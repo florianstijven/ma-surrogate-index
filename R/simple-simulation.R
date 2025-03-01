@@ -4,175 +4,150 @@
 library(tidyverse)
 library(sandwich)
 library(lmtest)
+library(future)
+library(furrr)
 
 # This script simulates data. We set a seed to ensure reproducibility.
 set.seed(123) 
 
+# Set of parameters controlling the simulations.
+N_MC = 100  # Number of Monte Carlo simulations
+n_approximation_MC = 1000  # Number of Monte Carlo simulations for the approximation of the true trial-level correlation
+
+# Source helper functions.
+source("R/helper-functions/simulation-functions.R")
+source("R/helper-functions/moment-based-estimator.R")
+source("R/helper-functions/delta-method-rho-trial.R")
+
+# Set up parallel computing
+plan(cluster)  # Adjust the number of workers as needed
 # Helper Functions --------------------------------------------------------
 
-# Function to generate trial-level random parameters. In the current setup, we
-# only have three trial-level random parameters: p1, beta_surr_treatment, and
-# beta_clin_treatment. p1 is the proportion for the baseline binary covariate.
-# beta_surr_treatment is the mean treatment effect on the surrogate endpoint.
-# beta_clin_treatment is the "additional" treatment effect on the clinical
-# endpoint in a model conditional on the baseline covariate and surrogate.
-generate_random_coefficients <- function() {
-  # Sample trial-level proportion parameter for baseline covariate from uniform
-  # distribution. 
-  p1 <- runif(1, min = 0.3, max = 0.7)
-  
-  # Sample random treatment effect on surrogate. 
-  beta_surr_treatment <- rnorm(1, mean = 0.5, sd = 0.3)
-  
-  # Sample random treatment effect on clinical endpoint.
-  beta_clin_treatment <- rnorm(1, mean = 0, sd = 0.05)
-  
-  # Return the list of sampled parameters.
-  return(
-    list(
-      p1 = p1,
-      beta_surr_treatment = beta_surr_treatment,
-      beta_clin_treatment = beta_clin_treatment
-    )
-  )
-}
-
-# Function to simulate a single trial with passed trial-level parameters.
-simulate_trial <- function(n, coefficients) {
-  # Randomization: Treatment assignment (1 or 0). Simple randomization is
-  # assumed.
-  treatment <- rbinom(n, 1, 0.5)  # 1 = treatment, 0 = control
-  
-  # Baseline covariates: One covariate from a Bernoulli distribution with
-  # probability p1.
-  covariate <- rbinom(n, 1, coefficients$p1)
-
-  # Surrogate endpoint: Linear relationship with treatment and random noise. The
-  # distribution of the surrogate does not depend on the baseline covariate.
-  surrogate <- coefficients$beta_surr_treatment * treatment + rnorm(n)
-
-  # Simulate clinical endpoint with no random coefficients. We're assuming that
-  # the regression of the clinical endpoint on the surrogate and covariate is
-  # the same across trials modulus some small random treatment effect.
-  clinical <- -1 * surrogate * covariate + surrogate * (1 - covariate) + 
-    coefficients$beta_clin_treatment * treatment +
-    rnorm(n)
-
-  # Data frame for a single trial
-  trial_data <- data.frame(treatment, covariate, surrogate, clinical)
-  
-  return(trial_data)
-}
-
-# Function to simulate data for multiple trials with a common within-trial
-# sample size. The random trial-level parameters are automatically sampled
-# within this function.
-simulate_trials_with_random_coefficients <- function(N = 10, n = 100) {
-  
-  trials <- lapply(1:N, function(i) {
-    coefficients <- generate_random_coefficients()  # generate new random coefficients for each trial
-    trial_data <- simulate_trial(n = n, coefficients = coefficients)
-    trial_data$trial <- i  # Add a trial-level variable
-    return(trial_data)
-  })
-
-  # Combine all trial data into a single tibble
-  all_trials_data <- bind_rows(trials) %>%
-    as_tibble()  # Ensure the result is a tibble
-  
-  return(all_trials_data)
-}
-
-
-
-# Function to compute treatment effects with robust standard errors and covariance matrix
-compute_treatment_effects <- function(trial_data) {
-  # Fit a linear model for the surrogate endpoint (surrogate ~ treatment + covariates)
-  surrogate_model <- lm(surrogate ~ treatment + covariate, data = trial_data)
-  
-  # Compute robust standard errors for the surrogate using the sandwich estimator
-  se_surr <- sqrt(diag(vcovHC(surrogate_model, type = "HC3")))["treatment"]
-  treatment_effect_surr <- coef(surrogate_model)["treatment"]
-  
-  # Fit a linear model for the clinical endpoint (clinical ~ treatment + covariates)
-  clinical_model <- lm(clinical ~ treatment + covariate, data = trial_data)
-  
-  # Compute robust standard errors for the clinical using the sandwich estimator
-  se_clin <- sqrt(diag(vcovHC(clinical_model, type = "HC3")))["treatment"]
-  treatment_effect_clin <- coef(clinical_model)["treatment"]
-  
-  # Compute the covariance matrix between the treatment effects on the surrogate and clinical endpoints
-  # For this, we need to extract the covariance matrix that jointly captures the uncertainty of the treatment effects
-  # across both models.
-  # Here we compute the covariance matrix between the two treatment effects.
-  
-  # Combine the coefficients into a single model to compute the covariance matrix for both treatment effects
-  combined_model <- lm(cbind(surrogate, clinical) ~ treatment + covariate, data = trial_data)
-  
-  # Compute the covariance matrix using the sandwich estimator
-  cov_matrix <- sandwich::vcovHC(combined_model, type = "HC3")
-  
-  # Extract the covariance matrix between the treatment effects on surrogate and clinical
-  cov_surr_clin <- cov_matrix[c("clinical:treatment", "surrogate:treatment"), c("clinical:treatment", "surrogate:treatment")]  # Covariance between treatment effects
-  
-  # Return a tibble with the treatment effects, standard errors, and covariance matrix
-  treatment_effects <- tibble(
-    treatment_effect_surr = treatment_effect_surr,  # Treatment effect on surrogate
-    se_surr = se_surr,  # Robust standard error for surrogate treatment effect
-    treatment_effect_clin = treatment_effect_clin,  # Treatment effect on clinical endpoint
-    se_clin = se_clin,  # Robust standard error for clinical treatment effect
-    covariance_matrix = list(cov_surr_clin)  # Store covariance matrix as a list
-  )
-  
-  return(treatment_effects)
-}
-
-
-# Function to train the clinical prediction model and add predictions to the dataset
+# Function to train the clinical prediction model and return prediction function.
 train_clinical_prediction_model <- function(simulated_data) {
   # Train a correctly specified linear regression model for predicting the
   # clinical endpoint given the surrogate and baseline covariate
   clinical_model <- lm(clinical ~ surrogate*covariate, data = simulated_data)
 
-  # Generate predictions from the trained model for all observations
-  simulated_data$surr_index <- predict(clinical_model, newdata = simulated_data)
-  
-  return(simulated_data)
+  return(
+    function(newdata) {
+      return(predict(clinical_model, newdata = newdata))
+    }
+  )
 }
 
 
-# Data Simulation ---------------------------------------------------------
 
+
+# Simulation Study ---------------------------------------------------------
+
+# Generate N meta-analytic data sets and compute the trial-level Pearson
+# correlation for (i) he treatment effects on the surrogate and clinical
+# endpoints and (ii) the treatment effects on the surrogate index and clinical
+# endpoint.
+data_set_indicator = 1:N_MC
+meta_analytic_data_list = future_map(data_set_indicator, function(i) {
+  generate_meta_analytic_data(N = 10, n = 3e3, train_clinical_prediction_model)
+})
+# Extract generated meta-analytic data sets with treatment effects on the
+# original surrogate.
+treatment_effects_list = lapply(meta_analytic_data_list, function(x) x[[1]])
+# Extract generated meta-analytic data sets with treatment effects on the
+# surrogate index.
+treatment_effects_index_list = lapply(meta_analytic_data_list, function(x) x[[2]])
+# Extract surrogate index prediction functions.
+surrogate_index_f_list = lapply(meta_analytic_data_list, function(x) x[[3]])
+# For each surrogate index prediction function, approximate the true trial-level
+# correlation through MC approximation.
+rho_true = future_map_dbl(surrogate_index_f_list, function(f) {
+  # Simulate data for N_ trials with random coefficients
+  trials_data <- simulate_trials_with_random_coefficients(N = n_approximation_MC, n = 1e3) 
+  
+  # Compute the surrogate index given the function f.
+  trials_data$surr_index <- f(trials_data)
+  
+  # Compute treatment effects for each trial (only considering the surrogate
+  # index and clinical endpoint).
+  treatment_effects_index <- trials_data %>%
+    group_by(trial) %>%
+    reframe(
+      pick(everything()) %>% 
+        select(-surrogate) %>% 
+        rename(surrogate = surr_index) %>%
+        compute_treatment_effects()
+    ) %>%
+    ungroup()  # Ensure the result is a tibble without grouping
+ 
+  # Estimate the meta-analytic parameters using the moment-based estimator.
+  temp = moment_estimator(treatment_effects_index$treatment_effect_surr, 
+                          treatment_effects_index$treatment_effect_clin, 
+                          treatment_effects_index$covariance_matrix)
+  
+  # Estimate the trial-level Pearson correlation using the delta method. We only
+  # need the point estimate in this MC approximation.
+  rho_delta_method(temp$coefs, temp$vcov)$rho
+})
+true_rho_surrogate_index_tbl = 
+  tibble(
+    data_set = data_set_indicator,
+    rho_true = rho_true
+  )
+
+# Combine the generated meta-analytic data sets with treatment effects in a
+# tibble in tidy format.
+meta_analytic_data_simulated =
+  bind_rows(
+    tibble(
+      data_set = 1:N_MC,
+      treatment_effects = treatment_effects_list
+    ) %>% mutate(analysis_type = "Original surrogate"),
+    tibble(
+      data_set = 1:N_MC,
+      treatment_effects = treatment_effects_index_list
+    ) %>% mutate(analysis_type = "Surrogate index")
+  )
+
+# Add approximated true trial-level rhos.
+meta_analytic_data_simulated = meta_analytic_data_simulated %>%
+  left_join(true_rho_surrogate_index_tbl, by = "data_set")
+
+# Estimate trial-level Pearson correlation for the generated meta-analytic data
+# sets of treatment effects and add everything to a tibble.
+meta_analytic_data_simulated = meta_analytic_data_simulated %>%
+  rowwise() %>%
+  mutate(
+    # Estimate the meta-analytic parameters using the moment-based estimator.
+    moment_estimates = list(
+      moment_estimator(treatment_effects$treatment_effect_surr, 
+                       treatment_effects$treatment_effect_clin, 
+                       treatment_effects$covariance_matrix)
+    ),
+    # Estimate the trial-level Pearson correlation using the delta method.
+    rho_delta_method = list(
+      rho_delta_method(
+        moment_estimates$coefs,
+        moment_estimates$vcov
+      )
+    ),
+    rho_est = rho_delta_method$rho,
+    rho_se = rho_delta_method$se,
+    rho_ci_lower = rho_delta_method$ci[1],
+    rho_ci_upper = rho_delta_method$ci[2]
+  )
+
+# Compute the coverage of the estimated confidence intervals.
+meta_analytic_data_simulated %>%
+  group_by(analysis_type) %>%
+  summarize(
+    coverage = mean(rho_true >= rho_ci_lower & rho_true <= rho_ci_upper, na.rm = TRUE)
+  )
 
 
 # Simulate data for 5 trials with random coefficients
-trials_data <- simulate_trials_with_random_coefficients(N = 10, n = 3e3) 
-
-trials_data = train_clinical_prediction_model(trials_data)
-
-plot(trials_data$surr_index, trials_data$clinical)
-plot(trials_data$surrogate, trials_data$clinical)
-
-# Compute treatment effects for each trial
-treatment_effects <- trials_data %>%
-  group_by(trial) %>%
-  do(compute_treatment_effects(.)) %>%
-  ungroup()  # Ensure the result is a tibble without grouping
-
-# Compute treatment effects for each trial
-treatment_effects_index <- trials_data %>%
-  group_by(trial) %>%
-  reframe(
-    pick(everything()) %>% 
-      select(-surrogate) %>% 
-      rename(surrogate = surr_index) %>%
-      compute_treatment_effects()
-  ) %>%
-  ungroup()  # Ensure the result is a tibble without grouping
-
+trials_data <- meta_analytic_data_simulated$treatment_effects[[1]]
 
 # Create a scatter plot with treatment effects on surrogate vs. clinical, including 95% CI error bars
-ggplot(treatment_effects, aes(x = treatment_effect_surr, y = treatment_effect_clin)) +
+ggplot(trials_data, aes(x = treatment_effect_surr, y = treatment_effect_clin)) +
   # Scatter plot of treatment effects
   geom_point(color = "purple", size = 3) +
   
@@ -201,7 +176,7 @@ ggplot(treatment_effects, aes(x = treatment_effect_surr, y = treatment_effect_cl
   )
 
 # Create a scatter plot with treatment effects on surrogate vs. clinical, including 95% CI error bars
-ggplot(treatment_effects_index, aes(x = treatment_effect_surr, y = treatment_effect_clin)) +
+ggplot(meta_analytic_data_simulated$treatment_effects[[101]], aes(x = treatment_effect_surr, y = treatment_effect_clin)) +
   # Scatter plot of treatment effects
   geom_point(color = "purple", size = 3) +
   
