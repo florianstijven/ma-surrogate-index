@@ -4,7 +4,7 @@
 # beta_surr_treatment is the mean treatment effect on the surrogate endpoint.
 # beta_clin_treatment is the "additional" treatment effect on the clinical
 # endpoint in a model conditional on the baseline covariate and surrogate.
-generate_random_coefficients <- function() {
+generate_random_coefficients <- function(sd_beta_clin_treatment = 0.10, sd_beta_clin_surrogate_sq = 0.10) {
   # Sample trial-level proportion parameter for baseline covariate from uniform
   # distribution. 
   p1 <- runif(1, min = 0.3, max = 0.7)
@@ -13,14 +13,16 @@ generate_random_coefficients <- function() {
   beta_surr_treatment <- rnorm(1, mean = 0.5, sd = 0.3)
   
   # Sample random treatment effect on clinical endpoint.
-  beta_clin_treatment <- rnorm(1, mean = 0, sd = 0.05)
+  beta_clin_treatment <- rnorm(1, mean = 0, sd = 0.10)
+  beta_clin_surrogate_sq <- rnorm(1, mean = 0, sd = 0.10)
   
   # Return the list of sampled parameters.
   return(
     list(
       p1 = p1,
       beta_surr_treatment = beta_surr_treatment,
-      beta_clin_treatment = beta_clin_treatment
+      beta_clin_treatment = beta_clin_treatment,
+      beta_clin_surrogate_sq = beta_clin_surrogate_sq
     )
   )
 }
@@ -44,6 +46,7 @@ simulate_trial <- function(n, coefficients) {
   # the same across trials modulus some small random treatment effect.
   clinical <- -1 * surrogate * covariate + surrogate * (1 - covariate) + 
     coefficients$beta_clin_treatment * treatment +
+    coefficients$beta_clin_surrogate_sq * surrogate ^ 2 +
     rnorm(n)
   
   # Data frame for a single trial
@@ -55,14 +58,16 @@ simulate_trial <- function(n, coefficients) {
 # Function to simulate data for multiple trials with a common within-trial
 # sample size. The random trial-level parameters are automatically sampled
 # within this function.
-simulate_trials_with_random_coefficients <- function(N = 10, n = 100) {
+simulate_trials_with_random_coefficients <- function(N, n, sd_beta_clin_treatment, sd_beta_clin_surrogate_sq) {
   
-  trials <- lapply(1:N, function(i) {
-    coefficients <- generate_random_coefficients()  # generate new random coefficients for each trial
+  trials <- lapply(1:N, function(i,
+                                 sd_beta_clin_treatment,
+                                 sd_beta_clin_surrogate_sq) {
+    coefficients <- generate_random_coefficients(sd_beta_clin_treatment, sd_beta_clin_surrogate_sq)  # generate new random coefficients for each trial
     trial_data <- simulate_trial(n = n, coefficients = coefficients)
     trial_data$trial <- i  # Add a trial-level variable
     return(trial_data)
-  })
+  }, sd_beta_clin_treatment = sd_beta_clin_treatment, sd_beta_clin_surrogate_sq = sd_beta_clin_surrogate_sq)
   
   # Combine all trial data into a single tibble
   all_trials_data <- bind_rows(trials) %>%
@@ -117,9 +122,9 @@ compute_treatment_effects <- function(trial_data) {
 # index as a variable, and computes the treatment effects on (i) the surrogate
 # and clinical endpoints and (ii) the surrogate index and clinical endpoint.
 # This function uses the previously defined functions.
-generate_meta_analytic_data <- function(N = 10, n = 100, train_clinical_prediction_model) {
+generate_meta_analytic_data <- function(N, n, sd_beta_clin_treatment, sd_beta_clin_surrogate_sq, train_clinical_prediction_model) {
   # Simulate data for N trials with random coefficients
-  trials_data <- simulate_trials_with_random_coefficients(N = N, n = n) 
+  trials_data <- simulate_trials_with_random_coefficients(N = N, n = n, sd_beta_clin_treatment, sd_beta_clin_surrogate_sq) 
   
   # Train the clinical prediction model and add the surrogate index to the data
   surrogate_index_f = train_clinical_prediction_model(trials_data)
