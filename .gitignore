@@ -3,4 +3,5 @@
 results/
 *.pdf
 *.html
+*.out
 
