@@ -1,0 +1,102 @@
+---
+title: "Simple Simulation Illustration"
+author: "Florian Stijven"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+# Simulate data for 5 trials with random coefficients
+trials_data <- meta_analytic_data_simulated$treatment_effects[[1]]
+
+# Create a scatter plot with treatment effects on surrogate vs. clinical, including 95% CI error bars
+ggplot(trials_data, aes(x = treatment_effect_surr, y = treatment_effect_clin)) +
+  # Scatter plot of treatment effects
+  geom_point(color = "purple", size = 3) +
+  
+  # Horizontal error bars for surrogate treatment effect
+  geom_errorbarh(aes(xmin = treatment_effect_surr - 1.96 * se_surr, 
+                     xmax = treatment_effect_surr + 1.96 * se_surr), 
+                 height = 0.2, color = "purple") +
+  
+  # Vertical error bars for clinical treatment effect
+  geom_errorbar(aes(ymin = treatment_effect_clin - 1.96 * se_clin, 
+                    ymax = treatment_effect_clin + 1.96 * se_clin), 
+                width = 0.2, color = "purple") +
+  
+  # Labels and title
+  labs(
+    x = "Treatment Effect on Surrogate Endpoint",
+    y = "Treatment Effect on Clinical Endpoint",
+    title = "Treatment Effects on Surrogate vs. Clinical Endpoint with 95% Confidence Intervals"
+  ) +
+  
+  # Customize the theme for better visualization
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.text.y = element_text(angle = 0, hjust = 1)
+  )
+
+# Create a scatter plot with treatment effects on surrogate vs. clinical, including 95% CI error bars
+ggplot(meta_analytic_data_simulated$treatment_effects[[101]], aes(x = treatment_effect_surr, y = treatment_effect_clin)) +
+  # Scatter plot of treatment effects
+  geom_point(color = "purple", size = 3) +
+  
+  # Horizontal error bars for surrogate treatment effect
+  geom_errorbarh(aes(xmin = treatment_effect_surr - 1.96 * se_surr, 
+                     xmax = treatment_effect_surr + 1.96 * se_surr), 
+                 height = 0.2, color = "purple") +
+  
+  # Vertical error bars for clinical treatment effect
+  geom_errorbar(aes(ymin = treatment_effect_clin - 1.96 * se_clin, 
+                    ymax = treatment_effect_clin + 1.96 * se_clin), 
+                width = 0.2, color = "purple") +
+  
+  # Labels and title
+  labs(
+    x = "Treatment Effect on Surrogate Endpoint",
+    y = "Treatment Effect on Clinical Endpoint",
+    title = "Treatment Effects on Surrogate vs. Clinical Endpoint with 95% Confidence Intervals"
+  ) +
+  
+  # Customize the theme for better visualization
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.text.y = element_text(angle = 0, hjust = 1)
+  ) +
+  geom_abline(slope = 1)
+
+# Estimate the meta-analytic parameters using the moment-based estimator.
+temp = moment_estimator(treatment_effects$treatment_effect_surr, 
+                 treatment_effects$treatment_effect_clin, 
+                 treatment_effects$covariance_matrix)
+rho_delta_method(temp$coefs, temp$vcov)
+
+
+temp = moment_estimator(treatment_effects_index$treatment_effect_surr, 
+                        treatment_effects_index$treatment_effect_clin, 
+                        treatment_effects_index$covariance_matrix)
+rho_delta_method(temp$coefs, temp$vcov)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

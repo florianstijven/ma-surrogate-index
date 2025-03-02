@@ -1,0 +1,6 @@
+finish simple-simulation 
+  -> save simulated data and results to raw-results
+add file where the results are processed
+  -> for now, this can be an Rmarkdown file that generates a report
+  
+add Makefile
