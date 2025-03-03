@@ -1,3 +1,4 @@
 run simulations with 1000-ish replications
+	-> segmentation fault issue?
 
 finish first version of report

@@ -8,7 +8,7 @@ library(future)
 library(furrr)
 
 # Set up parallel computing
-plan(multisession)  # Adjust the number of workers as needed
+plan("multicore")  # Adjust the number of workers as needed
 
 # This script simulates data. We set a seed to ensure reproducibility.
 set.seed(123) 
@@ -140,7 +140,7 @@ meta_analytic_data_simulated = meta_analytic_data_simulated %>%
 # Save the simulated MA data sets with the corresponding rho estimates and
 # confidence intervals. 
 saveRDS(meta_analytic_data_simulated, "results/raw-results/simple-simulation/meta_analytic_data_simulated.rds")
-
+ 
 
 
   
