@@ -1,6 +1,6 @@
 .Rproj.user
 .Rhistory
-results/
+*.rds
 *.pdf
 *.html
 *.out
