@@ -157,3 +157,47 @@ generate_meta_analytic_data <- function(N, n, sd_beta_clin_treatment, sd_beta_cl
     )
   )
 }
+
+# Function that approximates the true trial-level correlation given a surrogate
+# index function.
+rho_MC_approximation = function(f, N_approximation_MC, n_approximation_MC) {
+  # We follow a different strategy here for simulating trial-level treatment
+  # effects. Essentially, we generate data for a single trial and estimate the
+  # corresponding treatment effects, all trial-by-trial. This avoids excessive
+  # memory usage; at any time, we only have IPD data from a single trial in
+  # memory (instead of IPD data from N_approximation_MC trials).
+  
+  # Treatments effects list.
+  treatment_effects_index_list = purrr::map(
+    .x = 1:N_approximation_MC,
+    .f = function(.x) {
+      # Simulate data for one trial with random coefficients
+      one_trial_data <- simulate_trials_with_random_coefficients(N = 1, n = n_approximation_MC)
+
+      # Compute the surrogate index given the function f.
+      one_trial_data$surr_index <- f(one_trial_data)
+      
+      # Compute treatment effects for each trial (only considering the surrogate
+      # index and clinical endpoint).
+      treatment_effects_index_row <- one_trial_data %>%
+            select(-surrogate) %>% 
+            rename(surrogate = surr_index) %>%
+            compute_treatment_effects()
+      return(treatment_effects_index_row)
+    }
+  )
+  
+  # Join list of tibbles of treatment effects.
+  treatment_effects_index = bind_rows(treatment_effects_index_list)
+  
+  
+  
+  # Estimate the meta-analytic parameters using the moment-based estimator.
+  temp = moment_estimator(treatment_effects_index$treatment_effect_surr, 
+                          treatment_effects_index$treatment_effect_clin, 
+                          treatment_effects_index$covariance_matrix)
+  
+  # Estimate the trial-level Pearson correlation using the delta method. We only
+  # need the point estimate in this MC approximation.
+  rho_delta_method(temp$coefs, temp$vcov)$rho
+}

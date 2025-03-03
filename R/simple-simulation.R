@@ -7,6 +7,9 @@ library(lmtest)
 library(future)
 library(furrr)
 
+# Set up parallel computing
+plan(multisession)  # Adjust the number of workers as needed
+
 # This script simulates data. We set a seed to ensure reproducibility.
 set.seed(123) 
 
@@ -14,7 +17,7 @@ set.seed(123)
 N_MC = 10  # Number of Monte Carlo simulations
 
 N_approximation_MC = 1e4  # Number of Monte Carlo trial replications for the approximation of the true trial-level correlation
-n_approximation_MC = 1e3  # Number of patients in each trial for the approximation of the true trial-level correlation
+n_approximation_MC = 5e2  # Number of patients in each trial for the approximation of the true trial-level correlation
 
 N = 10  # Number of trials in each meta-analytic data set
 n = 2e3  # Number of patients in each trial
@@ -22,8 +25,7 @@ n = 2e3  # Number of patients in each trial
 sd_beta_clin_treatment = 0.10
 sd_beta_clin_surrogate_sq = 0.10
 
-# Set up parallel computing
-plan(cluster)  # Adjust the number of workers as needed
+
 # Helper Functions --------------------------------------------------------
 
 # Source helper functions.
@@ -57,8 +59,8 @@ train_clinical_prediction_model <- function(simulated_data) {
 # endpoint.
 data_set_indicator = 1:N_MC
 meta_analytic_data_list = future_map(data_set_indicator, function(i) {
-  generate_meta_analytic_data(N = 10,
-                              n = 3e3,
+  generate_meta_analytic_data(N = N,
+                              n = n,
                               train_clinical_prediction_model = train_clinical_prediction_model,
                               sd_beta_clin_treatment = sd_beta_clin_treatment,
                               sd_beta_clin_surrogate_sq = sd_beta_clin_surrogate_sq)
@@ -76,34 +78,13 @@ surrogate_index_f_list = lapply(meta_analytic_data_list, function(x) x[[3]])
 
 # For each surrogate index prediction function, approximate the true trial-level
 # correlation through MC approximation.
-rho_true = future_map_dbl(surrogate_index_f_list, function(f) {
-  # Simulate data for N_ trials with random coefficients
-  trials_data <- simulate_trials_with_random_coefficients(N = n_approximation_MC, n = n_approximation_MC)
-  
-  # Compute the surrogate index given the function f.
-  trials_data$surr_index <- f(trials_data)
-  
-  # Compute treatment effects for each trial (only considering the surrogate
-  # index and clinical endpoint).
-  treatment_effects_index <- trials_data %>%
-    group_by(trial) %>%
-    reframe(
-      pick(everything()) %>% 
-        select(-surrogate) %>% 
-        rename(surrogate = surr_index) %>%
-        compute_treatment_effects()
-    ) %>%
-    ungroup()  # Ensure the result is a tibble without grouping
- 
-  # Estimate the meta-analytic parameters using the moment-based estimator.
-  temp = moment_estimator(treatment_effects_index$treatment_effect_surr, 
-                          treatment_effects_index$treatment_effect_clin, 
-                          treatment_effects_index$covariance_matrix)
-  
-  # Estimate the trial-level Pearson correlation using the delta method. We only
-  # need the point estimate in this MC approximation.
-  rho_delta_method(temp$coefs, temp$vcov)$rho
-}, .options = furrr_options(seed = TRUE))
+rho_true = future_map_dbl(
+  surrogate_index_f_list,
+  rho_MC_approximation,
+  .options = furrr_options(seed = TRUE),
+  N_approximation_MC = N_approximation_MC,
+  n_approximation_MC = n_approximation_MC
+)
 
 true_rho_surrogate_index_tbl = 
   tibble(
@@ -112,17 +93,11 @@ true_rho_surrogate_index_tbl =
   )
 
 # Approximate the true trial-level correlation using the surrogate endpoint.
-trials_data_MC <- simulate_trials_with_random_coefficients(N = N_approximation_MC, n = n_approximation_MC)
-treatment_effects_MC <- trials_data_MC %>%
-  group_by(trial) %>%
-  reframe(compute_treatment_effects(pick(everything()))) %>%
-  ungroup()
-moment_estimates_MC = moment_estimator(
-  treatment_effects_MC$treatment_effect_surr,
-  treatment_effects_MC$treatment_effect_clin,
-  treatment_effects_MC$covariance_matrix
+rho_true_surrogate = rho_MC_approximation(
+  f = function(x) x$surrogate,
+  N_approximation_MC = N_approximation_MC,
+  n_approximation_MC = n_approximation_MC
 )
-rho_true_surrogate = rho_delta_method(moment_estimates_MC$coefs, moment_estimates_MC$vcov)$rho
 
 
 # Combine the generated meta-analytic data sets with treatment effects in a
