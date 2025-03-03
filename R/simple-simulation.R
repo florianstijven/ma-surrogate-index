@@ -8,7 +8,11 @@ library(future)
 library(furrr)
 
 # Set up parallel computing
-plan("multicore")  # Adjust the number of workers as needed
+if (parallelly::supportsMulticore()) {
+  plan("multicore")
+} else {
+  plan(mulisession)
+}
 
 # This script simulates data. We set a seed to ensure reproducibility.
 set.seed(123) 
