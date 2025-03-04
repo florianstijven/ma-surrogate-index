@@ -13,8 +13,8 @@ generate_random_coefficients <- function(sd_beta_clin_treatment = 0.10, sd_beta_
   beta_surr_treatment <- rnorm(1, mean = 0.5, sd = 0.3)
   
   # Sample random treatment effect on clinical endpoint.
-  beta_clin_treatment <- rnorm(1, mean = 0, sd = 0.10)
-  beta_clin_surrogate_sq <- rnorm(1, mean = 0, sd = 0.10)
+  beta_clin_treatment <- rnorm(1, mean = 0, sd = sd_beta_clin_treatment)
+  beta_clin_surrogate_sq <- rnorm(1, mean = 0, sd = sd_beta_clin_surrogate_sq)
   
   # Return the list of sampled parameters.
   return(
@@ -160,7 +160,11 @@ generate_meta_analytic_data <- function(N, n, sd_beta_clin_treatment, sd_beta_cl
 
 # Function that approximates the true trial-level correlation given a surrogate
 # index function.
-rho_MC_approximation = function(f, N_approximation_MC, n_approximation_MC) {
+rho_MC_approximation = function(f,
+                                N_approximation_MC,
+                                n_approximation_MC,
+                                sd_beta_clin_treatment,
+                                sd_beta_clin_surrogate_sq) {
   # We follow a different strategy here for simulating trial-level treatment
   # effects. Essentially, we generate data for a single trial and estimate the
   # corresponding treatment effects, all trial-by-trial. This avoids excessive
@@ -172,17 +176,22 @@ rho_MC_approximation = function(f, N_approximation_MC, n_approximation_MC) {
     .x = 1:N_approximation_MC,
     .f = function(.x) {
       # Simulate data for one trial with random coefficients
-      one_trial_data <- simulate_trials_with_random_coefficients(N = 1, n = n_approximation_MC)
-
+      one_trial_data <- simulate_trials_with_random_coefficients(
+        N = 1,
+        n = n_approximation_MC,
+        sd_beta_clin_treatment = sd_beta_clin_treatment,
+        sd_beta_clin_surrogate_sq = sd_beta_clin_surrogate_sq
+      )
+      
       # Compute the surrogate index given the function f.
       one_trial_data$surr_index <- f(one_trial_data)
       
       # Compute treatment effects for each trial (only considering the surrogate
       # index and clinical endpoint).
       treatment_effects_index_row <- one_trial_data %>%
-            select(-surrogate) %>% 
-            rename(surrogate = surr_index) %>%
-            compute_treatment_effects()
+        select(-surrogate) %>%
+        rename(surrogate = surr_index) %>%
+        compute_treatment_effects()
       return(treatment_effects_index_row)
     }
   )
@@ -193,9 +202,11 @@ rho_MC_approximation = function(f, N_approximation_MC, n_approximation_MC) {
   
   
   # Estimate the meta-analytic parameters using the moment-based estimator.
-  temp = moment_estimator(treatment_effects_index$treatment_effect_surr, 
-                          treatment_effects_index$treatment_effect_clin, 
-                          treatment_effects_index$covariance_matrix)
+  temp = moment_estimator(
+    treatment_effects_index$treatment_effect_surr,
+    treatment_effects_index$treatment_effect_clin,
+    treatment_effects_index$covariance_matrix
+  )
   
   # Estimate the trial-level Pearson correlation using the delta method. We only
   # need the point estimate in this MC approximation.

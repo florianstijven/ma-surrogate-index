@@ -4,22 +4,40 @@
 moment_estimator = function(
     alpha_hat, # Vector of treatment effect estimates on the surrogate.
     beta_hat, # Vector of treatment effect estimates on the clinical endpoint.
-    vcov_list # List of variance-covariance matrices for the treatment effect estimates.
-                            ) 
+    vcov_list, # List of variance-covariance matrices for the treatment effect estimates.
+    estimator_adjustment = "none", # Finite-sample adjustment to the estimator
+    sandwich_adjustment = "none", # Finite-sample adjustment to the sandwich estimator
+    weights = rep(1, length(alpha_hat))) 
   {
   # Total number of independent units.
   N = length(alpha_hat)
   
+  # Make sure that the weights sum to N.
+  weights = weights / mean(weights)
+  
   # Estimate the overall means.
-  mu_alpha_hat = mean(alpha_hat)
-  mu_beta_hat = mean(beta_hat)
+  mu_alpha_hat = mean(weights * alpha_hat)
+  mu_beta_hat = mean(weights * beta_hat)
   
   # Estimate the unadjusted covariance matrix.
-  S = cov(cbind(alpha_hat, beta_hat))
+  total_residual = cbind(weights * (alpha_hat - mu_alpha_hat),
+                         weights * (beta_hat - mu_beta_hat)) %>%
+    as.matrix()
+  S = (1 / N) * t(total_residual) %*% total_residual
+  
+  # If required, do finite-sample adjustment to the estimated covariance matrix.
+  if (estimator_adjustment == "N - 1") {
+    S = (N / (N - 1)) * S
+  }
   
   # Estimate the mean of the within-trial covariance matrices.
   # Compute the element-wise mean of a list of matrices.
-  mean_est_error_vcov = Reduce("+", vcov_list) / N
+  weighted_vcov_list = purrr::map2(
+    .x = vcov_list,
+    .y = weights,
+    .f = function(vcov_matrix, weight) weight * vcov_matrix
+  )
+  mean_est_error_vcov = Reduce("+", weighted_vcov_list) / N
   
   # Estimate the adjusted covariance matrix.
   S_adj = S - mean_est_error_vcov
@@ -31,16 +49,23 @@ moment_estimator = function(
   
   # Compute the ham matrix for the sandwich estimator. This is the outer product
   # of the estimation equations evaluated at the estimated parameters.
-  U = est_function(alpha_hat,
-                   beta_hat,
-                   vcov_list,
-                   c(mu_alpha_hat, mu_beta_hat, S_adj[1, 1], S_adj[2, 2], S_adj[1, 2]))
+  U = est_function(alpha_hat = alpha_hat,
+                   beta_hat = beta_hat,
+                   vcov_list = vcov_list,
+                   params = c(mu_alpha_hat, mu_beta_hat, S_adj[1, 1], S_adj[2, 2], S_adj[1, 2]),
+                   estimator_adjustment = estimator_adjustment,
+                   weights = weights)
   
   # Compute the outer product of estimating equations.
   ham = (t(U) %*% U) * (1 / N)
   
   # Compute the sandwich estimator.
   sandwich = bread %*% ham %*% bread
+
+  # Correct the sandwich estimate if required.
+  if (sandwich_adjustment == "N - 1") {
+    sandwich = (N / (N - 1)) * sandwich
+  }
   
   # Return the estimated mean and covariance parameters and the corresponding 
   # sandwich estimator.
@@ -52,7 +77,10 @@ moment_estimator = function(
 
 
 # Function that evaluates the estimating function in set of data given the parameters.
-est_function = function(alpha_hat, beta_hat, vcov_list, params) {
+est_function = function(alpha_hat, beta_hat, vcov_list, params, estimator_adjustment, weights) {
+  # Total number of independent units.
+  N = length(alpha_hat)
+  
   # Extract the parameters from params.
   mu_alpha = params[1]
   mu_beta = params[2]
@@ -72,18 +100,25 @@ est_function = function(alpha_hat, beta_hat, vcov_list, params) {
   
   # Estimating function evaluated in the data and parameters for the covariance
   # parameters.
-  ee_d_alpha = (alpha_hat - mu_alpha) ^ 2 - sigma_alpha - d_alpha
-  ee_d_beta = (beta_hat - mu_beta) ^ 2 - sigma_beta - d_beta
-  ee_d_alpha_beta = (alpha_hat - mu_alpha) * (beta_hat - mu_beta) - sigma_alpha_beta - d_alpha_beta
+  if (estimator_adjustment == "N - 1") {
+    ee_d_alpha = (N / (N - 1)) * (alpha_hat - mu_alpha) ^ 2 - sigma_alpha - d_alpha
+    ee_d_beta = (N / (N - 1)) * (beta_hat - mu_beta) ^ 2 - sigma_beta - d_beta
+    ee_d_alpha_beta = (N / (N - 1)) * (alpha_hat - mu_alpha) * (beta_hat - mu_beta) - sigma_alpha_beta - d_alpha_beta
+  } else if (estimator_adjustment == "none") {
+    ee_d_alpha = (alpha_hat - mu_alpha) ^ 2 - sigma_alpha - d_alpha
+    ee_d_beta = (beta_hat - mu_beta) ^ 2 - sigma_beta - d_beta
+    ee_d_alpha_beta = (alpha_hat - mu_alpha) * (beta_hat - mu_beta) - sigma_alpha_beta - d_alpha_beta
+  }
+
   
   # Return the evaluated estimating functions as a matric with each unit's
   # values as a single row.
-  return(
-    matrix(
-      c(ee_mu_alpha, ee_mu_beta, ee_d_alpha, ee_d_beta, ee_d_alpha_beta),
-      nrow = length(alpha_hat),
-      ncol = 5,
-      byrow = FALSE
-    )
+  U_unweighted = matrix(
+    c(ee_mu_alpha, ee_mu_beta, ee_d_alpha, ee_d_beta, ee_d_alpha_beta),
+    nrow = length(alpha_hat),
+    ncol = 5,
+    byrow = FALSE
   )
+  U = diag(weights) %*% U_unweighted
+  return(U)
 }

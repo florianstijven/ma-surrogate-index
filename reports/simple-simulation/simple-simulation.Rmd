@@ -6,7 +6,8 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+set.seed(1)
 ```
 
 ```{r}
@@ -20,6 +21,7 @@ library(lmtest)
 # Source functions for the moment-based estimator
 source(here::here("R", "helper-functions", "moment-based-estimator.R"))
 source(here::here("R", "helper-functions", "delta-method-rho-trial.R"))
+source(here::here("R", "helper-functions", "multiplier-bootstrap.R"))
 # Source functions to simulate data
 source(here::here("R", "helper-functions", "simulation-functions.R"))
 
@@ -139,22 +141,96 @@ ggplot(ma_trt_effect_index_tbl, aes(x = treatment_effect_surr, y = treatment_eff
 
 ```{r}
 # Estimate the meta-analytic parameters using the moment-based estimator.
-moment_estimate_surr = moment_estimator(
-  ma_trt_effect_tbl$treatment_effect_surr,
-  ma_trt_effect_tbl$treatment_effect_clin,
-  ma_trt_effect_tbl$covariance_matrix
-)
-rho_est_surr = rho_delta_method(moment_estimate_surr$coefs, moment_estimate_surr$vcov)
-
-
-moment_estimate_surr_index = moment_estimator(
-  ma_trt_effect_index_tbl$treatment_effect_surr,
-  ma_trt_effect_index_tbl$treatment_effect_clin,
-  ma_trt_effect_index_tbl$covariance_matrix
-)
-rho_est_surr_index = rho_delta_method(moment_estimate_surr_index$coefs,
-                                      moment_estimate_surr_index$vcov)
+moment_estimator_tbl = tibble(
+  setting = c("surrogate", "surrogate index"),
+  data = list(ma_trt_effect_tbl, ma_trt_effect_index_tbl)
+) %>%
+  cross_join(expand_grid(
+    estimator_adjustment = c("none", "N - 1"),
+    sandwich_adjustment = c("none", "N - 1")
+  )) %>%
+  rowwise(everything()) %>%
+  summarise(
+    moment_estimate = list(
+      moment_estimator(
+        data$treatment_effect_surr,
+        data$treatment_effect_clin,
+        data$covariance_matrix,
+        estimator_adjustment = estimator_adjustment,
+        sandwich_adjustment = sandwich_adjustment
+      )
+    ),
+    rho_est = list(
+      rho_delta_method(coefs = moment_estimate$coefs, vcov = moment_estimate$vcov)
+    )
+  ) %>%
+  ungroup() %>%
+  mutate(
+    rho = purrr::map_dbl(rho_est, "rho"),
+    se = purrr::map_dbl(rho_est, "se"),
+    lower_ci = purrr::map_dbl(rho_est, c(3, 1)),
+    upper_ci = purrr::map_dbl(rho_est, c(3, 2))
+  )
 ```
+
+```{r}
+statistic_function_factory = function(estimator_adjustment) {
+  statistic_f = function(data, weights) {
+    moment_estimate = moment_estimator(
+      alpha_hat = data$treatment_effect_surr,
+      beta_hat = data$treatment_effect_clin,
+      vcov_list = data$covariance_matrix,
+      estimator_adjustment = estimator_adjustment,
+      weights = weights
+    )
+    rho_est = rho_delta_method(moment_estimate$coefs, moment_estimate$vcov)
+    
+    return(rho_est$rho)
+  }
+  return(statistic_f)
+}
+
+
+moment_estimator_tbl = bind_rows(
+    moment_estimator_tbl %>%
+      mutate(CI = "sandwich"),
+    moment_estimator_tbl %>%
+      filter(sandwich_adjustment == "none") %>%
+      rowwise(everything()) %>%
+      summarise(
+        bootstrap_ci = list(multiplier_bootstrap_ci(
+          data = data,
+          statistic = statistic_function_factory(estimator_adjustment),
+          B = 1e3
+        )),
+        lower_ci = bootstrap_ci$ci_lower,
+        upper_ci = bootstrap_ci$ci_upper
+      ) %>%
+      ungroup() %>%
+      mutate(CI = "multiplier bootstrap")
+  )
+
+```
+
+
+```{r}
+# Present results with simulated data set in a tibble.
+moment_estimator_tbl %>%
+  select(-data, -moment_estimate, -rho_est, -bootstrap_ci) %>%
+  knitr::kable(digits = 3)
+```
+
+```{r}
+# Visualize the computed confidence intervals.
+moment_estimator_tbl %>%
+  ggplot(aes(x = rho, color = estimator_adjustment, y = CI, linetype = sandwich_adjustment)) +
+  geom_point(position = position_dodge(width = 0.2)) +
+  geom_errorbarh(aes(xmin = lower_ci, xmax = upper_ci), height = 0.1, position = position_dodge(width = 0.2)) +
+  xlim(c(-1.2, 1.2)) +
+  facet_grid(. ~ setting)
+```
+
+
 # Simulation Results
 
 ```{r}
@@ -170,16 +246,38 @@ meta_analytic_data_simulated <- readRDS(
 ```
 
 ```{r}
+# Distribution of data-adaptive rho-trial estimands (approximated through MC
+# integration).
+meta_analytic_data_simulated %>%
+  filter(analysis_type == "surrogate index") %>%
+  ggplot(aes(x = rho_true)) +
+  geom_histogram() +
+  facet_grid(.~sd_beta_clin_treatment)
+```
+
+
+```{r}
 # Compute coverage, mean bias, median bias, empirical SD, and mean SE.
 meta_analytic_data_simulated %>%
-  group_by(analysis_type) %>%
+  group_by(analysis_type, sd_beta_clin_surrogate_sq, sd_beta_clin_treatment, estimator_adjustment, sandwich_adjustment, CI_type) %>%
   summarise(
     coverage = mean((rho_true >= rho_ci_lower) & (rho_true <= rho_ci_upper), na.rm = TRUE),
     mean_bias = mean(rho_est - rho_true, na.rm = TRUE),
     median_bias = median(rho_est - rho_true, na.rm = TRUE),
     emp_SD = sd(rho_est, na.rm = TRUE),
     meanSE = mean(rho_se, na.rm = TRUE)
-  )
+  ) %>%
+  knitr::kable(digits = 3)
+```
+
+
+```{r}
+meta_analytic_data_simulated %>%
+  filter(analysis_type == "surrogate index", CI_type == "multiplier bootstrap") %>%
+  ggplot(aes(x = rho_ci_lower)) +
+  geom_histogram() +
+  xlim(c(-1, 1)) +
+  facet_grid(estimator_adjustment~sd_beta_clin_treatment)
 ```
 
 

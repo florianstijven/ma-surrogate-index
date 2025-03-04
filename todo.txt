@@ -1,4 +1,14 @@
-run simulations with 1000-ish replications
-	-> segmentation fault issue?
+% Implement finite-sample correction for sandwich estimator	
 
-finish first version of report
+% Use differenct CI methods in the simulations
+	-> N - 1 correction
+	-> no correction
+	-> multiplier bootstrap
+=> should work now
+
+% Finish simulqtion code for different sds 
+run on pc with small number of replicates
+and submit to HPC
+
+
+
