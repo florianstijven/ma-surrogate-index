@@ -22,7 +22,7 @@ set.seed(123)
 N_MC = 50  # Number of Monte Carlo simulations
 
 N_approximation_MC = 5e4  # Number of Monte Carlo trial replications for the approximation of the true trial-level correlation
-n_approximation_MC = 5e2  # Number of patients in each trial for the approximation of the true trial-level correlation
+n_approximation_MC = 1e2  # Number of patients in each trial for the approximation of the true trial-level correlation
 
 N = 10  # Number of trials in each meta-analytic data set
 n = 2e3  # Number of patients in each trial

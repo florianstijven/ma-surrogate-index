@@ -77,43 +77,54 @@ simulate_trials_with_random_coefficients <- function(N, n, sd_beta_clin_treatmen
 }
 
 # Function to compute treatment effects with robust standard errors and covariance matrix
-compute_treatment_effects <- function(trial_data) {
-  # Fit a linear model for the surrogate endpoint (surrogate ~ treatment + covariates)
-  surrogate_model <- lm(surrogate ~ treatment + covariate, data = trial_data)
-  
-  # Compute robust standard errors for the surrogate using the sandwich estimator
-  se_surr <- sqrt(diag(vcovHC(surrogate_model, type = "HC3")))["treatment"]
-  treatment_effect_surr <- coef(surrogate_model)["treatment"]
-  
-  # Fit a linear model for the clinical endpoint (clinical ~ treatment + covariates)
-  clinical_model <- lm(clinical ~ treatment + covariate, data = trial_data)
-  
-  # Compute robust standard errors for the clinical using the sandwich estimator
-  se_clin <- sqrt(diag(vcovHC(clinical_model, type = "HC3")))["treatment"]
-  treatment_effect_clin <- coef(clinical_model)["treatment"]
-  
-  # Compute the covariance matrix between the treatment effects on the surrogate and clinical endpoints
-  # For this, we need to extract the covariance matrix that jointly captures the uncertainty of the treatment effects
-  # across both models.
-  # Here we compute the covariance matrix between the two treatment effects.
-  
-  # Combine the coefficients into a single model to compute the covariance matrix for both treatment effects
-  combined_model <- lm(cbind(surrogate, clinical) ~ treatment + covariate, data = trial_data)
-  
-  # Compute the covariance matrix using the sandwich estimator
-  cov_matrix <- sandwich::vcovHC(combined_model, type = "HC3")
-  
-  # Extract the covariance matrix between the treatment effects on surrogate and clinical
-  cov_surr_clin <- cov_matrix[c("clinical:treatment", "surrogate:treatment"), c("clinical:treatment", "surrogate:treatment")]  # Covariance between treatment effects
-  
-  # Return a tibble with the treatment effects, standard errors, and covariance matrix
-  treatment_effects <- tibble(
-    treatment_effect_surr = treatment_effect_surr,  # Treatment effect on surrogate
-    se_surr = se_surr,  # Robust standard error for surrogate treatment effect
-    treatment_effect_clin = treatment_effect_clin,  # Treatment effect on clinical endpoint
-    se_clin = se_clin,  # Robust standard error for clinical treatment effect
-    covariance_matrix = list(cov_surr_clin)  # Store covariance matrix as a list
-  )
+compute_treatment_effects <- function(trial_data, method = "adjusted") {
+  # If adjusted treatment effects are requires, we fit two univariate linear
+  # regression models and estimate the covariance of the treatment effect
+  # estimators through the sandwich estimators.
+  if (method == "adjusted") {
+    # Combine the coefficients into a single model to compute the covariance matrix for both treatment effects
+    combined_model <- lm(cbind(surrogate, clinical) ~ treatment + covariate, data = trial_data)
+    
+    # Compute the covariance matrix using the sandwich estimator
+    cov_matrix <- sandwich::vcovHC(combined_model, type = "HC3")
+    
+    # Extract the covariance matrix between the treatment effects on surrogate and clinical
+    cov_surr_clin <- cov_matrix[c("surrogate:treatment", "clinical:treatment"), c("surrogate:treatment", "clinical:treatment")]  # Covariance between treatment effects
+    
+    # Return a tibble with the treatment effects, standard errors, and covariance matrix
+    treatment_effects <- tibble(
+      treatment_effect_surr = coef(combined_model)["treatment", "surrogate"],  # Treatment effect on surrogate
+      se_surr = sqrt(cov_surr_clin["surrogate:treatment", "surrogate:treatment"]),  # Robust standard error for surrogate treatment effect
+      treatment_effect_clin = coef(combined_model)["treatment", "clinical"],  # Treatment effect on clinical endpoint
+      se_clin = sqrt(cov_surr_clin["clinical:treatment", "clinical:treatment"]),  # Robust standard error for clinical treatment effect
+      covariance_matrix = list(cov_surr_clin)  # Store covariance matrix as a list
+    )
+  } else if (method == "mean") {
+    # Unadjusted treatment effect estimates are computed through differences of
+    # sample means.
+    treatment_effect_surr = mean(trial_data$surrogate[trial_data$treatment == 1]) - mean(trial_data$surrogate[trial_data$treatment == 0])
+    treatment_effect_clin = mean(trial_data$clinical[trial_data$treatment == 1]) - mean(trial_data$clinical[trial_data$treatment == 0])
+    
+    # Sample covariance matrices in each treatment group.
+    vcov_0 = var(trial_data[trial_data$treatment == 0, c("surrogate", "clinical")])
+    vcov_1 = var(trial_data[trial_data$treatment == 1, c("surrogate", "clinical")])
+    
+    # Treatment group sample sizes
+    n0 = sum(trial_data$treatment == 0)
+    n1 = sum(trial_data$treatment == 1)
+    
+    # Estimated covariance matrix for the treatment effect estimators.
+    covariance_matrix = (1 / n1) * vcov_1 + (1 / n0) * vcov_0
+    
+    # Return a tibble with the treatment effects, standard errors, and covariance matrix
+    treatment_effects <- tibble(
+      treatment_effect_surr = treatment_effect_surr,  # Treatment effect on surrogate
+      se_surr = sqrt(covariance_matrix[1, 1]),  # Standard error for surrogate treatment effect
+      treatment_effect_clin = treatment_effect_clin,  # Treatment effect on clinical endpoint
+      se_clin = sqrt(covariance_matrix[2, 2]),  # Standard error for clinical treatment effect
+      covariance_matrix = list(covariance_matrix)  # Store covariance matrix as a list
+    )
+  }
   
   return(treatment_effects)
 }
@@ -171,42 +182,58 @@ rho_MC_approximation = function(f,
   # memory usage; at any time, we only have IPD data from a single trial in
   # memory (instead of IPD data from N_approximation_MC trials).
   
-  # Treatments effects list.
-  treatment_effects_index_list = purrr::map(
-    .x = 1:N_approximation_MC,
-    .f = function(.x) {
-      # Simulate data for one trial with random coefficients
-      one_trial_data <- simulate_trials_with_random_coefficients(
-        N = 1,
-        n = n_approximation_MC,
-        sd_beta_clin_treatment = sd_beta_clin_treatment,
-        sd_beta_clin_surrogate_sq = sd_beta_clin_surrogate_sq
-      )
-      
-      # Compute the surrogate index given the function f.
-      one_trial_data$surr_index <- f(one_trial_data)
-      
-      # Compute treatment effects for each trial (only considering the surrogate
-      # index and clinical endpoint).
-      treatment_effects_index_row <- one_trial_data %>%
-        select(-surrogate) %>%
-        rename(surrogate = surr_index) %>%
-        compute_treatment_effects()
-      return(treatment_effects_index_row)
-    }
+  # Function that simulates a single trial and computes the treatment effects
+  # and covariance matrix based on sample means.
+  simulate_and_compute_trt_effects = function() {
+    # Simulate data for one trial with random coefficients
+    one_trial_data <- simulate_trials_with_random_coefficients(
+      N = 1,
+      n = n_approximation_MC,
+      sd_beta_clin_treatment = sd_beta_clin_treatment,
+      sd_beta_clin_surrogate_sq = sd_beta_clin_surrogate_sq
+    )
+    
+    # Compute the surrogate index given the function f.
+    one_trial_data$surr_index <- f(one_trial_data)
+    
+    # Compute treatment effects for each trial (only considering the surrogate
+    # index and clinical endpoint).
+    treatment_effects_index_row <- one_trial_data %>%
+      select(-surrogate) %>%
+      rename(surrogate = surr_index) %>%
+      compute_treatment_effects(method = "mean")
+    
+    rm("one_trial_data")
+    gc()
+    
+    return(treatment_effects_index_row)
+  }
+  
+  # Initialize a list to put the simulated estimated treatment effects etc in.
+  # By defining this list before the for loop, we can speed up the for loop.
+  treatment_effects_index_list = as.list(
+    rep(0L, N_approximation_MC)
   )
   
-  # Join list of tibbles of treatment effects.
+  # Generate estimated treatment effects etc and add them to the already defined
+  # list. By using a for loop and the simulate_and_compute_trt_effects function,
+  # we avoid the IPD data to accumulate in memory. Indeed, for each iteration in
+  # the for loop, an IPD data set is generated and implicitly deleted from
+  # memory.
+  for (i in seq_along(1:N_approximation_MC)) {
+    treatment_effects_index_list[[i]] = simulate_and_compute_trt_effects()
+  }
+  
   treatment_effects_index = bind_rows(treatment_effects_index_list)
-  
-  
-  
+
   # Estimate the meta-analytic parameters using the moment-based estimator.
   temp = moment_estimator(
     treatment_effects_index$treatment_effect_surr,
     treatment_effects_index$treatment_effect_clin,
     treatment_effects_index$covariance_matrix
   )
+  
+  
   
   # Estimate the trial-level Pearson correlation using the delta method. We only
   # need the point estimate in this MC approximation.

@@ -1,14 +1,9 @@
-% Implement finite-sample correction for sandwich estimator	
+Check results with 50 replicates
+if results OK, rerun with 500
 
-% Use differenct CI methods in the simulations
-	-> N - 1 correction
-	-> no correction
-	-> multiplier bootstrap
-=> should work now
-
-% Finish simulqtion code for different sds 
-run on pc with small number of replicates
-and submit to HPC
+% more efficient MC approximation of true rho by simply using sample means
+% corrected error in compute_trt_effects
+	-> explains approximated true rhos larger than one=> YES!
 
 
 
