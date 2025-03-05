@@ -21,8 +21,8 @@ set.seed(123)
 # Set of parameters controlling the simulations.
 N_MC = 500  # Number of Monte Carlo simulations
 
-N_approximation_MC = 2e4  # Number of Monte Carlo trial replications for the approximation of the true trial-level correlation
-n_approximation_MC = 60  # Number of patients in each trial for the approximation of the true trial-level correlation
+N_approximation_MC = 4e4  # Number of Monte Carlo trial replications for the approximation of the true trial-level correlation
+n_approximation_MC = 1e2  # Number of patients in each trial for the approximation of the true trial-level correlation
 
 N = 10  # Number of trials in each meta-analytic data set
 n = 2e3  # Number of patients in each trial
@@ -135,6 +135,10 @@ meta_analytic_data$rho_true = future_pmap_dbl(
 #     )
 #   )
 
+# Drop surrogate index function as this function is no longer needed.
+meta_analytic_data = meta_analytic_data %>%
+  select(-surrogate_index_f_list)
+
 print(Sys.time() - a)
 
 # Approximate the true trial-level correlation using the surrogate endpoint.
@@ -194,8 +198,7 @@ meta_analytic_data_simulated = bind_rows(
   meta_analytic_data_simulated %>%
     filter(analysis_type == "surrogate index"),
   meta_analytic_data_simulated %>%
-    filter(analysis_type == "surrogate") %>%
-    mutate(surrogate_index_f_list = list(surrogate_f))
+    filter(analysis_type == "surrogate")
 ) %>% # Drop columns that have become superfluous.
   select(-rho_true_surrogate)
 
@@ -287,6 +290,10 @@ meta_analytic_data_simulated =  bind_rows(
     select(-rho_ci_bs)
 )
 
+
+# Drop columns that are not needed.
+meta_analytic_data_simulated = meta_analytic_data_simulated %>%
+  select(-treatment_effects_tbl)
 
 print(Sys.time() - a)
 
