@@ -186,25 +186,19 @@ rho_MC_approximation = function(f,
   # and covariance matrix based on sample means.
   simulate_and_compute_trt_effects = function() {
     # Simulate data for one trial with random coefficients
-    one_trial_data <- simulate_trials_with_random_coefficients(
+    treatment_effects_index_row = simulate_trials_with_random_coefficients(
       N = 1,
       n = n_approximation_MC,
       sd_beta_clin_treatment = sd_beta_clin_treatment,
       sd_beta_clin_surrogate_sq = sd_beta_clin_surrogate_sq
-    )
-    
-    # Compute the surrogate index given the function f.
-    one_trial_data$surr_index <- f(one_trial_data)
-    
-    # Compute treatment effects for each trial (only considering the surrogate
-    # index and clinical endpoint).
-    treatment_effects_index_row <- one_trial_data %>%
+    ) %>%
+      # Compute the surrogate index given the function f.
+      mutate(surr_index = f(pick(everything()))) %>%
+      # Compute treatment effects for each trial (only considering the surrogate
+      # index and clinical endpoint).
       select(-surrogate) %>%
       rename(surrogate = surr_index) %>%
       compute_treatment_effects(method = "mean")
-    
-    rm("one_trial_data")
-    gc()
     
     return(treatment_effects_index_row)
   }

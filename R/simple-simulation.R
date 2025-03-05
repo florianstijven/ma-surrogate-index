@@ -19,10 +19,10 @@ if (parallelly::supportsMulticore()) {
 set.seed(123) 
 
 # Set of parameters controlling the simulations.
-N_MC = 50  # Number of Monte Carlo simulations
+N_MC = 500  # Number of Monte Carlo simulations
 
-N_approximation_MC = 5e4  # Number of Monte Carlo trial replications for the approximation of the true trial-level correlation
-n_approximation_MC = 1e2  # Number of patients in each trial for the approximation of the true trial-level correlation
+N_approximation_MC = 2e4  # Number of Monte Carlo trial replications for the approximation of the true trial-level correlation
+n_approximation_MC = 60  # Number of patients in each trial for the approximation of the true trial-level correlation
 
 N = 10  # Number of trials in each meta-analytic data set
 n = 2e3  # Number of patients in each trial
@@ -30,7 +30,7 @@ n = 2e3  # Number of patients in each trial
 sd_beta_clin_treatment = c(0.03, 0.10)
 sd_beta_clin_surrogate_sq = c(0.03, 0.10)
 
-B = 2e3
+B = 5e2
 
 # Tibble with simulation parameters. Each row corresponds to a data-generating
 # mechanism.
@@ -101,26 +101,41 @@ meta_analytic_data = expand_grid(data_set_indicator,
   ) %>%
   select(-list_of_ma_data_objects)
 
-
+print(Sys.time() - a)
 
 ## Approximate the true trial-level correlation parameter ------------------
 
 # For each surrogate index prediction function, approximate the true trial-level
 # correlation through MC approximation.
-meta_analytic_data = meta_analytic_data %>%
-  mutate(
-    rho_true =  future_pmap_dbl(
-      .l = list(
-        f = surrogate_index_f_list,
-        sd_beta_clin_treatment = sd_beta_clin_treatment,
-        sd_beta_clin_surrogate_sq = sd_beta_clin_surrogate_sq
-      ),
-      .f = rho_MC_approximation,
-      N_approximation_MC = N_approximation_MC,
-      n_approximation_MC = n_approximation_MC,
-      .options = furrr_options(seed = TRUE)
-    )
-  )
+meta_analytic_data$rho_true = future_pmap_dbl(
+  .l = list(
+    f = meta_analytic_data$surrogate_index_f_list,
+    sd_beta_clin_treatment = meta_analytic_data$sd_beta_clin_treatment,
+    sd_beta_clin_surrogate_sq = meta_analytic_data$sd_beta_clin_surrogate_sq
+  ),
+  .f = rho_MC_approximation,
+  N_approximation_MC = N_approximation_MC,
+  n_approximation_MC = n_approximation_MC,
+  .options = furrr_options(seed = TRUE)
+)
+
+
+# meta_analytic_data = meta_analytic_data %>%
+#   mutate(
+#     rho_true =  future_pmap_dbl(
+#       .l = list(
+#         f = surrogate_index_f_list,
+#         sd_beta_clin_treatment = sd_beta_clin_treatment,
+#         sd_beta_clin_surrogate_sq = sd_beta_clin_surrogate_sq
+#       ),
+#       .f = rho_MC_approximation,
+#       N_approximation_MC = N_approximation_MC,
+#       n_approximation_MC = n_approximation_MC,
+#       .options = furrr_options(seed = TRUE)
+#     )
+#   )
+
+print(Sys.time() - a)
 
 # Approximate the true trial-level correlation using the surrogate endpoint.
 rho_true_surrogate_tbl = dgm_param_tbl %>%
@@ -136,6 +151,8 @@ rho_true_surrogate_tbl = dgm_param_tbl %>%
     )
   )
 
+
+print(Sys.time() - a)
 # Add the true trial-level rho parameters to the tibble with the simulation data
 # sets.
 meta_analytic_data = meta_analytic_data %>%
@@ -182,7 +199,7 @@ meta_analytic_data_simulated = bind_rows(
 ) %>% # Drop columns that have become superfluous.
   select(-rho_true_surrogate)
 
-
+print(Sys.time() - a)
 ## Moment-based estimator --------------------------------------------------
 
 # Estimate trial-level Pearson correlation for the generated meta-analytic data
@@ -219,6 +236,8 @@ meta_analytic_data_simulated = meta_analytic_data_simulated %>%
   ungroup() %>%
   # Drop superfluous variables
   select(-moment_estimates, -rho_delta_method)
+
+print(Sys.time() - a)
 
 statistic_function_factory = function(estimator_adjustment) {
   statistic_f = function(data, weights) {
@@ -268,6 +287,8 @@ meta_analytic_data_simulated =  bind_rows(
     select(-rho_ci_bs)
 )
 
+
+print(Sys.time() - a)
 
 # Save Results -------------------------------------------------------------
 
