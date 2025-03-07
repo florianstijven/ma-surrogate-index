@@ -4,4 +4,6 @@
 *.pdf
 *.html
 *.out
+data/*.csv
+!data/processed_data_synthetic.csv
 

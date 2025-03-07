@@ -130,7 +130,7 @@ ggplot(ma_trt_effect_index_tbl, aes(x = treatment_effect_surr, y = treatment_eff
                 width = 0.05) +
   # Labels and title
   labs(
-    x = "Treatment Effect on Surrogate Endpoint",
+    x = "Treatment Effect on Estimated Surrogate Index",
     y = "Treatment Effect on Clinical Endpoint",
     title = "Treatment Effects on Surrogate vs. Clinical Endpoint with 95% Confidence Intervals"
   ) +
@@ -258,26 +258,76 @@ meta_analytic_data_simulated %>%
 
 ```{r}
 # Compute coverage, mean bias, median bias, empirical SD, and mean SE.
-meta_analytic_data_simulated %>%
+simulations_summary_tbl = meta_analytic_data_simulated %>%
   group_by(analysis_type, sd_beta_clin_surrogate_sq, sd_beta_clin_treatment, estimator_adjustment, sandwich_adjustment, CI_type) %>%
   summarise(
     coverage = mean((rho_true >= rho_ci_lower) & (rho_true <= rho_ci_upper), na.rm = TRUE),
     mean_bias = mean(rho_est - rho_true, na.rm = TRUE),
     median_bias = median(rho_est - rho_true, na.rm = TRUE),
     emp_SD = sd(rho_est, na.rm = TRUE),
-    meanSE = mean(rho_se, na.rm = TRUE)
-  ) %>%
+    mean_SE = mean(rho_se, na.rm = TRUE),
+    MSE = mean((rho_true - rho_est) ^2, na.rm = TRUE)
+  )
+```
+
+```{r}
+simulations_summary_tbl  %>%
   knitr::kable(digits = 3)
 ```
 
 
 ```{r}
+simulations_summary_tbl %>%
+  ggplot(aes(x = CI_type, y = coverage, color = estimator_adjustment, shape = sandwich_adjustment)) +
+  geom_point(position = position_dodge(width = 0.1)) +
+  ylim(c(0.80, 1)) +
+  geom_abline(intercept = 0.95, slope = 0) +
+  facet_grid(sd_beta_clin_treatment~analysis_type)
+```
+
+```{r}
+simulations_summary_tbl %>%
+  filter(CI_type == "sandwich", sandwich_adjustment == "none") %>%
+  ggplot(aes(x = CI_type, y = mean_bias, color = estimator_adjustment, shape = sandwich_adjustment)) +
+  geom_point(position = position_dodge(width = 0.1)) +
+  geom_abline(intercept = 0, slope = 0) +
+  ylim(c(-0.05, 0.05)) +
+  facet_grid(sd_beta_clin_treatment~analysis_type)
+```
+
+```{r}
+simulations_summary_tbl %>%
+  filter(CI_type == "sandwich", sandwich_adjustment == "none") %>%
+  ggplot(aes(x = CI_type, y = MSE, color = estimator_adjustment, shape = sandwich_adjustment)) +
+  geom_point(position = position_dodge(width = 0.1)) +
+  geom_abline(intercept = 0, slope = 0) +
+  ylim(c(0, 0.25)) +
+  facet_grid(sd_beta_clin_treatment~analysis_type)
+```
+
+
+
+
+
+Distribution of lower limits of the bootstrap CIs across the scenarios.
+
+```{r}
 meta_analytic_data_simulated %>%
-  filter(analysis_type == "surrogate index", CI_type == "multiplier bootstrap") %>%
-  ggplot(aes(x = rho_ci_lower)) +
-  geom_histogram() +
+  filter(CI_type == "multiplier bootstrap") %>%
+  ggplot(aes(x = rho_ci_lower, fill = analysis_type)) +
+  geom_histogram(position = "identity", alpha = 0.5, color = "black") +
   xlim(c(-1, 1)) +
   facet_grid(estimator_adjustment~sd_beta_clin_treatment)
 ```
 
+Distribution of upper limits of the bootstrap CIs across the scenarios.
+
+```{r}
+meta_analytic_data_simulated %>%
+  filter(CI_type == "multiplier bootstrap") %>%
+  ggplot(aes(x = rho_ci_upper, fill = analysis_type)) +
+  geom_histogram(position = "identity", alpha = 0.5, color = "black") +
+  xlim(c(-1, 1.5)) +
+  facet_grid(estimator_adjustment~sd_beta_clin_treatment)
+```
 
