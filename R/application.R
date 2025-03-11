@@ -155,7 +155,7 @@ surrogate_index_models_tbl = tibble(
 # baseline covariates and the surrogate. Note that we missing predictors: the
 # antibody titers are missing according to the case-cohort sampling mechanism. 
 gam_fit_baseline = gam(
-  formula = Y ~ bs(risk_score) + BMI_stratum + bs(Age),
+  formula = Y ~ s(risk_score) + BMI_stratum + s(Age),
   data = ipd_tbl, 
   weights = weight,
   subset = (ipd_tbl$Delta == 1) | (ipd_tbl$vax == 0),
@@ -163,7 +163,7 @@ gam_fit_baseline = gam(
 )
 gam_fit_spike = gam(
   formula = Y ~ detected_bindSpike + s(bindSpike) +
-    bs(risk_score) + BMI_stratum + bs(Age),
+    s(risk_score) + BMI_stratum + s(Age),
   data = ipd_tbl, 
   weights = weight,
   subset = (ipd_tbl$Delta == 1) | (ipd_tbl$vax == 0),
@@ -171,7 +171,7 @@ gam_fit_spike = gam(
 )
 gam_fit_neut = gam(
   formula = Y ~ detected_pseudoneut50 + s(pseudoneutid50) +
-    bs(risk_score) + BMI_stratum + bs(Age),
+    s(risk_score) + BMI_stratum + s(Age),
   data = ipd_tbl, 
   weights = weight,
   subset = (ipd_tbl$Delta == 1) | (ipd_tbl$vax == 0),
@@ -180,7 +180,7 @@ gam_fit_neut = gam(
 gam_fit_both = gam(
   formula = Y ~ detected_bindSpike + s(bindSpike) +
     detected_pseudoneut50 + s(pseudoneutid50) +
-    bs(risk_score) + BMI_stratum + bs(Age),
+    s(risk_score) + BMI_stratum + s(Age),
   data = ipd_tbl, 
   weights = weight,
   subset = (ipd_tbl$Delta == 1) | (ipd_tbl$vax == 0),
