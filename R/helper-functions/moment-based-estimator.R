@@ -1,3 +1,32 @@
+# Function to estimate the residual variance under the assumption of an identity
+# relation between treatment effects on the clinical endpoint and treatment
+# effects on the surrogate endpoint.
+residual_variance_identity_line = function(alpha_hat, # Vector of treatment effect estimates on the surrogate.
+                                           beta_hat, # Vector of treatment effect estimates on the clinical endpoint.
+                                           vcov_list, # List of variance-covariance matrices for the treatment effect estimates.
+                                           weights = rep(1, length(alpha_hat))) {
+  # Total number of independent units.
+  N = length(alpha_hat)
+  
+  # Make sure that the weights sum to N.
+  weights = weights / mean(weights)
+  
+  # Compute the variance of the estimated treatment effect differences. 
+  total_variance = mean(weights * (beta_hat - alpha_hat) ^ 2)
+  
+  # Compute mean of the estimated variances due to sampling variability.
+  var_alpha = purrr::map_dbl(vcov_list, ~.x[1, 1])
+  var_beta = purrr::map_dbl(vcov_list, ~.x[2, 2])
+  var_alpha_beta = purrr::map_dbl(vcov_list,~.x[1, 2])
+  mean_est_var = mean(weights * (var_alpha + var_beta - 2 * var_alpha_beta))
+  
+  # Compute corrected residual variance.
+  residual_variance = total_variance - mean_est_var
+  
+  return(residual_variance)
+}
+
+
 # The function below implements the so-called moment based estimator for the
 # mean and covariance parameters of the trial-level treatment effects in a
 # meta-analytic sample. 
@@ -67,11 +96,19 @@ moment_estimator = function(
     sandwich = (N / (N - 1)) * sandwich
   }
   
+  residual_var = residual_variance_identity_line(
+    alpha_hat = alpha_hat,
+    beta_hat = beta_hat,
+    vcov_list = vcov_list,
+    weights = weights
+  )
+  
   # Return the estimated mean and covariance parameters and the corresponding 
   # sandwich estimator.
   return(list(
     coefs = c(mu_alpha_hat, mu_beta_hat, S_adj[1, 1], S_adj[2, 2], S_adj[1, 2]),
-    vcov = sandwich / N
+    vcov = sandwich / N,
+    residual_var = residual_var
   ))
 }
 

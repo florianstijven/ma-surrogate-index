@@ -1,9 +1,5 @@
-Check results with 50 replicates
-if results OK, rerun with 500
 
-% more efficient MC approximation of true rho by simply using sample means
-% corrected error in compute_trt_effects
-	-> explains approximated true rhos larger than one=> YES!
+? Run simulations with larger number of replicates and better MC accuracy
 
 
 

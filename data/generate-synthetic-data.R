@@ -80,8 +80,10 @@ method.ini <- c("",
 sds_list = lapply(
   X = levels(df$trial.lbl),
   FUN = function(trial) {
+    data_temp = df %>%
+      filter(trial.lbl == .env$trial)
     sds <- syn(
-      data = df,
+      data = data_temp,
       visit.sequence = visit.sequence.ini,
       method = method.ini,
       m = 1,

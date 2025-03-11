@@ -107,7 +107,7 @@ df = df %>%
         BMI < 30
     )),
     BMI_obese = as.integer(ifelse(
-      stringr::str_detect(trial.lbl, "J&J"), BMI == 4, BMI > 30
+      stringr::str_detect(trial.lbl, "J&J"), BMI == 4, BMI >= 30
     )),
     BMI_underweight_normal = as.integer(ifelse(
       stringr::str_detect(trial.lbl, "J&J"), BMI <= 2, BMI < 25
