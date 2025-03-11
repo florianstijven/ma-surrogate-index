@@ -722,15 +722,6 @@ surrogate_results_tbl %>%
   select(-moment_estimate, -bootstrap_ci) %>%
   write.csv(file = "results/tables/application/surrogacy-inferences.csv")
 
-surrogate_results_tbl %>%
-  filter(surrogate != "none") %>%
-  mutate(
-    rho_trial_est = purrr::map_dbl(rho_trial, "rho"),
-    CI_lower_bs = purrr::map_dbl(bootstrap_ci, "ci_lower"),
-    CI_upper_bs = purrr::map_dbl(bootstrap_ci, "ci_upper")
-  ) %>%
-  select(-moment_estimate, -bootstrap_ci) %>%
-  write.csv(file = "results/tables/application/surrogate-inferences.csv")
 
 
 
