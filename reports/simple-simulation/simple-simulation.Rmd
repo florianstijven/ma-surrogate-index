@@ -14,6 +14,7 @@ set.seed(1)
 library(tidyverse)
 library(sandwich)
 library(lmtest)
+library(hal9001)
 ```
 
 
@@ -29,7 +30,7 @@ source(here::here("R", "helper-functions", "simulation-functions.R"))
 train_clinical_prediction_model <- function(simulated_data) {
   # Train a correctly specified linear regression model for predicting the
   # clinical endpoint given the surrogate and baseline covariate
-  clinical_model <- lm(clinical ~ surrogate * covariate + surrogate ^ 2, data = simulated_data)
+  clinical_model <- lm(clinical ~ surrogate * X1 + surrogate ^ 2, data = simulated_data)
 
   return(
     function(newdata) {
@@ -40,7 +41,7 @@ train_clinical_prediction_model <- function(simulated_data) {
 ```
 
 
-# Illustration of Simulated data
+# Illustration of Simulated data: Proof-of-Concept
 
 ## Individual-Patient Data
 
@@ -49,8 +50,8 @@ train_clinical_prediction_model <- function(simulated_data) {
 ma_ipd_tbl = simulate_trials_with_random_coefficients(
   N = 10,
   n = 2e3,
-  sd_beta_clin_surrogate_sq = 0.10,
-  sd_beta_clin_treatment = 0.10
+  sd_beta = c(0.1, 0.1), 
+  scenario = "proof-of-concept"
 )
 # Estimate "predcition model", which is just a correctly specified linear
 # regression model.
@@ -62,7 +63,7 @@ ma_ipd_tbl$surr_index = surr_index_pred_f(ma_ipd_tbl)
 ```{r}
 # Plot the surrogate against the clinical endpoint.
 ma_ipd_tbl %>%
-  ggplot(aes(x = surrogate, y = clinical, color = as.factor(covariate))) +
+  ggplot(aes(x = surrogate, y = clinical, color = as.factor(X1))) +
   geom_point(alpha = 0.1) +
   facet_wrap("trial")
 ```
@@ -81,16 +82,17 @@ ma_ipd_tbl %>%
 ## Trial-Level Treatment Effects
 
 ```{r}
+formula_SY = formula(cbind(surrogate, clinical) ~ treatment + X1)
 ma_trt_effect_tbl = ma_ipd_tbl %>%
   group_by(trial) %>%
-  reframe(compute_treatment_effects(pick(everything()))) %>%
+  reframe(compute_treatment_effects(pick(everything()), formula = formula_SY)) %>%
   ungroup()
 
 ma_trt_effect_index_tbl = ma_ipd_tbl %>%
   select(-surrogate) %>%
   rename(surrogate = surr_index) %>%
   group_by(trial) %>%
-  reframe(compute_treatment_effects(pick(everything()))) %>%
+  reframe(compute_treatment_effects(pick(everything()), formula = formula_SY)) %>%
   ungroup()
 ```
 
@@ -146,8 +148,8 @@ moment_estimator_tbl = tibble(
   data = list(ma_trt_effect_tbl, ma_trt_effect_index_tbl)
 ) %>%
   cross_join(expand_grid(
-    estimator_adjustment = c("none", "N - 1"),
-    sandwich_adjustment = c("none", "N - 1")
+    estimator_adjustment = c("N - 1"),
+    sandwich_adjustment = c("N - 1")
   )) %>%
   rowwise(everything()) %>%
   summarise(
@@ -161,7 +163,12 @@ moment_estimator_tbl = tibble(
       )
     ),
     rho_est = list(
-      rho_delta_method(coefs = moment_estimate$coefs, vcov = moment_estimate$vcov)
+      rho_delta_method(
+        coefs = moment_estimate$coefs,
+        vcov = moment_estimate$vcov,
+        method = "t-adjustment",
+        N = 10
+      )
     )
   ) %>%
   ungroup() %>%
@@ -183,9 +190,9 @@ statistic_function_factory = function(estimator_adjustment) {
       estimator_adjustment = estimator_adjustment,
       weights = weights
     )
-    rho_est = rho_delta_method(moment_estimate$coefs, moment_estimate$vcov)
     
-    return(rho_est$rho)
+    
+    return(moment_estimate$coefs[5] / sqrt(moment_estimate$coefs[3] * moment_estimate$coefs[4]))
   }
   return(statistic_f)
 }
@@ -195,7 +202,220 @@ moment_estimator_tbl = bind_rows(
     moment_estimator_tbl %>%
       mutate(CI = "sandwich"),
     moment_estimator_tbl %>%
-      filter(sandwich_adjustment == "none") %>%
+      rowwise(everything()) %>%
+      summarise(
+        bootstrap_ci = list(multiplier_bootstrap_ci(
+          data = data,
+          statistic = statistic_function_factory(estimator_adjustment),
+          B = 1e3
+        )),
+        lower_ci = bootstrap_ci$ci_lower,
+        upper_ci = bootstrap_ci$ci_upper
+      ) %>%
+      ungroup() %>%
+      mutate(CI = "multiplier bootstrap")
+  )
+
+```
+
+
+```{r}
+# Present results with simulated data set in a tibble.
+moment_estimator_tbl %>%
+  select(-data, -moment_estimate, -rho_est, -bootstrap_ci) %>%
+  knitr::kable(digits = 3)
+```
+
+```{r}
+# Visualize the computed confidence intervals.
+moment_estimator_tbl %>%
+  ggplot(aes(x = rho, color = estimator_adjustment, y = CI, linetype = sandwich_adjustment)) +
+  geom_point(position = position_dodge(width = 0.2)) +
+  geom_errorbarh(aes(xmin = lower_ci, xmax = upper_ci), height = 0.1, position = position_dodge(width = 0.2)) +
+  xlim(c(-1.2, 1.2)) +
+  facet_grid(. ~ setting)
+```
+# Illustration of Simulated data: Vaccine
+
+## Individual-Patient Data
+
+```{r}
+num_knots = c(25, 10)
+# Function to train the clinical prediction model and return prediction function.
+train_clinical_prediction_model_vaccine <- function(simulated_data) {
+  glm_temp = glm(clinical ~ surrogate + X1 + X2 + X3, simulated_data, family = gaussian())
+  hal_fit = fit_hal(
+    X = model.matrix(glm_temp)[, -1],
+    Y = glm_temp$model$clinical,
+    family = "binomial",
+    max_degree = 2,
+    num_knots = num_knots
+  )
+  
+  return(function(newdata) {
+    return(predict(hal_fit, new_data = newdata))
+  })
+}
+```
+
+
+```{r}
+# Generate IPD for a meta-analytic setting
+ma_ipd_tbl = simulate_trials_with_random_coefficients(
+  N = 10,
+  n = 1e4,
+  sd_beta = c(0.1, 0.1), 
+  scenario = "vaccine"
+)
+# Estimate "predcition model", which is just a correctly specified linear
+# regression model.
+surr_index_pred_f = train_clinical_prediction_model_vaccine(ma_ipd_tbl)
+# Add surrogate indew to IPD data
+ma_ipd_tbl$surr_index = surr_index_pred_f(ma_ipd_tbl)
+```
+
+```{r}
+# Plot the surrogate against the clinical endpoint.
+ma_ipd_tbl %>%
+  ggplot(aes(x = surrogate, y = clinical, color = as.factor(X1))) +
+  geom_point(alpha = 0.1) +
+  facet_wrap("trial")
+```
+
+```{r}
+# Plot the surrogate index against the clinical endpoint.
+ma_ipd_tbl %>%
+  ggplot(aes(x = surr_index, y = clinical)) +
+  geom_point(alpha = 0.1) +
+  geom_smooth(aes(group = as.factor(trial))) +
+  facet_wrap("trial") +
+  geom_abline(intercept = 0, slope = 1)
+```
+
+
+## Trial-Level Treatment Effects
+
+```{r}
+formula_SY = formula(cbind(surrogate, clinical) ~ treatment + X1)
+ma_trt_effect_tbl = ma_ipd_tbl %>%
+  group_by(trial) %>%
+  reframe(compute_treatment_effects(pick(everything()), formula = formula_SY)) %>%
+  ungroup()
+
+ma_trt_effect_index_tbl = ma_ipd_tbl %>%
+  select(-surrogate) %>%
+  rename(surrogate = surr_index) %>%
+  group_by(trial) %>%
+  reframe(compute_treatment_effects(pick(everything()), formula = formula_SY)) %>%
+  ungroup()
+```
+
+```{r}
+# Create a scatter plot with treatment effects on surrogate vs. clinical, including 95% CI error bars
+ggplot(ma_trt_effect_tbl, aes(x = treatment_effect_surr, y = treatment_effect_clin)) +
+  # Scatter plot of treatment effects
+  geom_point() +
+  # Horizontal error bars for surrogate treatment effect
+  geom_errorbarh(aes(xmin = treatment_effect_surr - 1.96 * se_surr, 
+                     xmax = treatment_effect_surr + 1.96 * se_surr), 
+                 height = 0.05) +
+  # Vertical error bars for clinical treatment effect
+  geom_errorbar(aes(ymin = treatment_effect_clin - 1.96 * se_clin, 
+                    ymax = treatment_effect_clin + 1.96 * se_clin), 
+                width = 0.05) +
+  # Labels and title
+  labs(
+    x = "Treatment Effect on Surrogate Endpoint",
+    y = "Treatment Effect on Clinical Endpoint",
+    title = "Treatment Effects on Surrogate vs. Clinical Endpoint with 95% Confidence Intervals"
+  ) 
+```
+
+```{r}
+# Create a scatter plot with treatment effects on surrogate vs. clinical, including 95% CI error bars
+ggplot(ma_trt_effect_index_tbl, aes(x = treatment_effect_surr, y = treatment_effect_clin)) +
+  # Scatter plot of treatment effects
+  geom_point() +
+  # Horizontal error bars for surrogate treatment effect
+  geom_errorbarh(aes(xmin = treatment_effect_surr - 1.96 * se_surr, 
+                     xmax = treatment_effect_surr + 1.96 * se_surr), 
+                 height = 0.05) +
+  # Vertical error bars for clinical treatment effect
+  geom_errorbar(aes(ymin = treatment_effect_clin - 1.96 * se_clin, 
+                    ymax = treatment_effect_clin + 1.96 * se_clin), 
+                width = 0.05) +
+  # Labels and title
+  labs(
+    x = "Treatment Effect on Estimated Surrogate Index",
+    y = "Treatment Effect on Clinical Endpoint",
+    title = "Treatment Effects on Surrogate vs. Clinical Endpoint with 95% Confidence Intervals"
+  ) +
+  geom_abline(intercept = 0, slope = 1)
+```
+
+## Moment-Based Estimator
+
+```{r}
+# Estimate the meta-analytic parameters using the moment-based estimator.
+moment_estimator_tbl = tibble(
+  setting = c("surrogate", "surrogate index"),
+  data = list(ma_trt_effect_tbl, ma_trt_effect_index_tbl)
+) %>%
+  cross_join(expand_grid(
+    estimator_adjustment = c("N - 1"),
+    sandwich_adjustment = c("N - 1")
+  )) %>%
+  rowwise(everything()) %>%
+  summarise(
+    moment_estimate = list(
+      moment_estimator(
+        data$treatment_effect_surr,
+        data$treatment_effect_clin,
+        data$covariance_matrix,
+        estimator_adjustment = estimator_adjustment,
+        sandwich_adjustment = sandwich_adjustment
+      )
+    ),
+    rho_est = list(
+      rho_delta_method(
+        coefs = moment_estimate$coefs,
+        vcov = moment_estimate$vcov,
+        method = "t-adjustment",
+        N = 10
+      )
+    )
+  ) %>%
+  ungroup() %>%
+  mutate(
+    rho = purrr::map_dbl(rho_est, "rho"),
+    se = purrr::map_dbl(rho_est, "se"),
+    lower_ci = purrr::map_dbl(rho_est, c(3, 1)),
+    upper_ci = purrr::map_dbl(rho_est, c(3, 2))
+  )
+```
+
+```{r}
+statistic_function_factory = function(estimator_adjustment) {
+  statistic_f = function(data, weights) {
+    moment_estimate = moment_estimator(
+      alpha_hat = data$treatment_effect_surr,
+      beta_hat = data$treatment_effect_clin,
+      vcov_list = data$covariance_matrix,
+      estimator_adjustment = estimator_adjustment,
+      weights = weights
+    )
+    
+    
+    return(moment_estimate$coefs[5] / sqrt(moment_estimate$coefs[3] * moment_estimate$coefs[4]))
+  }
+  return(statistic_f)
+}
+
+
+moment_estimator_tbl = bind_rows(
+    moment_estimator_tbl %>%
+      mutate(CI = "sandwich"),
+    moment_estimator_tbl %>%
       rowwise(everything()) %>%
       summarise(
         bootstrap_ci = list(multiplier_bootstrap_ci(
@@ -230,104 +450,181 @@ moment_estimator_tbl %>%
   facet_grid(. ~ setting)
 ```
 
-
 # Simulation Results
 
 ```{r}
 # Read in simulation results.
-meta_analytic_data_simulated <- readRDS(
+ma_sim_results <- bind_rows(readRDS(
   here::here(
     "results",
     "raw-results",
     "simple-simulation",
-    "meta_analytic_data_simulated.rds"
+    "ma-sim-results-proof-of-concept-large.rds"
   )
-)
+) %>%
+  mutate(scenario = "proof-of-concept", setting = "large N, small n"),
+readRDS(
+  here::here(
+    "results",
+    "raw-results",
+    "simple-simulation",
+    "ma-sim-results-proof-of-concept-small.rds"
+  )
+) %>%
+  mutate(scenario = "proof-of-concept", setting = "small N, large n"),
+readRDS(
+  here::here(
+    "results",
+    "raw-results",
+    "simple-simulation",
+    "ma-sim-results-vaccine-small.rds"
+  )
+) %>%
+  mutate(scenario = "vaccine", setting = "small N, large n"))
 ```
+
+```{r}
+# Add new variable indicating how strongly the surrogacy and comparability
+# assumptions are violated.
+ma_sim_results = ma_sim_results %>%
+  mutate(SI_violation = ifelse(map_dbl(sd_beta, 1) == 0.1, "moderately", "slightly"))
+```
+
 
 ```{r}
 # Distribution of data-adaptive rho-trial estimands (approximated through MC
 # integration).
-meta_analytic_data_simulated %>%
-  filter(analysis_type == "surrogate index") %>%
-  ggplot(aes(x = rho_true)) +
-  geom_histogram() +
-  facet_grid(.~sd_beta_clin_treatment)
+ma_sim_results %>%
+  filter(analysis_type == "surrogate index", n == 2000, CI_type == "sandwich") %>%
+  ggplot(aes(x = rho_true, fill = SI_violation)) +
+  geom_histogram(position = "identity", alpha = 0.5) +
+  facet_grid(N~scenario)
 ```
 
 
 ```{r}
 # Compute coverage, mean bias, median bias, empirical SD, and mean SE.
-simulations_summary_tbl = meta_analytic_data_simulated %>%
-  group_by(analysis_type, sd_beta_clin_surrogate_sq, sd_beta_clin_treatment, estimator_adjustment, sandwich_adjustment, CI_type) %>%
+ma_sim_summary = ma_sim_results %>%
+  group_by(
+    analysis_type,
+    SI_violation,
+    estimator_adjustment,
+    sandwich_adjustment,
+    CI_type,
+    setting,
+    scenario,
+    N,
+    n
+  ) %>%
   summarise(
-    coverage = mean((rho_true >= rho_ci_lower) & (rho_true <= rho_ci_upper), na.rm = TRUE),
+    coverage = mean((rho_true >= rho_ci_lower) &
+                      (rho_true <= rho_ci_upper), na.rm = TRUE),
     mean_bias = mean(rho_est - rho_true, na.rm = TRUE),
     median_bias = median(rho_est - rho_true, na.rm = TRUE),
     emp_SD = sd(rho_est, na.rm = TRUE),
     mean_SE = mean(rho_se, na.rm = TRUE),
-    MSE = mean((rho_true - rho_est) ^2, na.rm = TRUE)
+    MSE = mean((rho_true - rho_est) ^ 2, na.rm = TRUE)
   )
 ```
 
 ```{r}
-simulations_summary_tbl  %>%
+ma_sim_summary  %>%
   knitr::kable(digits = 3)
 ```
 
 
 ```{r}
-simulations_summary_tbl %>%
-  ggplot(aes(x = CI_type, y = coverage, color = estimator_adjustment, shape = sandwich_adjustment)) +
+ma_sim_summary %>%
+  filter(N <= 30) %>%
+  ggplot(aes(
+    x = N,
+    y = coverage,
+    shape = scenario,
+    color = CI_type
+  )) +
   geom_point(position = position_dodge(width = 0.1)) +
   ylim(c(0.80, 1)) +
   geom_abline(intercept = 0.95, slope = 0) +
-  facet_grid(sd_beta_clin_treatment~analysis_type)
+  facet_grid(SI_violation ~ analysis_type)
 ```
 
 ```{r}
-simulations_summary_tbl %>%
-  filter(CI_type == "sandwich", sandwich_adjustment == "none") %>%
-  ggplot(aes(x = CI_type, y = mean_bias, color = estimator_adjustment, shape = sandwich_adjustment)) +
+ma_sim_summary %>%
+  filter(N <= 30, CI_type == "sandwich") %>%
+  ggplot(aes(
+    x = N,
+    y = mean_bias,
+    shape = scenario
+  )) +
   geom_point(position = position_dodge(width = 0.1)) +
   geom_abline(intercept = 0, slope = 0) +
-  ylim(c(-0.05, 0.05)) +
-  facet_grid(sd_beta_clin_treatment~analysis_type)
+  facet_grid(SI_violation ~ analysis_type)
 ```
 
 ```{r}
-simulations_summary_tbl %>%
-  filter(CI_type == "sandwich", sandwich_adjustment == "none") %>%
-  ggplot(aes(x = CI_type, y = MSE, color = estimator_adjustment, shape = sandwich_adjustment)) +
+ma_sim_summary %>%
+  filter(N <= 30, CI_type == "sandwich") %>%
+  ggplot(aes(
+    x = N,
+    y = MSE,
+    shape = scenario
+  )) +
   geom_point(position = position_dodge(width = 0.1)) +
   geom_abline(intercept = 0, slope = 0) +
-  ylim(c(0, 0.25)) +
-  facet_grid(sd_beta_clin_treatment~analysis_type)
+  facet_grid(SI_violation ~ analysis_type)
 ```
-
-
-
 
 
 Distribution of lower limits of the bootstrap CIs across the scenarios.
 
 ```{r}
-meta_analytic_data_simulated %>%
-  filter(CI_type == "multiplier bootstrap") %>%
-  ggplot(aes(x = rho_ci_lower, fill = analysis_type)) +
-  geom_histogram(position = "identity", alpha = 0.5, color = "black") +
-  xlim(c(-1, 1)) +
-  facet_grid(estimator_adjustment~sd_beta_clin_treatment)
+ma_sim_results %>%
+  filter(N <= 30, CI_type == "multiplier bootstrap", scenario == "proof-of-concept") %>%
+  ggplot(aes(
+    x = rho_ci_lower,
+    fill = SI_violation
+  )) +
+  geom_histogram(position = "identity", alpha = 0.5) +
+  facet_grid(N ~ analysis_type)
+
+ma_sim_results %>%
+  filter(N <= 30, CI_type == "sandwich", scenario == "proof-of-concept") %>%
+  ggplot(aes(
+    x = rho_ci_lower,
+    fill = SI_violation
+  )) +
+  geom_histogram(position = "identity", alpha = 0.5) +
+  facet_grid(N ~ analysis_type)
 ```
 
-Distribution of upper limits of the bootstrap CIs across the scenarios.
+```{r}
+ma_sim_results %>%
+  filter(N <= 30, CI_type == "multiplier bootstrap", scenario == "vaccine") %>%
+  ggplot(aes(
+    x = rho_ci_lower,
+    fill = SI_violation
+  )) +
+  geom_histogram(position = "identity", alpha = 0.5) +
+  facet_grid(N ~ analysis_type)
+
+ma_sim_results %>%
+  filter(N <= 30, CI_type == "sandwich", scenario == "vaccine") %>%
+  ggplot(aes(
+    x = rho_ci_lower,
+    fill = SI_violation
+  )) +
+  geom_histogram(position = "identity", alpha = 0.5) +
+  facet_grid(N ~ analysis_type)
+```
+
+
+Failure of asymptotics
 
 ```{r}
-meta_analytic_data_simulated %>%
-  filter(CI_type == "multiplier bootstrap") %>%
-  ggplot(aes(x = rho_ci_upper, fill = analysis_type)) +
-  geom_histogram(position = "identity", alpha = 0.5, color = "black") +
-  xlim(c(-1, 1.5)) +
-  facet_grid(estimator_adjustment~sd_beta_clin_treatment)
+ma_sim_results %>% filter(setting == "large N, small n", CI_type == "sandwich") %>%
+  mutate(Z = (rho_est - rho_true) / rho_se) %>%
+  ggplot(aes(x = Z)) +
+  geom_histogram() +
+  facet_grid(.~analysis_type)
 ```
 
