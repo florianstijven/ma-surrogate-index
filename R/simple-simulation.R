@@ -24,13 +24,13 @@ scenario = args[1]
 set.seed(123) 
 
 # Set of parameters controlling the simulations.
-N_MC = 10  # Number of Monte Carlo simulations
+N_MC = 5  # Number of Monte Carlo simulations
 
 N_approximation_MC = 5e4  # Number of Monte Carlo trial replications for the approximation of the true trial-level correlation
-n_approximation_MC = 1e2  # Number of patients in each trial for the approximation of the true trial-level correlation
+n_approximation_MC = 1e3  # Number of patients in each trial for the approximation of the true trial-level correlation
 
 N = c(5, 10, 30, 5e2)  # Number of trials in each meta-analytic data set
-n = c(100, 2e3)  # Number of patients in each trial
+n = c(50, 2e3)  # Number of patients in each trial
 
 sd_beta = list(c(0.03, 0.03), c(0.1, 0.1))
 
@@ -42,13 +42,14 @@ dgm_param_tbl = expand_grid(tibble(sd_beta), N, n) %>%
   # Settings with few trial-level replications and a small number of independent
   # trials are excluded. These settings are not relevant because the amount of
   # information is way too little to come to meaningful conclusions.
-  filter(!(n == 100 & N <= 10))
+  filter(!(n == 50 & N <= 10))
 
 # In the vaccine scenario, we also don't consider the small n large N setting.
-# This setting would anyhow lead to problems with zero events in some trials.
+# This setting would anyhow lead to problems with zero events in some trials. We
+# also don't consider the large N scenario as it is not practically relevant. 
 if (scenario == "vaccine") {
   dgm_param_tbl = dgm_param_tbl %>%
-    filter(!(n == 100))
+    filter(!(n == 50 | N == 5e2))
 }
 
 
@@ -280,7 +281,6 @@ meta_analytic_data_simulated =  bind_rows(
   meta_analytic_data_simulated %>%
     mutate(CI_type = "sandwich"),
   meta_analytic_data_simulated %>%
-    filter(sandwich_adjustment == "none") %>%
     mutate(
       # Compute CIs for rho based on the multiplier bootstrap.
       rho_ci_bs = furrr::future_map2(
