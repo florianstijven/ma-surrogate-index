@@ -5,6 +5,7 @@
 *.html
 *.out
 *.csv
+*.png
 data/*.csv
 #!data/processed_data_synthetic.csv
 

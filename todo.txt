@@ -1,5 +1,6 @@
-
-? Run simulations with larger number of replicates and better MC accuracy
-
-
+% -> Run small simulations with most recent version of the code
+	-> may fail because I changed not only the number of replications
+-> check whether results make sense
+-> run simumlations with 50 replications
+-> if everything makese sense, run with 500 replications
 
