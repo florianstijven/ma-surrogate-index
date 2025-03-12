@@ -157,7 +157,7 @@ compute_treatment_effects <- function(trial_data, method = "adjusted", formula) 
     combined_model <- lm(formula, data = trial_data)
     
     # Compute the covariance matrix using the sandwich estimator
-    cov_matrix <- sandwich::vcovHC(combined_model, type = "HC3")
+    cov_matrix <- sandwich::vcovHC(combined_model, type = "HC0")
     
     # Extract the covariance matrix between the treatment effects on surrogate and clinical
     cov_surr_clin <- cov_matrix[c("surrogate:treatment", "clinical:treatment"), c("surrogate:treatment", "clinical:treatment")]  # Covariance between treatment effects
@@ -313,5 +313,5 @@ rho_MC_approximation = function(f,
   
   # Estimate the trial-level Pearson correlation using the delta method. We only
   # need the point estimate in this MC approximation.
-  rho_delta_method(temp$coefs, temp$vcov)$rho
+  return(temp$coefs[5] / sqrt(temp$coefs[3] * temp$coefs[4]))
 }
