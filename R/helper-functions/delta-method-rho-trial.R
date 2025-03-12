@@ -2,7 +2,7 @@
 # parameter based on the estimated variances and covariance, the corresponding
 # variance matrix. The confidence interval is based on the delta method and
 # Fisher's Z transformation.
-rho_delta_method = function(coefs, vcov, alpha = 0.05){
+rho_delta_method = function(coefs, vcov, alpha = 0.05, method = "t-adjustment", N = NULL){
   # Extract the estimated parameters.
   mu_alpha = coefs[1]
   mu_beta = coefs[2]
@@ -32,8 +32,14 @@ rho_delta_method = function(coefs, vcov, alpha = 0.05){
   # Compute the SE for the fisher's z transformation of rho.
   se_fisher_z = se_rho_hat / ((1 + rho) * (1 - rho))
   
-  # Compute the Z-score for the confidence interval.
-  z = qnorm(1 - alpha / 2)
+  if (method == "no adjustment") {
+    # Compute the Z-score for the confidence interval.
+    z = qnorm(1 - alpha / 2)
+  } else if (method == "t-adjustment") {
+    if (is.null(N)) stop("Number of independent trials N required for t-adjustment.")
+    z = qt(1 - alpha / 2, df = N - 1)
+  }
+
   
   # Compute the confidence interval for the Pearson correlation parameter on the
   # Fisher's Z scale.

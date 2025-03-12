@@ -242,7 +242,9 @@ meta_analytic_data_simulated = meta_analytic_data_simulated %>%
     rho_delta_method = list(
       rho_delta_method(
         moment_estimates$coefs,
-        moment_estimates$vcov
+        moment_estimates$vcov,
+        method = "t-adjustment",
+        N = N
       )
     ),
     rho_est = rho_delta_method$rho,
@@ -265,9 +267,8 @@ statistic_function_factory = function(estimator_adjustment) {
       estimator_adjustment = estimator_adjustment,
       weights = weights
     )
-    rho_est = rho_delta_method(moment_estimate$coefs, moment_estimate$vcov)
     
-    return(rho_est$rho)
+    return(moment_estimate$coefs[5] / sqrt(moment_estimate$coefs[3] * moment_estimate$coefs[4]))
   }
   return(statistic_f)
 }
