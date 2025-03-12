@@ -4,7 +4,7 @@
 # beta_surr_treatment is the mean treatment effect on the surrogate endpoint.
 # beta_clin_treatment is the "additional" treatment effect on the clinical
 # endpoint in a model conditional on the baseline covariate and surrogate.
-generate_random_coefficients <- function(sd_beta_clin_treatment = 0.10, sd_beta_clin_surrogate_sq = 0.10) {
+generate_random_coefficients_proof_of_concept <- function(sd_beta_clin_treatment = 0.10, sd_beta_clin_surrogate = 0.10) {
   # Sample trial-level proportion parameter for baseline covariate from uniform
   # distribution. 
   p1 <- runif(1, min = 0.3, max = 0.7)
@@ -14,7 +14,7 @@ generate_random_coefficients <- function(sd_beta_clin_treatment = 0.10, sd_beta_
   
   # Sample random treatment effect on clinical endpoint.
   beta_clin_treatment <- rnorm(1, mean = 0, sd = sd_beta_clin_treatment)
-  beta_clin_surrogate_sq <- rnorm(1, mean = 0, sd = sd_beta_clin_surrogate_sq)
+  beta_clin_surrogate <- rnorm(1, mean = 0, sd = sd_beta_clin_surrogate)
   
   # Return the list of sampled parameters.
   return(
@@ -22,20 +22,51 @@ generate_random_coefficients <- function(sd_beta_clin_treatment = 0.10, sd_beta_
       p1 = p1,
       beta_surr_treatment = beta_surr_treatment,
       beta_clin_treatment = beta_clin_treatment,
-      beta_clin_surrogate_sq = beta_clin_surrogate_sq
+      beta_clin_surrogate = beta_clin_surrogate
     )
   )
 }
 
+
+generate_random_coefficients_vaccine <- function(sd_beta_clin_treatment = 0.10, sd_beta_clin_surrogate = 0.10) {
+  # Sample trial-level proportion parameter for X3 from uniform
+  # distribution. 
+  p1 <- runif(1, min = 0.3, max = 0.7)
+  # Trial-level mean parameters for X1 and X2 are also sampled from uniform
+  # distributions.
+  mu1 = runif(1, min = -1, max = 1)
+  mu2 = runif(1, min = -1, max = 2)
+  
+  # Sample random treatment effect on surrogate. 
+  beta_surr_treatment <- rnorm(1, mean = 0.5, sd = 0.3)
+  
+  # Sample random treatment effect on clinical endpoint.
+  beta_clin_treatment <- rnorm(1, mean = 0, sd = sd_beta_clin_treatment)
+  beta_clin_surrogate <- rnorm(1, mean = 0, sd = sd_beta_clin_surrogate)
+  
+  # Return the list of sampled parameters.
+  return(
+    list(
+      mu1 = mu1,
+      mu2 = mu2,
+      p1 = p1,
+      beta_surr_treatment = beta_surr_treatment,
+      beta_clin_treatment = beta_clin_treatment,
+      beta_clin_surrogate = beta_clin_surrogate
+    )
+  )
+}
+
+
 # Function to simulate a single trial with passed trial-level parameters.
-simulate_trial <- function(n, coefficients) {
+simulate_trial_proof_of_concept <- function(n, coefficients) {
   # Randomization: Treatment assignment (1 or 0). Simple randomization is
   # assumed.
   treatment <- rbinom(n, 1, 0.5)  # 1 = treatment, 0 = control
   
   # Baseline covariates: One covariate from a Bernoulli distribution with
   # probability p1.
-  covariate <- rbinom(n, 1, coefficients$p1)
+  X1 <- rbinom(n, 1, coefficients$p1)
   
   # Surrogate endpoint: Linear relationship with treatment and random noise. The
   # distribution of the surrogate does not depend on the baseline covariate.
@@ -44,13 +75,42 @@ simulate_trial <- function(n, coefficients) {
   # Simulate clinical endpoint with no random coefficients. We're assuming that
   # the regression of the clinical endpoint on the surrogate and covariate is
   # the same across trials modulus some small random treatment effect.
-  clinical <- -1 * surrogate * covariate + surrogate * (1 - covariate) + 
+  clinical <- -1 * surrogate * X1 + surrogate * (1 - X1) + 
     coefficients$beta_clin_treatment * treatment +
-    coefficients$beta_clin_surrogate_sq * surrogate ^ 2 +
+    coefficients$beta_clin_surrogate * surrogate ^ 2 +
     rnorm(n)
   
   # Data frame for a single trial
-  trial_data <- data.frame(treatment, covariate, surrogate, clinical)
+  trial_data <- data.frame(treatment, X1, surrogate, clinical)
+  
+  return(trial_data)
+}
+
+# Function to simulate a single vaccine trial. 
+simulate_trial_vaccine = function(n, coefficients) {
+  # Randomization: Treatment assignment (1 or 0). Simple randomization is
+  # assumed.
+  treatment <- rbinom(n, 1, 0.5)  # 1 = treatment, 0 = control
+  
+  # Baseline covariates: One covariate from a Bernoulli distribution with
+  # probability p1.
+  X1 = rnorm(n, mean = coefficients$mu1)
+  X2 = rnorm(n, mean = coefficients$mu2)
+  X3 <- rbinom(n, 1, coefficients$p1)
+  
+  # Surrogate endpoint: Linear relationship with treatment and random noise. The
+  # distribution of the surrogate does not depend on the baseline covariates.
+  surrogate <- coefficients$beta_surr_treatment * treatment + rnorm(n)
+  
+  # Simulate clinical endpoint with no random coefficients. 
+  eta = coefficients$beta_clin_treatment * treatment + 
+    (1 + coefficients$beta_clin_surrogate + X3) * surrogate +
+    X1 + X3 + 1
+  prob_clin = (1 / (1 + exp(-1 * (eta)))) * 0.05 * (sin(X2) + 1)
+  clinical <- rbinom(n = n, size = 1, prob = prob_clin)
+  
+  # Data frame for a single trial
+  trial_data <- data.frame(treatment, X1, X2, X3, surrogate, clinical)
   
   return(trial_data)
 }
@@ -58,16 +118,27 @@ simulate_trial <- function(n, coefficients) {
 # Function to simulate data for multiple trials with a common within-trial
 # sample size. The random trial-level parameters are automatically sampled
 # within this function.
-simulate_trials_with_random_coefficients <- function(N, n, sd_beta_clin_treatment, sd_beta_clin_surrogate_sq) {
+simulate_trials_with_random_coefficients <- function(N, n, sd_beta, scenario) {
+  
+  if (scenario == "proof of concept") {
+    simulate_trial = simulate_trial_proof_of_concept
+    generate_random_coefficients = generate_random_coefficients_proof_of_concept
+  } else if (scenario == "vaccine") {
+    simulate_trial = simulate_trial_vaccine
+    generate_random_coefficients = generate_random_coefficients_vaccine
+  } else {
+    stop("`scenario` is not valid.")
+  }
+  
   
   trials <- lapply(1:N, function(i,
                                  sd_beta_clin_treatment,
-                                 sd_beta_clin_surrogate_sq) {
-    coefficients <- generate_random_coefficients(sd_beta_clin_treatment, sd_beta_clin_surrogate_sq)  # generate new random coefficients for each trial
+                                 sd_beta_clin_surrogate) {
+    coefficients <- generate_random_coefficients(sd_beta_clin_treatment, sd_beta_clin_surrogate)  # generate new random coefficients for each trial
     trial_data <- simulate_trial(n = n, coefficients = coefficients)
     trial_data$trial <- i  # Add a trial-level variable
     return(trial_data)
-  }, sd_beta_clin_treatment = sd_beta_clin_treatment, sd_beta_clin_surrogate_sq = sd_beta_clin_surrogate_sq)
+  }, sd_beta_clin_treatment = sd_beta[1], sd_beta_clin_surrogate = sd_beta[2])
   
   # Combine all trial data into a single tibble
   all_trials_data <- bind_rows(trials) %>%
@@ -77,13 +148,13 @@ simulate_trials_with_random_coefficients <- function(N, n, sd_beta_clin_treatmen
 }
 
 # Function to compute treatment effects with robust standard errors and covariance matrix
-compute_treatment_effects <- function(trial_data, method = "adjusted") {
+compute_treatment_effects <- function(trial_data, method = "adjusted", formula) {
   # If adjusted treatment effects are requires, we fit two univariate linear
   # regression models and estimate the covariance of the treatment effect
   # estimators through the sandwich estimators.
   if (method == "adjusted") {
     # Combine the coefficients into a single model to compute the covariance matrix for both treatment effects
-    combined_model <- lm(cbind(surrogate, clinical) ~ treatment + covariate, data = trial_data)
+    combined_model <- lm(formula, data = trial_data)
     
     # Compute the covariance matrix using the sandwich estimator
     cov_matrix <- sandwich::vcovHC(combined_model, type = "HC3")
@@ -133,18 +204,24 @@ compute_treatment_effects <- function(trial_data, method = "adjusted") {
 # index as a variable, and computes the treatment effects on (i) the surrogate
 # and clinical endpoints and (ii) the surrogate index and clinical endpoint.
 # This function uses the previously defined functions.
-generate_meta_analytic_data <- function(N, n, sd_beta_clin_treatment, sd_beta_clin_surrogate_sq, train_clinical_prediction_model) {
+generate_meta_analytic_data <- function(N, n, train_clinical_prediction_model, sd_beta, scenario) {
   # Simulate data for N trials with random coefficients
-  trials_data <- simulate_trials_with_random_coefficients(N = N, n = n, sd_beta_clin_treatment, sd_beta_clin_surrogate_sq) 
+  trials_data <- simulate_trials_with_random_coefficients(N = N, n = n, sd_beta = sd_beta, scenario = scenario) 
   
   # Train the clinical prediction model and add the surrogate index to the data
   surrogate_index_f = train_clinical_prediction_model(trials_data)
   trials_data$surr_index <- surrogate_index_f(trials_data)
   
+  if (scenario == "proof of concept") {
+    formula = formula(cbind(surrogate, clinical) ~ treatment + X1)
+  } else if (scenario == "vaccine") {
+    formula = formula(cbind(surrogate, clinical) ~ treatment + X1 + X2 + X3)
+  }
+
   # Compute treatment effects for each trial
   treatment_effects <- trials_data %>%
     group_by(trial) %>%
-    do(compute_treatment_effects(.)) %>%
+    do(compute_treatment_effects(., formula = formula)) %>%
     ungroup()  # Ensure the result is a tibble without grouping
   
   # Compute treatment effects for each trial
@@ -154,7 +231,7 @@ generate_meta_analytic_data <- function(N, n, sd_beta_clin_treatment, sd_beta_cl
       pick(everything()) %>% 
         select(-surrogate) %>% 
         rename(surrogate = surr_index) %>%
-        compute_treatment_effects()
+        compute_treatment_effects(formula = formula)
     ) %>%
     ungroup()  # Ensure the result is a tibble without grouping
   
@@ -174,8 +251,8 @@ generate_meta_analytic_data <- function(N, n, sd_beta_clin_treatment, sd_beta_cl
 rho_MC_approximation = function(f,
                                 N_approximation_MC,
                                 n_approximation_MC,
-                                sd_beta_clin_treatment,
-                                sd_beta_clin_surrogate_sq) {
+                                sd_beta,
+                                scenario) {
   # We follow a different strategy here for simulating trial-level treatment
   # effects. Essentially, we generate data for a single trial and estimate the
   # corresponding treatment effects, all trial-by-trial. This avoids excessive
@@ -189,8 +266,8 @@ rho_MC_approximation = function(f,
     treatment_effects_index_row = simulate_trials_with_random_coefficients(
       N = 1,
       n = n_approximation_MC,
-      sd_beta_clin_treatment = sd_beta_clin_treatment,
-      sd_beta_clin_surrogate_sq = sd_beta_clin_surrogate_sq
+      sd_beta = sd_beta,
+      scenario = scenario
     ) %>%
       # Compute the surrogate index given the function f.
       mutate(surr_index = f(pick(everything()))) %>%
@@ -199,15 +276,19 @@ rho_MC_approximation = function(f,
       select(-surrogate) %>%
       rename(surrogate = surr_index) %>%
       compute_treatment_effects(method = "mean")
-    
-    return(treatment_effects_index_row)
+
+    return(list(
+      alpha_hat = treatment_effects_index_row$treatment_effect_surr,
+      beta_hat = treatment_effects_index_row$treatment_effect_clin,
+      vcov = treatment_effects_index_row$covariance_matrix
+    ))
   }
   
   # Initialize a list to put the simulated estimated treatment effects etc in.
   # By defining this list before the for loop, we can speed up the for loop.
-  treatment_effects_index_list = as.list(
-    rep(0L, N_approximation_MC)
-  )
+  treatment_effect_surr = rep(0L, N_approximation_MC)
+  treatment_effect_clin = rep(0L, N_approximation_MC)
+  vcov_list = as.list(rep(0L, N_approximation_MC))
   
   # Generate estimated treatment effects etc and add them to the already defined
   # list. By using a for loop and the simulate_and_compute_trt_effects function,
@@ -215,16 +296,17 @@ rho_MC_approximation = function(f,
   # the for loop, an IPD data set is generated and implicitly deleted from
   # memory.
   for (i in seq_along(1:N_approximation_MC)) {
-    treatment_effects_index_list[[i]] = simulate_and_compute_trt_effects()
+    results_temp = simulate_and_compute_trt_effects()
+    treatment_effect_surr[i] = results_temp$alpha_hat
+    treatment_effect_clin[i] = results_temp$beta_hat
+    vcov_list[[i]] = results_temp$vcov[[1]]
   }
-  
-  treatment_effects_index = bind_rows(treatment_effects_index_list)
 
   # Estimate the meta-analytic parameters using the moment-based estimator.
   temp = moment_estimator(
-    treatment_effects_index$treatment_effect_surr,
-    treatment_effects_index$treatment_effect_clin,
-    treatment_effects_index$covariance_matrix
+    treatment_effect_surr,
+    treatment_effect_clin,
+    vcov_list
   )
   
   

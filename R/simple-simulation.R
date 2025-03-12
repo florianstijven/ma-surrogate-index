@@ -15,26 +15,39 @@ if (parallelly::supportsMulticore()) {
   plan(multisession)
 }
 
+# Under which scenario should the simulations be conducted? 
+scenario = "proof of concept"
+
 # This script simulates data. We set a seed to ensure reproducibility.
 set.seed(123) 
 
 # Set of parameters controlling the simulations.
-N_MC = 500  # Number of Monte Carlo simulations
+N_MC = 10  # Number of Monte Carlo simulations
 
-N_approximation_MC = 4e4  # Number of Monte Carlo trial replications for the approximation of the true trial-level correlation
+N_approximation_MC = 5e4  # Number of Monte Carlo trial replications for the approximation of the true trial-level correlation
 n_approximation_MC = 1e2  # Number of patients in each trial for the approximation of the true trial-level correlation
 
-N = 10  # Number of trials in each meta-analytic data set
-n = 2e3  # Number of patients in each trial
+N = c(5, 10, 30, 5e2)  # Number of trials in each meta-analytic data set
+n = c(100, 2e3)  # Number of patients in each trial
 
-sd_beta_clin_treatment = c(0.03, 0.10)
-sd_beta_clin_surrogate_sq = c(0.03, 0.10)
+sd_beta = list(c(0.03, 0.03), c(0.1, 0.1))
 
 B = 5e2
 
 # Tibble with simulation parameters. Each row corresponds to a data-generating
 # mechanism.
-dgm_param_tbl = tibble(sd_beta_clin_treatment, sd_beta_clin_surrogate_sq)
+dgm_param_tbl = expand_grid(tibble(sd_beta), N, n) %>%
+  # Settings with few trial-level replications and a small number of independent
+  # trials are excluded. These settings are not relevant because the amount of
+  # information is way too little to come to meaningful conclusions.
+  filter(!(n == 100 & N <= 10))
+
+# In the vaccine scenario, we also don't consider the small n large N setting.
+# This setting would anyhow lead to problems with zero events in some trials.
+if (scenario == "vaccine") {
+  dgm_param_tbl = dgm_param_tbl %>%
+    filter(!(n == 100))
+}
 
 
 # Helper Functions --------------------------------------------------------
@@ -45,11 +58,26 @@ source("R/helper-functions/moment-based-estimator.R")
 source("R/helper-functions/delta-method-rho-trial.R")
 source("R/helper-functions/multiplier-bootstrap.R")
 
+# Formula for simple surrogate index estimator based on linear model.
+if (scenario == "proof of concept") {
+  formula_surrogate_index = formula(clinical ~ surrogate*X1 + surrogate ^ 2)
+  family_surrogate_index = gaussian()
+} else if (scenario == "vaccine") {
+  formula_surrogate_index = formula(clinical ~ surrogate + X1 + X2 + X3)
+  family_surrogate_index = binomial()
+}
+
 # Function to train the clinical prediction model and return prediction function.
 train_clinical_prediction_model <- function(simulated_data) {
   # Train a correctly specified linear regression model for predicting the
   # clinical endpoint given the surrogate and baseline covariate
-  clinical_model <- lm(clinical ~ surrogate*covariate + surrogate ^ 2, data = simulated_data)
+  clinical_model <- glm(
+    formula_surrogate_index,
+    data = simulated_data,
+    x = FALSE,
+    y = FALSE,
+    family = family_surrogate_index
+  )
 
   return(
     function(newdata) {
@@ -74,19 +102,16 @@ data_set_indicator = 1:N_MC
 meta_analytic_data = expand_grid(data_set_indicator,
                                  dgm_param_tbl) %>%
   mutate(
-    list_of_ma_data_objects = future_map2(
-      sd_beta_clin_treatment, 
-      sd_beta_clin_surrogate_sq, 
-      function(sd_beta_clin_treatment,
-               sd_beta_clin_surrogate_sq) {
-        generate_meta_analytic_data(
-          N = N,
-          n = n,
-          train_clinical_prediction_model = train_clinical_prediction_model,
-          sd_beta_clin_treatment = sd_beta_clin_treatment,
-          sd_beta_clin_surrogate_sq = sd_beta_clin_surrogate_sq
-        )
-      }, .options = furrr_options(seed = TRUE)),
+    list_of_ma_data_objects = future_pmap(
+      .l = list(
+        sd_beta = sd_beta,
+        n = n,
+        N = N
+      ),
+      .f = generate_meta_analytic_data,
+      train_clinical_prediction_model = train_clinical_prediction_model,
+      scenario = scenario,
+      .options = furrr_options(seed = TRUE)),
     # Extract generated meta-analytic data sets with treatment effects on the
     # original surrogate.
     treatment_effects = lapply(list_of_ma_data_objects, function(x)
@@ -110,30 +135,14 @@ print(Sys.time() - a)
 meta_analytic_data$rho_true = future_pmap_dbl(
   .l = list(
     f = meta_analytic_data$surrogate_index_f_list,
-    sd_beta_clin_treatment = meta_analytic_data$sd_beta_clin_treatment,
-    sd_beta_clin_surrogate_sq = meta_analytic_data$sd_beta_clin_surrogate_sq
+    sd_beta = meta_analytic_data$sd_beta
   ),
   .f = rho_MC_approximation,
   N_approximation_MC = N_approximation_MC,
   n_approximation_MC = n_approximation_MC,
+  scenario = scenario,
   .options = furrr_options(seed = TRUE)
 )
-
-
-# meta_analytic_data = meta_analytic_data %>%
-#   mutate(
-#     rho_true =  future_pmap_dbl(
-#       .l = list(
-#         f = surrogate_index_f_list,
-#         sd_beta_clin_treatment = sd_beta_clin_treatment,
-#         sd_beta_clin_surrogate_sq = sd_beta_clin_surrogate_sq
-#       ),
-#       .f = rho_MC_approximation,
-#       N_approximation_MC = N_approximation_MC,
-#       n_approximation_MC = n_approximation_MC,
-#       .options = furrr_options(seed = TRUE)
-#     )
-#   )
 
 # Drop surrogate index function as this function is no longer needed.
 meta_analytic_data = meta_analytic_data %>%
@@ -143,17 +152,20 @@ print(Sys.time() - a)
 
 # Approximate the true trial-level correlation using the surrogate endpoint.
 rho_true_surrogate_tbl = dgm_param_tbl %>%
-  rowwise(everything()) %>%
-  summarise(
-    rho_true_surrogate = rho_MC_approximation(
-      f = function(x)
-        x$surrogate,
+  mutate(
+    rho_true_surrogate = future_map_dbl(
+      .x = sd_beta,
+      .f = rho_MC_approximation,
       N_approximation_MC = N_approximation_MC,
       n_approximation_MC = n_approximation_MC,
-      sd_beta_clin_treatment = sd_beta_clin_treatment,
-      sd_beta_clin_surrogate_sq = sd_beta_clin_surrogate_sq
+      f = function(x) {
+        x$surrogate
+      },
+      scenario = scenario,
+      .options = furrr_options(seed = TRUE)
     )
   )
+
 
 
 print(Sys.time() - a)
@@ -188,10 +200,10 @@ meta_analytic_data_simulated = meta_analytic_data %>%
 # Remove redundant tibble from memory.
 rm("meta_analytic_data")
 
-# Surrogate index prediction function for the setting where we simply use the
-# surrogate endpoint.
-surrogate_f = function(x)
-  x$surrogate
+# # Surrogate index prediction function for the setting where we simply use the
+# # surrogate endpoint.
+# surrogate_f = function(x)
+#   x$surrogate
 
 # If the analysis type is the surrogate, we change the surrogate index function to a function that simpy return the surrogate.
 meta_analytic_data_simulated = bind_rows(
@@ -209,8 +221,8 @@ print(Sys.time() - a)
 # sets of treatment effects and add everything to a tibble.
 meta_analytic_data_simulated = meta_analytic_data_simulated %>%
   cross_join(expand_grid(
-    estimator_adjustment = c("none", "N - 1"),
-    sandwich_adjustment = c("none", "N - 1")
+    estimator_adjustment = c("N - 1"),
+    sandwich_adjustment = c("N - 1")
   )) %>%
   rowwise(everything()) %>%
   summarise(
@@ -301,7 +313,8 @@ print(Sys.time() - a)
 
 # Save the simulated MA data sets with the corresponding rho estimates and
 # confidence intervals. 
-saveRDS(meta_analytic_data_simulated, "results/raw-results/simple-simulation/meta_analytic_data_simulated.rds")
+saveRDS(meta_analytic_data_simulated, paste0("results/raw-results/simple-simulation/meta_analytic_data_simulated-", 
+        scenario, ".rds"))
  
 print(Sys.time() - a)
 
