@@ -19,6 +19,9 @@ args = commandArgs(trailingOnly=TRUE)
 
 # Under which scenario should the simulations be conducted? 
 scenario = args[1]
+# Are the simulations small or large sample? Large sample is just to illustrate
+# problems under some asymptotic regimes.
+regime = args[2]
 
 # This script simulates data. We set a seed to ensure reproducibility.
 set.seed(123) 
@@ -29,29 +32,24 @@ N_MC = 5  # Number of Monte Carlo simulations
 N_approximation_MC = 5e4  # Number of Monte Carlo trial replications for the approximation of the true trial-level correlation
 n_approximation_MC = 1e3  # Number of patients in each trial for the approximation of the true trial-level correlation
 
-N = c(5, 10, 30, 5e2)  # Number of trials in each meta-analytic data set
-n = c(50, 2e3)  # Number of patients in each trial
-
-sd_beta = list(c(0.03, 0.03), c(0.1, 0.1))
+if (regime == "small") {
+  N = c(5, 10, 30)  # Number of trials in each meta-analytic data set
+  n = c(2e3)  # Number of patients in each trial
+  
+  sd_beta = list(c(0.03, 0.03), c(0.1, 0.1))
+} else if (regime == "large") {
+  N = c(5e2)  # Number of trials in each meta-analytic data set
+  n = c(50)  # Number of patients in each trial
+  
+  sd_beta = list(c(0.1, 0.1))
+}
+l
 
 B = 5e2
 
 # Tibble with simulation parameters. Each row corresponds to a data-generating
 # mechanism.
-dgm_param_tbl = expand_grid(tibble(sd_beta), N, n) %>%
-  # Settings with few trial-level replications and a small number of independent
-  # trials are excluded. These settings are not relevant because the amount of
-  # information is way too little to come to meaningful conclusions.
-  filter(!(n == 50 & N <= 10))
-
-# In the vaccine scenario, we also don't consider the small n large N setting.
-# This setting would anyhow lead to problems with zero events in some trials. We
-# also don't consider the large N scenario as it is not practically relevant. 
-if (scenario == "vaccine") {
-  dgm_param_tbl = dgm_param_tbl %>%
-    filter(!(n == 50 | N == 5e2))
-}
-
+dgm_param_tbl = expand_grid(tibble(sd_beta), N, n)
 
 # Helper Functions --------------------------------------------------------
 
@@ -203,11 +201,6 @@ meta_analytic_data_simulated = meta_analytic_data %>%
 # Remove redundant tibble from memory.
 rm("meta_analytic_data")
 
-# # Surrogate index prediction function for the setting where we simply use the
-# # surrogate endpoint.
-# surrogate_f = function(x)
-#   x$surrogate
-
 # If the analysis type is the surrogate, we change the surrogate index function to a function that simpy return the surrogate.
 meta_analytic_data_simulated = bind_rows(
   meta_analytic_data_simulated %>%
@@ -317,7 +310,7 @@ print(Sys.time() - a)
 # Save the simulated MA data sets with the corresponding rho estimates and
 # confidence intervals. 
 saveRDS(meta_analytic_data_simulated, paste0("results/raw-results/simple-simulation/ma-sim-results-", 
-        scenario, ".rds"))
+        scenario, "-", regime, ".rds"))
  
 print(Sys.time() - a)
 
