@@ -14,9 +14,11 @@ if (parallelly::supportsMulticore()) {
 } else {
   plan(multisession)
 }
+# Extract arguments for analysis. 
+args = commandArgs(trailingOnly=TRUE)
 
 # Under which scenario should the simulations be conducted? 
-scenario = "proof of concept"
+scenario = args[1]
 
 # This script simulates data. We set a seed to ensure reproducibility.
 set.seed(123) 
@@ -59,7 +61,7 @@ source("R/helper-functions/delta-method-rho-trial.R")
 source("R/helper-functions/multiplier-bootstrap.R")
 
 # Formula for simple surrogate index estimator based on linear model.
-if (scenario == "proof of concept") {
+if (scenario == "proof-of-concept") {
   formula_surrogate_index = formula(clinical ~ surrogate*X1 + surrogate ^ 2)
   family_surrogate_index = gaussian()
 } else if (scenario == "vaccine") {
@@ -313,7 +315,7 @@ print(Sys.time() - a)
 
 # Save the simulated MA data sets with the corresponding rho estimates and
 # confidence intervals. 
-saveRDS(meta_analytic_data_simulated, paste0("results/raw-results/simple-simulation/meta_analytic_data_simulated-", 
+saveRDS(meta_analytic_data_simulated, paste0("results/raw-results/simple-simulation/ma-sim-results-", 
         scenario, ".rds"))
  
 print(Sys.time() - a)

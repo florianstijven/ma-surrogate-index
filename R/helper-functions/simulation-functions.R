@@ -120,7 +120,7 @@ simulate_trial_vaccine = function(n, coefficients) {
 # within this function.
 simulate_trials_with_random_coefficients <- function(N, n, sd_beta, scenario) {
   
-  if (scenario == "proof of concept") {
+  if (scenario == "proof-of-concept") {
     simulate_trial = simulate_trial_proof_of_concept
     generate_random_coefficients = generate_random_coefficients_proof_of_concept
   } else if (scenario == "vaccine") {
@@ -212,7 +212,7 @@ generate_meta_analytic_data <- function(N, n, train_clinical_prediction_model, s
   surrogate_index_f = train_clinical_prediction_model(trials_data)
   trials_data$surr_index <- surrogate_index_f(trials_data)
   
-  if (scenario == "proof of concept") {
+  if (scenario == "proof-of-concept") {
     formula = formula(cbind(surrogate, clinical) ~ treatment + X1)
   } else if (scenario == "vaccine") {
     formula = formula(cbind(surrogate, clinical) ~ treatment + X1 + X2 + X3)
