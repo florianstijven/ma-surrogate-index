@@ -4,15 +4,19 @@ simulationhelpers = R/helper-functions/simulation-functions.R
 data = data/processed_data.csv
 
 .PHONY: all
-all: results/raw-results/simple-simulation/ma-sim-results-proof-of-concept.rds \
-results/raw-results/simple-simulation/ma-sim-results-vaccine.rds
+all: results/raw-results/simple-simulation/ma-sim-results-proof-of-concept-small.rds \
+	results/raw-results/simple-simulation/ma-sim-results-vaccine-small.rds \
+	results/raw-results/simple-simulation/ma-sim-results-proof-of-concept-large.rds
 	
 
-results/raw-results/simple-simulation/ma-sim-results-proof-of-concept.rds: R/simple-simulation.R $(analysishelpers) $(simulationhelpers)
-	Rscript R/simple-simulation.R proof-of-concept
+results/raw-results/simple-simulation/ma-sim-results-proof-of-concept-small.rds: R/simple-simulation.R $(analysishelpers) $(simulationhelpers)
+	Rscript R/simple-simulation.R proof-of-concept small
 	
-results/raw-results/simple-simulation/ma-sim-results-vaccine.rds: R/simple-simulation.R $(analysishelpers) $(simulationhelpers)
-	Rscript R/simple-simulation.R vaccine
+results/raw-results/simple-simulation/ma-sim-results-proof-of-concept-large.rds: R/simple-simulation.R $(analysishelpers) $(simulationhelpers)
+	Rscript R/simple-simulation.R proof-of-concept large
+	
+results/raw-results/simple-simulation/ma-sim-results-vaccine-small.rds: R/simple-simulation.R $(analysishelpers) $(simulationhelpers)
+	Rscript R/simple-simulation.R vaccine small
 	
 # R/application.Rout: R/application.R $(analysishelpers) $(data)
 #	 Rscript --verbose R/application.R  > $@ 2> $@
