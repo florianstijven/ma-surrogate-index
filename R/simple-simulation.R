@@ -43,7 +43,6 @@ if (regime == "small") {
   
   sd_beta = list(c(0.1, 0.1))
 }
-l
 
 B = 5e2
 
