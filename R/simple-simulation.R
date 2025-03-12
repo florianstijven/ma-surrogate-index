@@ -27,7 +27,7 @@ regime = args[2]
 set.seed(123) 
 
 # Set of parameters controlling the simulations.
-N_MC = 5  # Number of Monte Carlo simulations
+N_MC = 50  # Number of Monte Carlo simulations
 
 N_approximation_MC = 5e4  # Number of Monte Carlo trial replications for the approximation of the true trial-level correlation
 n_approximation_MC = 1e3  # Number of patients in each trial for the approximation of the true trial-level correlation
