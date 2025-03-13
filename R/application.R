@@ -661,18 +661,22 @@ source("R/helper-functions/delta-method-rho-trial.R")
 # weighted data set.
 statistic_f = function(data, weights) {
   moment_estimate = moment_estimator(
-    alpha_hat = data$trt_surr,
-    beta_hat = data$trt_clin,
-    vcov_list = data$vcov,
-    estimator_adjustment = "N - 1",
+    alpha_hat = data$treatment_effect_surr,
+    beta_hat = data$treatment_effect_clin,
+    vcov_list = data$covariance_matrix,
+    estimator_adjustment = estimator_adjustment,
     weights = weights
   )
-  d_alpha = moment_estimate$coefs[3]
-  d_beta = moment_estimate$coefs[4]
-  d_alphabeta = moment_estimate$coefs[5]
-  rho_trial = d_alphabeta / sqrt(d_alpha * d_beta)
+  rho = rho_delta_method(
+    coefs = moment_estimate$coefs,
+    vcov = moment_estimate$vcov,
+    method = "t-adjustment",
+    # N is only used for the t-adjustment, it doesn't matter for the estimate
+    # or SE.
+    N = 5
+  )
   
-  return(rho_trial)
+  return(list(estimate = rho$rho, se = rho$se))
 }
 
 # Estimate the surrogacy parameters on each data set of trial-level treatment
@@ -694,7 +698,8 @@ surrogate_results_tbl = ma_trt_effects_tbl %>%
         data = pick(everything()) %>%
           rename(trt_surr = "trt_effect_surrogate_index_est", trt_clin = 'log_RR_est'),
         statistic = statistic_f,
-        B = B_multiplier
+        B = B_multiplier,
+        type = "BCa"
       )
     )
   ) %>%
