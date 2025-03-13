@@ -34,9 +34,10 @@ moment_estimator = function(
     alpha_hat, # Vector of treatment effect estimates on the surrogate.
     beta_hat, # Vector of treatment effect estimates on the clinical endpoint.
     vcov_list, # List of variance-covariance matrices for the treatment effect estimates.
-    estimator_adjustment = "none", # Finite-sample adjustment to the estimator
-    sandwich_adjustment = "none", # Finite-sample adjustment to the sandwich estimator
-    weights = rep(1, length(alpha_hat))) 
+    estimator_adjustment = "N - 1", # Finite-sample adjustment to the estimator
+    sandwich_adjustment = "N -1", # Finite-sample adjustment to the sandwich estimator
+    weights = rep(1, length(alpha_hat)),
+    SE = TRUE) 
   {
   # Total number of independent units.
   N = length(alpha_hat)
@@ -58,7 +59,7 @@ moment_estimator = function(
   if (estimator_adjustment == "N - 1") {
     S = (N / (N - 1)) * S
   }
-  
+
   # Estimate the mean of the within-trial covariance matrices.
   # Compute the element-wise mean of a list of matrices.
   weighted_vcov_list = purrr::map2(
@@ -71,37 +72,45 @@ moment_estimator = function(
   # Estimate the adjusted covariance matrix.
   S_adj = S - mean_est_error_vcov
   
-  # Compute bread matrix for sandwich estimator. This is a diagonal matrix with
-  # the first two diagonal elements ones, and the remaining three minus ones.
-  bread = matrix(0, nrow = 5, ncol = 5)
-  diag(bread) = c(1, 1, -1, -1, -1)
   
-  # Compute the ham matrix for the sandwich estimator. This is the outer product
-  # of the estimation equations evaluated at the estimated parameters.
-  U = est_function(alpha_hat = alpha_hat,
-                   beta_hat = beta_hat,
-                   vcov_list = vcov_list,
-                   params = c(mu_alpha_hat, mu_beta_hat, S_adj[1, 1], S_adj[2, 2], S_adj[1, 2]),
-                   estimator_adjustment = estimator_adjustment,
-                   weights = weights)
-  
-  # Compute the outer product of estimating equations.
-  ham = (t(U) %*% U) * (1 / N)
-  
-  # Compute the sandwich estimator.
-  sandwich = bread %*% ham %*% bread
-
-  # Correct the sandwich estimate if required.
-  if (sandwich_adjustment == "N - 1") {
-    sandwich = (N / (N - 1)) * sandwich
+  # Compute sandwich estimator if required.
+  if (SE) {
+    # Compute bread matrix for sandwich estimator. This is a diagonal matrix with
+    # the first two diagonal elements ones, and the remaining three minus ones.
+    bread = matrix(0, nrow = 5, ncol = 5)
+    diag(bread) = c(1, 1, -1, -1, -1)
+    
+    # Compute the ham matrix for the sandwich estimator. This is the outer product
+    # of the estimation equations evaluated at the estimated parameters.
+    U = est_function(alpha_hat = alpha_hat,
+                     beta_hat = beta_hat,
+                     vcov_list = vcov_list,
+                     params = c(mu_alpha_hat, mu_beta_hat, S_adj[1, 1], S_adj[2, 2], S_adj[1, 2]),
+                     estimator_adjustment = estimator_adjustment,
+                     weights = weights)
+    
+    # Compute the outer product of estimating equations.
+    ham = (t(U) %*% U) * (1 / N)
+    
+    # Compute the sandwich estimator.
+    sandwich = bread %*% ham %*% bread
+    
+    # Correct the sandwich estimate if required.
+    if (sandwich_adjustment == "N - 1") {
+      sandwich = (N / (N - 1)) * sandwich
+    }
+    
+    residual_var = residual_variance_identity_line(
+      alpha_hat = alpha_hat,
+      beta_hat = beta_hat,
+      vcov_list = vcov_list,
+      weights = weights
+    )
+  } else {
+    sandwich = NA
+    residual_var = NA
   }
   
-  residual_var = residual_variance_identity_line(
-    alpha_hat = alpha_hat,
-    beta_hat = beta_hat,
-    vcov_list = vcov_list,
-    weights = weights
-  )
   
   # Return the estimated mean and covariance parameters and the corresponding 
   # sandwich estimator.

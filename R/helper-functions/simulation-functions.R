@@ -35,10 +35,10 @@ generate_random_coefficients_vaccine <- function(sd_beta_clin_treatment = 0.10, 
   # Trial-level mean parameters for X1 and X2 are also sampled from uniform
   # distributions.
   mu1 = runif(1, min = -1, max = 1)
-  mu2 = runif(1, min = -1, max = 2)
+  mu2 = runif(1, min = -1, max = 1)
   
   # Sample random treatment effect on surrogate. 
-  beta_surr_treatment <- runif(1, min = 0.50, max = 3.5)
+  beta_surr_treatment <- runif(1, min = 0.25, max = 3)
   
   # Sample random treatment effect on clinical endpoint.
   beta_clin_treatment <- rnorm(1, mean = 0, sd = sd_beta_clin_treatment)
@@ -265,51 +265,69 @@ compute_treatment_effects <- function(trial_data, method = "adjusted", formula =
 # index as a variable, and computes the treatment effects on (i) the surrogate
 # and clinical endpoints and (ii) the surrogate index and clinical endpoint.
 # This function uses the previously defined functions.
-generate_meta_analytic_data <- function(N, n, train_clinical_prediction_model, sd_beta, scenario) {
+generate_meta_analytic_data <- function(N, n, surrogate_index_estimators, sd_beta, scenario) {
   # Simulate data for N trials with random coefficients
   trials_data <- simulate_trials_with_random_coefficients(N = N, n = n, sd_beta = sd_beta, scenario = scenario) 
   
-  # Train the clinical prediction model and add the surrogate index to the data
-  surrogate_index_f = train_clinical_prediction_model(trials_data)
-  trials_data$surr_index <- surrogate_index_f(trials_data)
+  # List for MA data set.
+  MA_data_list = as.list(rep(0L, length(surrogate_index_estimators)))
+  # List for prediction functions.
+  surrogate_index_f_list = as.list(rep(0L, length(surrogate_index_estimators)))
   
-  if (scenario == "proof-of-concept") {
-    formula = formula(cbind(surrogate, clinical) ~ treatment + X1)
-  } else if (scenario == "vaccine") {
-    formula = formula(cbind(surrogate, clinical) ~ treatment + X1 + X2 + X3)
+  # For every surrogate index estimator, train the clinical prediction model and
+  # estimate the treatment effects on the corresponding surrogate index.
+  for (i in seq_along(1:length(surrogate_index_estimators))) {
+    if (scenario == "proof-of-concept") {
+      # For the proof of concept scenario, we use adjusted treatment effect
+      # estimators for the mean difference.
+      method = "adjusted"
+      formula = formula(cbind(surrogate, clinical) ~ treatment + X1)
+      measure = c("mean difference", "mean difference")
+    } else if (scenario == "vaccine") {
+      # For the vaccine scenario, we use the mean treatment effect estimators for
+      # the log RR. Adjusted estimators would be difficult to implement here. 
+      method = "mean"
+      formula = NULL
+      measure = c("log RR", "log RR")
+      # IF the surrogate index is just the surrogate, we still have to use the
+      # mean difference for the surrogate index.
+      if (surrogate_index_estimators[i] == "surrogate") {
+        measure[1] = "mean difference"
+      }
+      
+    } else {
+      stop("`scenario` is not valid.")
+    }
+    
+    # Train the clinical prediction model and add the surrogate index to the data
+    surrogate_index_f = train_clinical_prediction_model(trials_data, method = surrogate_index_estimators[i])
+    trials_data$surr_index <- surrogate_index_f(trials_data)
+    # Compute treatment effects for each trial
+    MA_data_list[[i]] <- trials_data %>%
+      group_by(trial) %>%
+      reframe(
+        pick(everything()) %>% 
+          select(-surrogate) %>% 
+          rename(surrogate = surr_index) %>%
+          compute_treatment_effects(formula = formula, measure = measure, method = method)
+      ) %>%
+      ungroup()  # Ensure the result is a tibble without grouping
+    surrogate_index_f_list[[i]] = surrogate_index_f
   }
-
-  # Compute treatment effects for each trial
-  treatment_effects <- trials_data %>%
-    group_by(trial) %>%
-    do(compute_treatment_effects(., formula = formula)) %>%
-    ungroup()  # Ensure the result is a tibble without grouping
-  
-  # Compute treatment effects for each trial
-  treatment_effects_index <- trials_data %>%
-    group_by(trial) %>%
-    reframe(
-      pick(everything()) %>% 
-        select(-surrogate) %>% 
-        rename(surrogate = surr_index) %>%
-        compute_treatment_effects(formula = formula)
-    ) %>%
-    ungroup()  # Ensure the result is a tibble without grouping
   
   # Return a list with the computed treatment effects (and associated relevant
   # information).
   return(
     list(
-      treatment_effects,
-      treatment_effects_index,
-      surrogate_index_f
+      MA_data_list,
+      surrogate_index_f_list
     )
   )
 }
 
 # Function that approximates the true trial-level correlation given a surrogate
 # index function.
-rho_MC_approximation = function(f,
+rho_MC_approximation = function(f = NULL,
                                 N_approximation_MC,
                                 n_approximation_MC,
                                 sd_beta,
@@ -320,30 +338,35 @@ rho_MC_approximation = function(f,
   # memory usage; at any time, we only have IPD data from a single trial in
   # memory (instead of IPD data from N_approximation_MC trials).
   
-  # Function that simulates a single trial and computes the treatment effects
-  # and covariance matrix based on sample means.
-  simulate_and_compute_trt_effects = function() {
-    # Simulate data for one trial with random coefficients
-    treatment_effects_index_row = simulate_trials_with_random_coefficients(
-      N = 1,
-      n = n_approximation_MC,
-      sd_beta = sd_beta,
-      scenario = scenario
-    ) %>%
-      # Compute the surrogate index given the function f.
-      mutate(surr_index = f(pick(everything()))) %>%
-      # Compute treatment effects for each trial (only considering the surrogate
-      # index and clinical endpoint).
-      select(-surrogate) %>%
-      rename(surrogate = surr_index) %>%
-      compute_treatment_effects(method = "mean")
-
-    return(list(
-      alpha_hat = treatment_effects_index_row$treatment_effect_surr,
-      beta_hat = treatment_effects_index_row$treatment_effect_clin,
-      vcov = treatment_effects_index_row$covariance_matrix
-    ))
+  if (scenario == "proof-of-concept") {
+    # If f is NULL, the surrogate index is the surrogate.
+    if (is.null(f)) {
+      f = function(x) x$surrogate
+    }
+    # For the proof of concept scenario, we again use mean differences as effect
+    # measure.
+    measure = c("mean difference", "mean difference")
+  } else if (scenario == "vaccine") {
+    # For the vaccine scenario, we use the log RR as effect measure, except when
+    # f is just the surrogate (which is true when f is NULL). In that case, we use the mean difference.
+    if (is.null(f)) {
+      measure = c("mean difference", "log RR")
+      f = function(x) x$surrogate
+    } else {
+      measure = c("log RR", "log RR")
+    }
+    # The covariance estimator for log RR is not unbiased (but it is
+    # consistent). This means that `n_approximation_MC` should be large enough.
+    if (n_approximation_MC < 2000) {
+      stop(
+        "The number of MC samples should be at least 2000 for the vaccine scenario to ensure a good approximation."
+      )
+    }
+  } else {
+    stop("`scenario` is not valid.")
   }
+  
+
   
   # Initialize a list to put the simulated estimated treatment effects etc in.
   # By defining this list before the for loop, we can speed up the for loop.
@@ -357,19 +380,38 @@ rho_MC_approximation = function(f,
   # the for loop, an IPD data set is generated and implicitly deleted from
   # memory.
   for (i in seq_along(1:N_approximation_MC)) {
-    results_temp = simulate_and_compute_trt_effects()
-    treatment_effect_surr[i] = results_temp$alpha_hat
-    treatment_effect_clin[i] = results_temp$beta_hat
-    vcov_list[[i]] = results_temp$vcov[[1]]
+    # Simulate data for one trial with random coefficients
+    treatment_effects_index_row = simulate_trials_with_random_coefficients(
+      N = 1,
+      n = n_approximation_MC,
+      sd_beta = sd_beta,
+      scenario = scenario
+    ) %>%
+      # Compute the surrogate index given the function f.
+      mutate(surr_index = f(pick(everything()))) %>%
+      # Compute treatment effects for each trial (only considering the surrogate
+      # index and clinical endpoint).
+      select(-surrogate) %>%
+      rename(surrogate = surr_index) %>%
+      compute_treatment_effects(method = "mean", measure = measure)
+    
+    treatment_effect_surr[i] = treatment_effects_index_row$treatment_effect_surr
+    treatment_effect_clin[i] = treatment_effects_index_row$treatment_effect_clin
+    vcov_list[[i]] = treatment_effects_index_row$covariance_matrix[[1]]
+    
+    # Garbage clean every 100 iterations.
+    if (i %% 100 == 0) {
+      gc()
+    }
   }
 
   # Estimate the meta-analytic parameters using the moment-based estimator.
   temp = moment_estimator(
     treatment_effect_surr,
     treatment_effect_clin,
-    vcov_list
+    vcov_list, 
+    SE = FALSE
   )
-  
   
   
   # Estimate the trial-level Pearson correlation using the delta method. We only
