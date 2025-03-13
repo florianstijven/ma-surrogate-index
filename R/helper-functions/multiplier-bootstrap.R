@@ -3,7 +3,6 @@
 multiplier_bootstrap_sampling <- function(data, statistic, B) {
   # Number of rows in the data set that is to be bootstrapped
   n <- nrow(data)
-  statistic(data, weights = rep(1, n))
   
   # Function that samples weights and evaluates statistic in reweighted data.
   bootstrap_replicate_f = function(x) {
@@ -17,19 +16,58 @@ multiplier_bootstrap_sampling <- function(data, statistic, B) {
   # Compute estimate on reweighted data. A list of estimates is returned.
   bootstrap_est_list = purrr::map(.x = 1:B, .f = bootstrap_replicate_f)
   
-  # Convert the list of estimates to a matrix with one row per bootstrap
-  # replicate.
-  bootstrap_matrix = as.matrix(do.call(rbind, bootstrap_est_list))
-  return(bootstrap_matrix)
+  # Extract estimates from the list of estimates.
+  bootstrap_estimates = purrr::map_dbl(.x = bootstrap_est_list, 1)
+  
+  # Extraxt SEs from the list of estimates.
+  bootstrap_ses = purrr::map_dbl(.x = bootstrap_est_list, 2)
+  
+  # Return list with bootstrap replicates and standard errors.
+  return(list(
+    bootstrap_estimates = bootstrap_estimates,
+    bootstrap_ses = bootstrap_ses
+  ))
+}
+
+
+
+multiplier_bootstrap_ci = function(data, statistic, B, alpha = 0.05, type = "BCa") {
+  bootstrap_replications_list = multiplier_bootstrap_sampling(data, statistic, B)
+  # Compute the required type of bootstrap CI.
+  if (type == "BCa") {
+    # Compute BCa interval
+    return(
+      BCa_CI(
+        boot_replicates = bootstrap_replications_list$bootstrap_estimates,
+        estimate = statistic(data, weights = rep(1, nrow(data)))$estimate,
+        statistic = statistic,
+        data = data,
+        alpha = alpha
+      )
+    )
+  } else if (type == "percentile") {
+    # Compute percentile interval
+    return(percentile_CI(bootstrap_replications_list$bootstrap_estimates, alpha))
+  } else {
+    stop("Invalid type. Must be 'BCa' or 'percentile'.")
+  }
 }
 
 # Compute the percentile confidence intervals
-multiplier_bootstrap_ci_help = function(samples_matrix, alpha = 0.05) {
-  if (any(is.na(samples_matrix))) {
-    warning("Some bootstrap replicates have missing values. These are removed for computing percentile confidence intervals.")
+percentile_CI = function(boot_replicates, alpha = 0.05) {
+  # Check for missing values or NaN in the bootstrap replicates. A warning is
+  # raised if there are any missing values. The warning also details the number
+  # of problematic values such that the user can decide whether to ignore this.
+  if (any(is.na(boot_replicates)) | any(is.nan(boot_replicates))) {
+    warning_message = paste(
+      "Some bootstrap replicates have missing values. These are removed for computing BCa confidence intervals.",
+      "\nNumber of missing values in bootstrap replicates: ",
+      sum(is.na(boot_replicates) | is.nan(boot_replicates)))
+    # Remove missing values from the bootstrap replicates and standard errors.
+    boot_replicates = boot_replicates[!is.na(boot_replicates) & !is.nan(boot_replicates)] 
   }
-  ci_lower = apply(samples_matrix, 2, quantile, probs = alpha / 2, na.rm = TRUE)
-  ci_upper = apply(samples_matrix, 2, quantile, probs = 1 - alpha / 2, na.rm = TRUE)
+  ci_lower = quantile(x = boot_replicates, probs = alpha / 2, na.rm = TRUE)
+  ci_upper = quantile(x = boot_replicates, probs = 1 - (alpha / 2), na.rm = TRUE)
   
   return(list(
     ci_lower = ci_lower,
@@ -37,9 +75,59 @@ multiplier_bootstrap_ci_help = function(samples_matrix, alpha = 0.05) {
   ))
 }
 
-multiplier_bootstrap_ci = function(data, statistic, B, alpha = 0.05 ) {
-  samples_matrix = multiplier_bootstrap_sampling(data, statistic, B)
-  multiplier_bootstrap_ci_help(samples_matrix, alpha)
+
+
+# Function that implements the BCa bootstrap.
+BCa_CI <- function(boot_replicates,
+                   estimate,
+                   data,
+                   statistic,
+                   alpha = 0.05) {
+  # Check for missing values or NaN in the bootstrap replicates. A warning is
+  # raised if there are any missing values. The warning also details the number
+  # of problematic values such that the user can decide whether to ignore this.
+  if (any(is.na(boot_replicates)) | any(is.nan(boot_replicates))) {
+    warning_message = paste(
+      "Some bootstrap replicates have missing values. These are removed for computing BCa confidence intervals.",
+      "\nNumber of missing values in bootstrap replicates: ",
+      sum(is.na(boot_replicates) | is.nan(boot_replicates)))
+    # Remove missing values from the bootstrap replicates and standard errors.
+    boot_replicates = boot_replicates[!is.na(boot_replicates) & !is.nan(boot_replicates)] 
+  }
+  
+  
+  # Calculate the number of bootstrap replicates
+  B <- length(boot_replicates)
+  # Number of independent replicates in the data
+  N <- nrow(data)
+  
+  
+  # Calculate the z0 (bias correction) term
+  z0 <- qnorm(sum(boot_replicates < estimate) / B)
+  
+  # Calculate the acceleration term (a)
+  jackknife_est <- sapply(1:N, function(i) {
+    statistic(data[-i, ], weights = rep(1, N - 1))$estimate
+  })
+  jackknife_mean <- mean(jackknife_est)
+  a <- sum((jackknife_mean - jackknife_est)^3) / (6 * sum((jackknife_mean - jackknife_est)^2)^1.5)
+  
+  # Calculate the adjusted alpha levels
+  alpha1 <- pnorm(z0 + (z0 + qnorm(alpha / 2)) / (1 - a * (
+    z0 + qnorm(alpha / 2)
+  )))
+  alpha2 <- pnorm(z0 + (z0 + qnorm(1 - alpha / 2)) / (1 - a * (
+    z0 + qnorm(1 - alpha / 2)
+  )))
+  
+  # Calculate the BCa intervals
+  ci_lower <- quantile(boot_replicates, alpha1)
+  ci_upper <- quantile(boot_replicates, alpha2)
+  
+  return(list(
+    ci_lower = ci_lower,
+    ci_upper = ci_upper
+  ))
 }
 
 

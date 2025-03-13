@@ -31,14 +31,14 @@ generate_random_coefficients_proof_of_concept <- function(sd_beta_clin_treatment
 generate_random_coefficients_vaccine <- function(sd_beta_clin_treatment = 0.10, sd_beta_clin_surrogate = 0.10) {
   # Sample trial-level proportion parameter for X3 from uniform
   # distribution. 
-  p1 <- runif(1, min = 0.3, max = 0.7)
+  p1 <- runif(1, min = 0.25, max = 0.75)
   # Trial-level mean parameters for X1 and X2 are also sampled from uniform
   # distributions.
   mu1 = runif(1, min = -1, max = 1)
   mu2 = runif(1, min = -1, max = 2)
   
   # Sample random treatment effect on surrogate. 
-  beta_surr_treatment <- rnorm(1, mean = 0.5, sd = 0.3)
+  beta_surr_treatment <- runif(1, min = 0.50, max = 3.5)
   
   # Sample random treatment effect on clinical endpoint.
   beta_clin_treatment <- rnorm(1, mean = 0, sd = sd_beta_clin_treatment)
@@ -103,10 +103,10 @@ simulate_trial_vaccine = function(n, coefficients) {
   surrogate <- coefficients$beta_surr_treatment * treatment + rnorm(n)
   
   # Simulate clinical endpoint with no random coefficients. 
-  eta = coefficients$beta_clin_treatment * treatment + 
-    (1 + coefficients$beta_clin_surrogate + X3) * surrogate +
-    X1 + X3 + 1
-  prob_clin = (1 / (1 + exp(-1 * (eta)))) * 0.05 * (sin(X2) + 1)
+  eta = coefficients$beta_clin_treatment * treatment - 
+    (1 + coefficients$beta_clin_surrogate + 1 * X3) * surrogate +
+    X1 - 2 * X3
+  prob_clin = (1 / (1 + exp(-1 * (eta)))) * 0.10 * exp(sin(1.5 * X2) + 1)
   clinical <- rbinom(n = n, size = 1, prob = prob_clin)
   
   # Data frame for a single trial
@@ -148,11 +148,16 @@ simulate_trials_with_random_coefficients <- function(N, n, sd_beta, scenario) {
 }
 
 # Function to compute treatment effects with robust standard errors and covariance matrix
-compute_treatment_effects <- function(trial_data, method = "adjusted", formula) {
+compute_treatment_effects <- function(trial_data, method = "adjusted", formula = NULL, measure = rep("mean difference", "mean difference")) {
   # If adjusted treatment effects are requires, we fit two univariate linear
   # regression models and estimate the covariance of the treatment effect
   # estimators through the sandwich estimators.
   if (method == "adjusted") {
+    # Adjusted method cannot be combined with the VE measure.
+    if (any(measure != c("mean difference", "mean difference"))) {
+      stop("The adjusted method can only be combined with the mean difference measure.")
+    }
+    
     # Combine the coefficients into a single model to compute the covariance matrix for both treatment effects
     combined_model <- lm(formula, data = trial_data)
     
@@ -171,10 +176,11 @@ compute_treatment_effects <- function(trial_data, method = "adjusted", formula) 
       covariance_matrix = list(cov_surr_clin)  # Store covariance matrix as a list
     )
   } else if (method == "mean") {
-    # Unadjusted treatment effect estimates are computed through differences of
-    # sample means.
-    treatment_effect_surr = mean(trial_data$surrogate[trial_data$treatment == 1]) - mean(trial_data$surrogate[trial_data$treatment == 0])
-    treatment_effect_clin = mean(trial_data$clinical[trial_data$treatment == 1]) - mean(trial_data$clinical[trial_data$treatment == 0])
+    # Compute treatment and outcome specific means.
+    surr_mean_0 = mean(trial_data$surrogate[trial_data$treatment == 0])
+    surr_mean_1 = mean(trial_data$surrogate[trial_data$treatment == 1])
+    clin_mean_0 = mean(trial_data$clinical[trial_data$treatment == 0])
+    clin_mean_1 = mean(trial_data$clinical[trial_data$treatment == 1])
     
     # Sample covariance matrices in each treatment group.
     vcov_0 = var(trial_data[trial_data$treatment == 0, c("surrogate", "clinical")])
@@ -184,8 +190,63 @@ compute_treatment_effects <- function(trial_data, method = "adjusted", formula) 
     n0 = sum(trial_data$treatment == 0)
     n1 = sum(trial_data$treatment == 1)
     
-    # Estimated covariance matrix for the treatment effect estimators.
-    covariance_matrix = (1 / n1) * vcov_1 + (1 / n0) * vcov_0
+    # Compute covariance matrix of (surr_mean_0, clin_mean_0, surr_mean_1, clin_mean_1)'.
+    covariance_matrix_means = Matrix::bdiag(list(vcov_0 / n0, vcov_1 / n1)) %>%
+      as.matrix()
+    
+    # Estimate treatment effect on the surrogate and compute corresponding
+    # gradient (for subsequent use in the delta method).
+    if (measure[1] == "mean difference") {
+      treatment_effect_surr = surr_mean_1 - surr_mean_0
+      
+      # Vector of partial derivatives of surr_mean_1 - surr_mean_0 with
+      # respect to (surr_mean_0, clin_mean_0, surr_mean_1, clin_mean_1)'.
+      partial_s = c(1, 0, 1, 0)
+    } else if (measure[1] == "VE") {
+      treatment_effect_surr = 1 - (surr_mean_1 / surr_mean_0)
+      
+      # Vector of partial derivatives of 1 - (surr_mean_1 / surr_mean_0) with
+      # respect to (surr_mean_0, clin_mean_0, surr_mean_1, clin_mean_1)'.
+      partial_s = c(surr_mean_1 * surr_mean_0 ^ (-2), 0, -1 / surr_mean_0, 0)
+    } else if (measure[1] == "log RR") {
+      treatment_effect_surr = log(surr_mean_1 / surr_mean_0)
+      
+      # Vector of partial derivatives of log(surr_mean_1 / surr_mean_0) with
+      # respect to (surr_mean_0, clin_mean_0, surr_mean_1, clin_mean_1)'.
+      partial_s = c(-1 / surr_mean_0, 0, 1 / surr_mean_1, 0)
+    } else {
+      stop("`measure` is not valid.")
+    }
+    
+    # Estimate treatment effect on the clinical endpoint and compute corresponding
+    # gradient (for subsequent use in the delta method).
+    if (measure[2] == "mean difference") {
+      treatment_effect_clin = clin_mean_1 - clin_mean_0
+      
+      # Vector of partial derivatives of clin_mean_1 - clin_mean_0 with
+      # respect to (surr_mean_0, clin_mean_0, surr_mean_1, clin_mean_1)'.
+      partial_c = c(0, 1, 0, 1)
+    } else if (measure[2] == "VE") {
+      treatment_effect_clin = 1 - (clin_mean_1 / clin_mean_0)
+      
+      # Vector of partial derivatives of 1 - (clin_mean_1 / clin_mean_0) with
+      # respect to (surr_mean_0, clin_mean_0, surr_mean_1, clin_mean_1)'.
+      partial_c = c(0, clin_mean_1 * clin_mean_0 ^ (-2), 0, -1 / clin_mean_0)
+    } else if (measure[2] == "log RR") {
+      treatment_effect_clin = log(clin_mean_1 / clin_mean_0)
+      
+      # Vector of partial derivatives of log(clin_mean_1 / clin_mean_0) with
+      # respect to (surr_mean_0, clin_mean_0, surr_mean_1, clin_mean_1)'.
+      partial_c = c(0, -1 / clin_mean_0, 0, 1 / clin_mean_1)
+    } else {
+      stop("`measure` is not valid.")
+    }
+
+    # Jacobian matrix with the gradients on the columns.
+    J = matrix(c(partial_s, partial_c), ncol = 2, byrow = FALSE)
+    
+    # Compute covariance matrix of the treatment effects based on the delta method.
+    covariance_matrix = t(J) %*% covariance_matrix_means %*% J
     
     # Return a tibble with the treatment effects, standard errors, and covariance matrix
     treatment_effects <- tibble(

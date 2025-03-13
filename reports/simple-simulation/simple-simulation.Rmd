@@ -15,6 +15,8 @@ library(tidyverse)
 library(sandwich)
 library(lmtest)
 library(hal9001)
+library(pROC)
+library(mgcv)
 ```
 
 
@@ -240,9 +242,9 @@ moment_estimator_tbl %>%
 ## Individual-Patient Data
 
 ```{r}
-num_knots = c(25, 10)
-# Function to train the clinical prediction model and return prediction function.
-train_clinical_prediction_model_vaccine <- function(simulated_data) {
+num_knots = c(10, 5)
+# Function to train the clinical prediction model based on HAL and return prediction function.
+train_clinical_prediction_model_hal <- function(simulated_data) {
   glm_temp = glm(clinical ~ surrogate + X1 + X2 + X3, simulated_data, family = gaussian())
   hal_fit = fit_hal(
     X = model.matrix(glm_temp)[, -1],
@@ -253,7 +255,20 @@ train_clinical_prediction_model_vaccine <- function(simulated_data) {
   )
   
   return(function(newdata) {
-    return(predict(hal_fit, new_data = newdata))
+    return(predict(hal_fit, new_data = newdata, type = "response"))
+  })
+}
+# Functiont to train the clinical prediction model, based on a logistic GAM, and return the prediction function.
+train_clinical_prediction_model_gam <- function(simulated_data) {
+  gam_fit = gam(
+    clinical ~ s(surrogate, by = X3) + s(X1, by = X3) + s(X2, by = X3) +
+      s(surrogate, by = 1 - X3) + s(X1, by = 1 - X3) + s(X2, by = 1 - X3),
+    data = simulated_data,
+    family = binomial()
+  )
+  
+  return(function(newdata) {
+    return(predict(gam_fit, newdata = newdata, type = "response"))
   })
 }
 ```
@@ -262,52 +277,125 @@ train_clinical_prediction_model_vaccine <- function(simulated_data) {
 ```{r}
 # Generate IPD for a meta-analytic setting
 ma_ipd_tbl = simulate_trials_with_random_coefficients(
-  N = 10,
-  n = 1e4,
-  sd_beta = c(0.1, 0.1), 
+  N = 6,
+  n = 4e3,
+  sd_beta = c(0.03, 0.03), 
   scenario = "vaccine"
 )
-# Estimate "predcition model", which is just a correctly specified linear
-# regression model.
-surr_index_pred_f = train_clinical_prediction_model_vaccine(ma_ipd_tbl)
+
+# Estimate the surrogate index using HAL and GAM. 
+# surr_index_pred_f_hal = train_clinical_prediction_model_hal(ma_ipd_tbl)
+surr_index_pred_f_gam = train_clinical_prediction_model_gam(ma_ipd_tbl)
 # Add surrogate indew to IPD data
-ma_ipd_tbl$surr_index = surr_index_pred_f(ma_ipd_tbl)
+# ma_ipd_tbl$surr_index_hal = surr_index_pred_f_hal(ma_ipd_tbl)
+ma_ipd_tbl$surr_index_gam = surr_index_pred_f_gam(ma_ipd_tbl)
 ```
 
 ```{r}
-# Plot the surrogate against the clinical endpoint.
+# # Scatterplot for the estimated surrogate index based on HAL vs based on GAM.
+# ma_ipd_tbl %>%
+#   ggplot(aes(x = surr_index_hal, y = surr_index_gam)) +
+#   geom_point(alpha = 0.1) +
+#   geom_abline(intercept = 0, slope = 1) +
+#   facet_wrap("trial")
+```
+
+
+```{r}
+# Scatterplots for the relationship between the surrogate/baseline covariate and clinical endpoint. A smoothing fit is added to the plots. The plots are mode by trial to illustrate differences between trials.
 ma_ipd_tbl %>%
-  ggplot(aes(x = surrogate, y = clinical, color = as.factor(X1))) +
+  ggplot(aes(x = surrogate, y = clinical, color = as.factor(trial))) +
   geom_point(alpha = 0.1) +
+  geom_smooth(aes(group = as.factor(trial))) +
+  facet_wrap("trial")
+
+# Same set of scatterplots, but now for the baseline covariates instead of the
+# surrogate.
+ma_ipd_tbl %>%
+  ggplot(aes(x = X1, y = clinical, color = as.factor(trial))) +
+  geom_point(alpha = 0.1) +
+  geom_smooth(aes(group = as.factor(trial))) +
+  facet_wrap("trial")
+ma_ipd_tbl %>%
+  ggplot(aes(x = X2, y = clinical, color = as.factor(trial))) +
+  geom_point(alpha = 0.1) +
+  geom_smooth(aes(group = as.factor(trial))) +
+  facet_wrap("trial")
+
+```
+
+
+```{r}
+# Plot the ROC curve for the surrogate index based on HAL and GAM by trial.
+ma_ipd_tbl %>%
+  pivot_longer(
+    cols = c(surr_index_hal, surr_index_gam),
+    names_to = "method",
+    values_to = "surr_index"
+  ) %>%
+  group_by(trial, method) %>%
+  summarise(roc_object = list(roc(clinical, surr_index))) %>%
+  group_by(trial, method) %>%
+  reframe(
+    tibble(
+      sensitivity = roc_object[[1]]$sensitivities,
+      specificity = roc_object[[1]]$specificities
+    ),
+  ) %>%
+  ggplot(aes(
+    x = 1 - specificity,
+    y = sensitivity,
+    color = method
+  )) +
+  geom_line() +
   facet_wrap("trial")
 ```
 
-```{r}
-# Plot the surrogate index against the clinical endpoint.
-ma_ipd_tbl %>%
-  ggplot(aes(x = surr_index, y = clinical)) +
-  geom_point(alpha = 0.1) +
-  geom_smooth(aes(group = as.factor(trial))) +
-  facet_wrap("trial") +
-  geom_abline(intercept = 0, slope = 1)
-```
 
 
 ## Trial-Level Treatment Effects
 
 ```{r}
-formula_SY = formula(cbind(surrogate, clinical) ~ treatment + X1)
+# Trial-level treatment effects on surrogate endpoint.
 ma_trt_effect_tbl = ma_ipd_tbl %>%
   group_by(trial) %>%
-  reframe(compute_treatment_effects(pick(everything()), formula = formula_SY)) %>%
-  ungroup()
+  reframe(compute_treatment_effects(
+    pick(everything()),
+    measure = c("mean difference", "log RR"),
+    method = "mean"
+  )) %>%
+  ungroup() %>%
+  mutate(treatment_effect_clin = -treatment_effect_clin)
 
-ma_trt_effect_index_tbl = ma_ipd_tbl %>%
+# Trial-level treatment effects for surrogate index based on HAL.
+ma_trt_effect_index_hal_tbl = ma_ipd_tbl %>%
   select(-surrogate) %>%
-  rename(surrogate = surr_index) %>%
+  rename(surrogate = surr_index_hal) %>%
   group_by(trial) %>%
-  reframe(compute_treatment_effects(pick(everything()), formula = formula_SY)) %>%
-  ungroup()
+  reframe(compute_treatment_effects(
+    pick(everything()),
+    method = "mean",
+    measure = c("log RR", "log RR")
+  )) %>%
+  ungroup() %>%
+  # Transform treatment effects to minus log RR.
+  mutate(treatment_effect_surr = -treatment_effect_surr,
+         treatment_effect_clin = -treatment_effect_clin)
+
+# Trial-level treatment effects for surrogate index based on GAM.
+ma_trt_effect_index_gam_tbl = ma_ipd_tbl %>%
+  select(-surrogate) %>%
+  rename(surrogate = surr_index_gam) %>%
+  group_by(trial) %>%
+  reframe(compute_treatment_effects(
+    pick(everything()),
+    method = "mean",
+    measure = c("log RR", "log RR")
+  )) %>%
+  ungroup() %>%
+  # Transform treatment effects to minus log RR.
+  mutate(treatment_effect_surr = -treatment_effect_surr,
+         treatment_effect_clin = -treatment_effect_clin)
 ```
 
 ```{r}
@@ -333,7 +421,7 @@ ggplot(ma_trt_effect_tbl, aes(x = treatment_effect_surr, y = treatment_effect_cl
 
 ```{r}
 # Create a scatter plot with treatment effects on surrogate vs. clinical, including 95% CI error bars
-ggplot(ma_trt_effect_index_tbl, aes(x = treatment_effect_surr, y = treatment_effect_clin)) +
+ggplot(ma_trt_effect_index_hal_tbl, aes(x = treatment_effect_surr, y = treatment_effect_clin)) +
   # Scatter plot of treatment effects
   geom_point() +
   # Horizontal error bars for surrogate treatment effect
@@ -353,13 +441,36 @@ ggplot(ma_trt_effect_index_tbl, aes(x = treatment_effect_surr, y = treatment_eff
   geom_abline(intercept = 0, slope = 1)
 ```
 
+```{r}
+# Create a scatter plot with treatment effects on surrogate vs. clinical, including 95% CI error bars
+ggplot(ma_trt_effect_index_gam_tbl, aes(x = treatment_effect_surr, y = treatment_effect_clin)) +
+  # Scatter plot of treatment effects
+  geom_point() +
+  # Horizontal error bars for surrogate treatment effect
+  geom_errorbarh(aes(xmin = treatment_effect_surr - 1.96 * se_surr, 
+                     xmax = treatment_effect_surr + 1.96 * se_surr), 
+                 height = 0.05) +
+  # Vertical error bars for clinical treatment effect
+  geom_errorbar(aes(ymin = treatment_effect_clin - 1.96 * se_clin, 
+                    ymax = treatment_effect_clin + 1.96 * se_clin), 
+                width = 0.05) +
+  # Labels and title
+  labs(
+    x = "Treatment Effect on Estimated Surrogate Index",
+    y = "Treatment Effect on Clinical Endpoint",
+    title = "Treatment Effects on Surrogate vs. Clinical Endpoint with 95% Confidence Intervals"
+  ) +
+  geom_abline(intercept = 0, slope = 1)
+```
+
+
 ## Moment-Based Estimator
 
 ```{r}
 # Estimate the meta-analytic parameters using the moment-based estimator.
 moment_estimator_tbl = tibble(
-  setting = c("surrogate", "surrogate index"),
-  data = list(ma_trt_effect_tbl, ma_trt_effect_index_tbl)
+  setting = c("surrogate",  "surrogate index GAM"),
+  data = list(ma_trt_effect_tbl,  ma_trt_effect_index_gam_tbl)
 ) %>%
   cross_join(expand_grid(
     estimator_adjustment = c("N - 1"),
@@ -381,7 +492,7 @@ moment_estimator_tbl = tibble(
         coefs = moment_estimate$coefs,
         vcov = moment_estimate$vcov,
         method = "t-adjustment",
-        N = 10
+        N = 5
       )
     )
   ) %>%

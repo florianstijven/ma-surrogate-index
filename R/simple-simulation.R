@@ -27,23 +27,50 @@ regime = args[2]
 set.seed(123) 
 
 # Set of parameters controlling the simulations.
-N_MC = 50  # Number of Monte Carlo simulations
+N_MC = 2  # Number of Monte Carlo simulations
 
-N_approximation_MC = 5e4  # Number of Monte Carlo trial replications for the approximation of the true trial-level correlation
-n_approximation_MC = 1e3  # Number of patients in each trial for the approximation of the true trial-level correlation
+N_approximation_MC = 5e1  # Number of Monte Carlo trial replications for the approximation of the true trial-level correlation
+
+# Set within-trial sample size depending on the scenario
+if (scenario == "proof-of-concept") {
+  n = 2e3
+  N = c(5, 10, 30)  # Number of trials in each meta-analytic data set
+  
+  # Number of patients in each trial for the approximation of the true
+  # trial-level correlation. This can be small for the proof-of-concept scenario
+  # because that is based on differences in sample means, for the standard
+  # covariance estimator is unbiased.
+  n_approximation_MC = 2e2  
+  
+} else if (scenario == "vaccine") {
+  n = 4e3
+  N = c(6, 10)  # Number of trials in each meta-analytic data set
+  
+  # Number of patients in each trial for the approximation of the true
+  # trial-level correlation. This should be large in the vaccine scenario
+  # because the standard covariance estimator (based on the delta method) for
+  # log RR estimators is consistent but biased. 
+  n_approximation_MC = 1e4  
+}
+
 
 if (regime == "small") {
-  N = c(5, 10, 30)  # Number of trials in each meta-analytic data set
-  n = c(2e3)  # Number of patients in each trial
-  
+  # sd_beta represents the variance of important trial-level parameters that
+  # control the surrogacy and comparability assumptions. A non-zero variance
+  # implies some violation of these assumptions.
   sd_beta = list(c(0.03, 0.03), c(0.1, 0.1))
 } else if (regime == "large") {
-  N = c(5e2)  # Number of trials in each meta-analytic data set
-  n = c(50)  # Number of patients in each trial
+  # This regime corresponds to the large N small n asymptotic regime. This
+  # scenario is artifical and just meant to show when methods can break. 
+  N = c(5e2, 1e3, 2e3)  # Number of trials in each meta-analytic data set
+  # The within-trial sample size is set to something small. 
+  n = 40
   
   sd_beta = list(c(0.1, 0.1))
 }
 
+
+# Number of bootstrap replications for the multiplier bootstrap
 B = 5e2
 
 # Tibble with simulation parameters. Each row corresponds to a data-generating
