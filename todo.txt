@@ -1,6 +1,8 @@
-% -> Run small simulations with most recent version of the code
-	-> may fail because I changed not only the number of replications
--> check whether results make sense
--> run simumlations with 50 replications
--> if everything makese sense, run with 500 replications
+-> There seem to be issues with memory usage.
+	-> I have added SE = FALSE, to the moment estimator. That function seems to pile up memory
+	=> should be solved now
+
+== changed the N_approx too low, change later
+
+-> 
 
