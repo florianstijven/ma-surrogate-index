@@ -5,5 +5,7 @@
 		it could either be related to the jackknife or the median bias
 		I think the jacknife is the culprit
 
-solve rho_true NAs
+? solve rho_true NAs
 	I have made the approx function robust to NAs and NaN during MC integration
+
+if there is no apparant bias in the large N scenario, consider exp(a) - exp(b) as trt effect measure
