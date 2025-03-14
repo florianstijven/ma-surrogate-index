@@ -83,6 +83,16 @@ BCa_CI <- function(boot_replicates,
                    data,
                    statistic,
                    alpha = 0.05) {
+  # Check whether estimate is valid. If it is not valid, we return NA is
+  # confidence intervals.
+  if (is.na(estimate) | is.nan(estimate)) {
+    warning("`estimate` is NA or NaN. BCa interval cannot be computed.")
+    return(list(
+      ci_lower = NA,
+      ci_upper = NA
+    ))
+  }
+  
   # Check for missing values or NaN in the bootstrap replicates. A warning is
   # raised if there are any missing values. The warning also details the number
   # of problematic values such that the user can decide whether to ignore this.
@@ -98,12 +108,17 @@ BCa_CI <- function(boot_replicates,
   
   # Calculate the number of bootstrap replicates
   B <- length(boot_replicates)
+  # Check length of bootstrap replicates.
+  if (B <= 2) {
+    stop("BCa could not be computed because there are too few valid bootstrap replicates.")
+  }
   # Number of independent replicates in the data
   N <- nrow(data)
   
   
   # Calculate the z0 (bias correction) term
   median_bias = sum(boot_replicates < estimate) / B
+  
   if (median_bias == 0 | median_bias == 1) {
     warning("Extreme median bias. Interpret results with care and increase number of bootstrap replications.")
     if (median_bias == 0) {

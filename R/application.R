@@ -7,12 +7,12 @@ library(hal9001)
 library(future)
 library(furrr)
 
-# Set up parallel computing
-if (parallelly::supportsMulticore()) {
-  plan("multicore")
-} else {
-  plan(multisession)
-}
+# # Set up parallel computing
+# if (parallelly::supportsMulticore()) {
+#   plan("multicore")
+# } else {
+#   plan(multisession)
+# }
 
 ## Analysis Parameters -------------------------------------------------- 
 
