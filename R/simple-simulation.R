@@ -34,7 +34,7 @@ set.seed(123)
 # Set within-trial sample size depending on the scenario
 if (scenario == "proof-of-concept") {
   n = 2e3
-  N = c(6, 12)  # Number of trials in each meta-analytic data set
+  N = c(6, 12, 24)  # Number of trials in each meta-analytic data set
   
   # Number of Monte Carlo trial replications for the approximation of the true
   # trial-level correlation.
@@ -202,8 +202,10 @@ meta_analytic_data = meta_analytic_data %>%
 print(Sys.time() - a)
 
 # Approximate the true trial-level correlation using the surrogate endpoint.
-rho_true_surrogate_tbl = dgm_param_tbl %>%
-  select(-surrogate_index_estimators, -n, -N ) %>%
+rho_true_surrogate_tbl = tibble(
+  sd_beta, 
+  SI_violation
+) %>%
   mutate(surrogate_index_estimator = "surrogate") %>%
   mutate(
     rho_true = future_map_dbl(
