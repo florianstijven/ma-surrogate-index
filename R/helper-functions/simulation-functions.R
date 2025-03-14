@@ -214,6 +214,12 @@ compute_treatment_effects <- function(trial_data, method = "adjusted", formula =
       # Vector of partial derivatives of log(surr_mean_1 / surr_mean_0) with
       # respect to (surr_mean_0, clin_mean_0, surr_mean_1, clin_mean_1)'.
       partial_s = c(-1 / surr_mean_0, 0, 1 / surr_mean_1, 0)
+    } else if (measure[1] == "exp mean difference") {
+      treatment_effect_surr = exp(surr_mean_1) - exp(surr_mean_0)
+      
+      # Vector of partial derivatives of exp(surr_mean_1) - exp(surr_mean_0) with
+      # respect to (surr_mean_0, clin_mean_0, surr_mean_1, clin_mean_1)'.
+      partial_s = c(- exp(surr_mean_0), 0, exp(surr_mean_1), 0)
     } else {
       stop("`measure` is not valid.")
     }
@@ -238,6 +244,12 @@ compute_treatment_effects <- function(trial_data, method = "adjusted", formula =
       # Vector of partial derivatives of log(clin_mean_1 / clin_mean_0) with
       # respect to (surr_mean_0, clin_mean_0, surr_mean_1, clin_mean_1)'.
       partial_c = c(0, -1 / clin_mean_0, 0, 1 / clin_mean_1)
+    } else if (measure[2] == "exp mean difference") {
+      treatment_effect_clin = exp(clin_mean_1) - exp(clin_mean_0)
+      
+      # Vector of partial derivatives of exp(surr_mean_1) - exp(surr_mean_0) with
+      # respect to (surr_mean_0, clin_mean_0, surr_mean_1, clin_mean_1)'.
+      partial_c = c(0, - exp(clin_mean_0), 0, exp(clin_mean_1))
     } else {
       stop("`measure` is not valid.")
     }
