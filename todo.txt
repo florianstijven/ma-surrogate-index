@@ -1,8 +1,9 @@
--> There seem to be issues with memory usage.
-	-> I have added SE = FALSE, to the moment estimator. That function seems to pile up memory
-	=> should be solved now
+- run analyses with more replications
 
-== changed the N_approx too low, change later
+% solve NaN with multiplier bootstrap
+	should be solved
+		it could either be related to the jackknife or the median bias
+		I think the jacknife is the culprit
 
--> 
-
+solve rho_true NAs
+	I have made the approx function robust to NAs and NaN during MC integration
