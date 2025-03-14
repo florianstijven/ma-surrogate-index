@@ -7,6 +7,8 @@ library(sandwich)
 library(lmtest)
 library(future)
 library(furrr)
+library(mgcv)
+library(ranger)
 
 # Set up parallel computing
 if (parallelly::supportsMulticore()) {
@@ -36,7 +38,7 @@ if (scenario == "proof-of-concept") {
   
   # Number of Monte Carlo trial replications for the approximation of the true
   # trial-level correlation.
-  N_approximation_MC = 2e4 
+  N_approximation_MC = 2e3 
   # Number of patients in each trial for the approximation of the true
   # trial-level correlation. This can be small for the proof-of-concept scenario
   # because that is based on differences in sample means, for the standard
@@ -50,7 +52,7 @@ if (scenario == "proof-of-concept") {
   
   # Number of Monte Carlo trial replications for the approximation of the true
   # trial-level correlation.
-  N_approximation_MC = 5e3 
+  N_approximation_MC = 5e2 
   # Number of patients in each trial for the approximation of the true
   # trial-level correlation. This should be large in the vaccine scenario
   # because the standard covariance estimator (based on the delta method) for
@@ -185,7 +187,7 @@ meta_analytic_data$rho_true = future_pmap_dbl(
   N_approximation_MC = N_approximation_MC,
   n_approximation_MC = n_approximation_MC,
   scenario = scenario,
-  .options = furrr_options(seed = TRUE)
+  .options = furrr_options(seed = TRUE, packages = c("ranger", "mgcv"))
 )
 
 # Drop surrogate index function as this function is no longer needed.
@@ -283,6 +285,8 @@ statistic_function_factory = function(estimator_adjustment) {
       coefs = moment_estimate$coefs,
       vcov = moment_estimate$vcov,
       method = "t-adjustment",
+      # N is only used for the t-adjustment, it doesn't matter for the estimate
+      # or SE.
       N = 5
     )
     

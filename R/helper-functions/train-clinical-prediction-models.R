@@ -45,7 +45,7 @@ train_clinical_prediction_model_logistic = function(simulated_data) {
 # for the vaccine scenario.
 train_clinical_prediction_model_gam = function(simulated_data) {
   # Fit GAM logistic model.
-  clinical_model <- gam(
+  clinical_model <- mgcv::gam(
     formula = clinical ~ s(
       surrogate,
       by = X3,
@@ -64,7 +64,7 @@ train_clinical_prediction_model_gam = function(simulated_data) {
   )
   
   return(function(newdata) {
-    return(predict(clinical_model, newdata = newdata, type = "response"))
+    return(mgcv::predict.gam(clinical_model, newdata = newdata, type = "response"))
   })
 }
 
