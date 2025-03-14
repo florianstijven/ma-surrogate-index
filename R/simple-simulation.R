@@ -38,7 +38,7 @@ if (scenario == "proof-of-concept") {
   
   # Number of Monte Carlo trial replications for the approximation of the true
   # trial-level correlation.
-  N_approximation_MC = 2e3 
+  N_approximation_MC = 2e4 
   # Number of patients in each trial for the approximation of the true
   # trial-level correlation. This can be small for the proof-of-concept scenario
   # because that is based on differences in sample means, for the standard
@@ -52,12 +52,12 @@ if (scenario == "proof-of-concept") {
   
   # Number of Monte Carlo trial replications for the approximation of the true
   # trial-level correlation.
-  N_approximation_MC = 5e2 
+  N_approximation_MC = 5e3 
   # Number of patients in each trial for the approximation of the true
   # trial-level correlation. This should be large in the vaccine scenario
   # because the standard covariance estimator (based on the delta method) for
   # log RR estimators is consistent but biased. 
-  n_approximation_MC = 4e3  
+  n_approximation_MC = 3e3  
 }
 
 

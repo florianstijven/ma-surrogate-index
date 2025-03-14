@@ -10,13 +10,13 @@ all: results/raw-results/simple-simulation/ma-sim-results-proof-of-concept-small
 	
 
 results/raw-results/simple-simulation/ma-sim-results-proof-of-concept-small.rds: R/simple-simulation.R $(analysishelpers) $(simulationhelpers)
-	Rscript R/simple-simulation.R proof-of-concept small 1
+	Rscript R/simple-simulation.R proof-of-concept small 5
 	
 results/raw-results/simple-simulation/ma-sim-results-proof-of-concept-large.rds: R/simple-simulation.R $(analysishelpers) $(simulationhelpers)
-	Rscript R/simple-simulation.R proof-of-concept large 1
+	Rscript R/simple-simulation.R proof-of-concept large 5
 	
 results/raw-results/simple-simulation/ma-sim-results-vaccine-small.rds: R/simple-simulation.R $(analysishelpers) $(simulationhelpers)
-	Rscript R/simple-simulation.R vaccine small 1
+	Rscript R/simple-simulation.R vaccine small 5
 	
 # R/application.Rout: R/application.R $(analysishelpers) $(data)
 #	 Rscript --verbose R/application.R  > $@ 2> $@
