@@ -103,12 +103,25 @@ BCa_CI <- function(boot_replicates,
   
   
   # Calculate the z0 (bias correction) term
+  median_bias = sum(boot_replicates < estimate) / B
+  if (median_bias == 0 | median_bias == 1) {
+    warning("Extreme median bias. Interpret results with care and increase number of bootstrap replications.")
+    if (median_bias == 0) {
+      median_bias = 1 / B
+    } else {
+      median_bias = (B - 1) / B
+    }
+  }
   z0 <- qnorm(sum(boot_replicates < estimate) / B)
   
   # Calculate the acceleration term (a)
   jackknife_est <- sapply(1:N, function(i) {
     statistic(data[-i, ], weights = rep(1, N - 1))$estimate
   })
+  if (any(is.na(jackknife_est)) | any(is.nan(jackknife_est))) {
+    warning("Some jacknknife estimates could not be computed. These are ignored in the computation of the BCa interval. The percentile CI may be advised.")
+    jackknife_est = jackknife_est[!is.na(jackknife_est)]
+    }
   jackknife_mean <- mean(jackknife_est)
   a <- sum((jackknife_mean - jackknife_est)^3) / (6 * sum((jackknife_mean - jackknife_est)^2)^1.5)
   

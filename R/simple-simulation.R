@@ -203,7 +203,7 @@ print(Sys.time() - a)
 
 # Approximate the true trial-level correlation using the surrogate endpoint.
 rho_true_surrogate_tbl = dgm_param_tbl %>%
-  select(-surrogate_index_estimators) %>%
+  select(-surrogate_index_estimators, -n, -N ) %>%
   mutate(surrogate_index_estimator = "surrogate") %>%
   mutate(
     rho_true = future_map_dbl(
@@ -226,7 +226,8 @@ meta_analytic_data = meta_analytic_data %>%
   left_join(
     rho_true_surrogate_tbl %>%
       select(-sd_beta),
-    by = c("n", "N", "SI_violation", "surrogate_index_estimator")
+    by = c("SI_violation", "surrogate_index_estimator"), 
+    relationship = "many-to-one"
   ) %>%
   # rho_true is present in both tibbles before joining. Hence, we get rho_true.x
   # and .y in the joined data set. We keep the non-missing value.

@@ -404,6 +404,23 @@ rho_MC_approximation = function(f = NULL,
       gc()
     }
   }
+  
+  # Check for NAs and NaNs. These are removed while returning a warning.
+  treatment_effect_surr_nas = is.na(treatment_effect_surr) | is.nan(treatment_effect_surr)
+  treatment_effect_clin_nas = is.na(treatment_effect_clin) | is.nan(treatment_effect_clin)
+  vcov_nas = sapply(
+    X = vcov_list,
+    FUN = function(x) {
+      any(is.na(x)) | any(is.nan(x))
+    }
+  )
+  total_nas = treatment_effect_surr_nas | treatment_effect_clin_nas | vcov_nas
+  if (any(total_nas)) {
+    warning("NAs or NaNs were generated while approximating the true correlation. These are removed.")
+    treatment_effect_surr = treatment_effect_surr[!total_nas]
+    treatment_effect_clin = treatment_effect_clin[!total_nas]
+    vcov_list = vcov_list[!total_nas]
+  }
 
   # Estimate the meta-analytic parameters using the moment-based estimator.
   temp = moment_estimator(
