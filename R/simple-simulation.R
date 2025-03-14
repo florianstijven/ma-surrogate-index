@@ -68,7 +68,7 @@ if (regime == "small") {
   if (scenario == "vaccine") {
     sd_beta = list(c(0.10, 0.10), c(0.25, 0.25))
   } else if (scenario == "proof-of-concept") {
-    sd_beta = list(c(0.1, 0.1))
+    sd_beta = list(c(0.03, 0.03), c(0.1, 0.1))
   }
   SI_violation = c("slight", "moderate")
 } else if (regime == "large") {
@@ -102,6 +102,11 @@ source("R/helper-functions/train-clinical-prediction-models.R")
 if (scenario == "proof-of-concept") {
   # Set surrogate index estimators
   surrogate_index_estimator = c("surrogate", "lm")
+  # We only look at the original surrogate for the large regime. This saves some
+  # computational time.
+  if (regime == "large") {
+    surrogate_index_estimator = c("surrogate")
+  }
 } else if (scenario == "vaccine") {
   # Set surrogate index estimators
   surrogate_index_estimator = c("surrogate", "logistic", "gam", "rf")
