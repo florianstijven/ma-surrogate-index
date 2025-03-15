@@ -9,6 +9,7 @@ library(future)
 library(furrr)
 library(mgcv)
 library(ranger)
+library(splines)
 
 # Set up parallel computing
 if (parallelly::supportsMulticore()) {
@@ -29,6 +30,9 @@ N_MC = as.numeric(args[3])
 
 # This script simulates data. We set a seed to ensure reproducibility.
 set.seed(123) 
+
+# Number of bootstrap replications for the multiplier bootstrap
+B = 5e2
 
  
 # Set within-trial sample size depending on the scenario
@@ -84,15 +88,15 @@ if (regime == "small") {
   # The approximation accuracy for the true rho is increased for the large N
   # setting. In this setting, the SD of the estimators will be much smaller; so,
   # the MC error in the true rho is relatively more important. 
-  N_approximation_MC =  
+  N_approximation_MC = 5e4
+  n_approximation_MC = 5e2
   
   sd_beta = list(c(0.1, 0.1))
   SI_violation = c("moderate")
 }
 
 
-# Number of bootstrap replications for the multiplier bootstrap
-B = 5e2
+
 
 # Helper Functions --------------------------------------------------------
 
@@ -145,6 +149,7 @@ meta_analytic_data = expand_grid(data_set_indicator,
       ),
       .f = generate_meta_analytic_data,
       scenario = scenario,
+      regime = regime,
       .options = furrr_options(seed = TRUE)),
    ) %>%
   rowwise(everything()) %>%
@@ -176,7 +181,8 @@ meta_analytic_data$rho_true = future_pmap_dbl(
                 surrogate_index_estimator,
                 N_approximation_MC,
                 n_approximation_MC,
-                scenario) {
+                scenario,
+                regime) {
     if (surrogate_index_estimator == "surrogate") {
       # We will not compute the true rho for the surrogate because this is the
       # same true rho across simulations. This value is computed later on.
@@ -189,7 +195,8 @@ meta_analytic_data$rho_true = future_pmap_dbl(
           f = f,
           N_approximation_MC = N_approximation_MC,
           n_approximation_MC = n_approximation_MC,
-          scenario = scenario
+          scenario = scenario,
+          regime = regime
         )
       )
     }
@@ -197,6 +204,7 @@ meta_analytic_data$rho_true = future_pmap_dbl(
   N_approximation_MC = N_approximation_MC,
   n_approximation_MC = n_approximation_MC,
   scenario = scenario,
+  regime = regime,
   .options = furrr_options(seed = TRUE, packages = c("ranger", "mgcv"))
 )
 
@@ -220,6 +228,7 @@ rho_true_surrogate_tbl = tibble(
       n_approximation_MC = n_approximation_MC,
       f = NULL,
       scenario = scenario,
+      regime = regime,
       .options = furrr_options(seed = TRUE)
     )
   )
@@ -310,35 +319,39 @@ statistic_function_factory = function(estimator_adjustment) {
 
 
 
-# Compute multiplier bootstrap percentile confidence intervals.
-meta_analytic_data_simulated =  bind_rows(
-  meta_analytic_data_simulated %>%
-    mutate(CI_type = "sandwich"),
-  meta_analytic_data_simulated %>%
-    mutate(
-      # Compute CIs for rho based on the multiplier bootstrap.
-      rho_ci_bs = furrr::future_map2(
-        .x = treatment_effects,
-        .y = estimator_adjustment,
-        .f = function(treatment_effects, estimator_adjustment) {
-          multiplier_bootstrap_ci(
-            data = treatment_effects,
-            statistic = statistic_function_factory(estimator_adjustment),
-            B = B,
-            alpha = 0.05, 
-            type = "BCa"
-          )
-        }
-      ),
-      rho_ci_lower = purrr::map_dbl(rho_ci_bs, function(x)
-        x[[1]]),
-      rho_ci_upper = purrr::map_dbl(rho_ci_bs, function(x)
-        x[[2]])
-    ) %>%
-    mutate(CI_type = "multiplier bootstrap") %>%
-    # Drop redundant variables.
-    select(-rho_ci_bs)
-)
+# Compute multiplier bootstrap percentile confidence intervals. We don't compute
+# bootstrap intervals for the large N regime.
+if (regime == "small") {
+  meta_analytic_data_simulated =  bind_rows(
+    meta_analytic_data_simulated %>%
+      mutate(CI_type = "sandwich"),
+    meta_analytic_data_simulated %>%
+      mutate(
+        # Compute CIs for rho based on the multiplier bootstrap.
+        rho_ci_bs = furrr::future_map2(
+          .x = treatment_effects,
+          .y = estimator_adjustment,
+          .f = function(treatment_effects, estimator_adjustment) {
+            multiplier_bootstrap_ci(
+              data = treatment_effects,
+              statistic = statistic_function_factory(estimator_adjustment),
+              B = B,
+              alpha = 0.05, 
+              type = "BCa"
+            )
+          }
+        ),
+        rho_ci_lower = purrr::map_dbl(rho_ci_bs, function(x)
+          x[[1]]),
+        rho_ci_upper = purrr::map_dbl(rho_ci_bs, function(x)
+          x[[2]])
+      ) %>%
+      mutate(CI_type = "multiplier bootstrap") %>%
+      # Drop redundant variables.
+      select(-rho_ci_bs)
+  )
+}
+
 
 
 # Drop columns that are not needed.

@@ -62,7 +62,7 @@ generate_random_coefficients_vaccine <- function(sd_beta_clin_treatment = 0.10, 
 simulate_trial_proof_of_concept <- function(n, coefficients) {
   # Randomization: Treatment assignment (1 or 0). Simple randomization is
   # assumed.
-  treatment <- rbinom(n, 1, 0.5)  # 1 = treatment, 0 = control
+  treatment <- c(rep(0, n %/% 2), rep(1, (n + 1) %/% 2))  # 1 = treatment, 0 = control
   
   # Baseline covariates: One covariate from a Bernoulli distribution with
   # probability p1.
@@ -90,7 +90,7 @@ simulate_trial_proof_of_concept <- function(n, coefficients) {
 simulate_trial_vaccine = function(n, coefficients) {
   # Randomization: Treatment assignment (1 or 0). Simple randomization is
   # assumed.
-  treatment <- rbinom(n, 1, 0.5)  # 1 = treatment, 0 = control
+  treatment <- c(rep(0, n %/% 2), rep(1, (n + 1) %/% 2)) # 1 = treatment, 0 = control
   
   # Baseline covariates: One covariate from a Bernoulli distribution with
   # probability p1.
@@ -157,16 +157,13 @@ compute_treatment_effects <- function(trial_data, method = "adjusted", formula =
     if (any(measure != c("mean difference", "mean difference"))) {
       stop("The adjusted method can only be combined with the mean difference measure.")
     }
-    
     # Combine the coefficients into a single model to compute the covariance matrix for both treatment effects
     combined_model <- lm(formula, data = trial_data)
-    
     # Compute the covariance matrix using the sandwich estimator
     cov_matrix <- sandwich::vcovHC(combined_model, type = "HC0")
     
     # Extract the covariance matrix between the treatment effects on surrogate and clinical
     cov_surr_clin <- cov_matrix[c("surrogate:treatment", "clinical:treatment"), c("surrogate:treatment", "clinical:treatment")]  # Covariance between treatment effects
-    
     # Return a tibble with the treatment effects, standard errors, and covariance matrix
     treatment_effects <- tibble(
       treatment_effect_surr = coef(combined_model)["treatment", "surrogate"],  # Treatment effect on surrogate
@@ -277,7 +274,7 @@ compute_treatment_effects <- function(trial_data, method = "adjusted", formula =
 # index as a variable, and computes the treatment effects on (i) the surrogate
 # and clinical endpoints and (ii) the surrogate index and clinical endpoint.
 # This function uses the previously defined functions.
-generate_meta_analytic_data <- function(N, n, surrogate_index_estimators, sd_beta, scenario) {
+generate_meta_analytic_data <- function(N, n, surrogate_index_estimators, sd_beta, scenario, regime = "small") {
   # Simulate data for N trials with random coefficients
   trials_data <- simulate_trials_with_random_coefficients(N = N, n = n, sd_beta = sd_beta, scenario = scenario) 
   
@@ -290,11 +287,25 @@ generate_meta_analytic_data <- function(N, n, surrogate_index_estimators, sd_bet
   # estimate the treatment effects on the corresponding surrogate index.
   for (i in seq_along(1:length(surrogate_index_estimators))) {
     if (scenario == "proof-of-concept") {
-      # For the proof of concept scenario, we use adjusted treatment effect
-      # estimators for the mean difference.
-      method = "adjusted"
-      formula = formula(cbind(surrogate, clinical) ~ treatment + X1)
-      measure = c("mean difference", "mean difference")
+      if (regime == "small") {
+        # For the small N proof of concept scenario, we use adjusted treatment
+        # effect estimators for the mean difference.
+        method = "adjusted"
+        formula = formula(cbind(surrogate, clinical) ~ treatment + X1)
+        measure = c("mean difference", "mean difference")
+      } else if (regime == "large") {
+        # For the small N proof of concept scenario, we use the exponentiated
+        # mean difference as effect measure.
+        method = "adjusted"
+        formula = formula(cbind(surrogate, clinical) ~ treatment + X1 + bs(X2))
+        measure = c("mean difference", "mean difference")
+        # We add extra noise to the data. This allows us to make the linear
+        # regression models overfit and hence produce more biased sandwich
+        # estimators.
+        trials_data = trials_data %>%
+          mutate(X2 = rnorm(n = n()))
+      }
+
     } else if (scenario == "vaccine") {
       # For the vaccine scenario, we use the mean treatment effect estimators for
       # the log RR. Adjusted estimators would be difficult to implement here. 
@@ -343,7 +354,8 @@ rho_MC_approximation = function(f = NULL,
                                 N_approximation_MC,
                                 n_approximation_MC,
                                 sd_beta,
-                                scenario) {
+                                scenario,
+                                regime = "small") {
   # We follow a different strategy here for simulating trial-level treatment
   # effects. Essentially, we generate data for a single trial and estimate the
   # corresponding treatment effects, all trial-by-trial. This avoids excessive
@@ -355,9 +367,16 @@ rho_MC_approximation = function(f = NULL,
     if (is.null(f)) {
       f = function(x) x$surrogate
     }
-    # For the proof of concept scenario, we again use mean differences as effect
-    # measure.
-    measure = c("mean difference", "mean difference")
+    if (regime == "small") {
+      # For the small N proof of concept scenario, we again use mean differences
+      # as effect measure.
+      measure = c("mean difference", "mean difference")
+    } else if (regime == "large") {
+      # For the large N proof of concept scenario, we also use the mean
+      # differences as effect measure.
+      measure = c("mean difference", "mean difference")
+    }
+
   } else if (scenario == "vaccine") {
     # For the vaccine scenario, we use the log RR as effect measure, except when
     # f is just the surrogate (which is true when f is NULL). In that case, we use the mean difference.
