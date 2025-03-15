@@ -297,7 +297,7 @@ generate_meta_analytic_data <- function(N, n, surrogate_index_estimators, sd_bet
         # For the small N proof of concept scenario, we use the exponentiated
         # mean difference as effect measure.
         method = "adjusted"
-        formula = formula(cbind(surrogate, clinical) ~ treatment + X1 + bs(X2))
+        formula = formula(cbind(surrogate, clinical) ~ treatment + X1 + bs(X2, df = 8))
         measure = c("mean difference", "mean difference")
         # We add extra noise to the data. This allows us to make the linear
         # regression models overfit and hence produce more biased sandwich
