@@ -61,7 +61,7 @@ if (scenario == "proof-of-concept") {
   # trial-level correlation. This should be large in the vaccine scenario
   # because the standard covariance estimator (based on the delta method) for
   # log RR estimators is consistent but biased. 
-  n_approximation_MC = 3e3  
+  n_approximation_MC = 4e3  
 }
 
 
@@ -81,14 +81,14 @@ if (regime == "small") {
   }
   # This regime corresponds to the large N small n asymptotic regime. This
   # scenario is artifical and just meant to show when methods can break. 
-  N = c(100, 500, 1e3, 2e3)  # Number of trials in each meta-analytic data set
+  N = c(100, 500, 1e3, 2e3, 5e3)  # Number of trials in each meta-analytic data set
   # The within-trial sample size is set to something small. 
-  n = c(100, 500, 1e3, 2e3)
+  n = c(100, 500, 1e3, 2e3, 5e3)
   
   # The approximation accuracy for the true rho is increased for the large N
   # setting. In this setting, the SD of the estimators will be much smaller; so,
   # the MC error in the true rho is relatively more important. 
-  N_approximation_MC = 5e4
+  N_approximation_MC = 2e5
   n_approximation_MC = 5e2
   
   sd_beta = list(c(0.1, 0.1))
@@ -118,7 +118,7 @@ if (scenario == "proof-of-concept") {
   }
 } else if (scenario == "vaccine") {
   # Set surrogate index estimators
-  surrogate_index_estimator = c("surrogate", "logistic", "gam", "rf")
+  surrogate_index_estimator = c("surrogate", "logistic", "gam")
 }
 
 

@@ -38,7 +38,7 @@ generate_random_coefficients_vaccine <- function(sd_beta_clin_treatment = 0.10, 
   mu2 = runif(1, min = -1, max = 1)
   
   # Sample random treatment effect on surrogate. 
-  beta_surr_treatment <- runif(1, min = 0.25, max = 3)
+  beta_surr_treatment <- runif(1, min = 0.25, max = 2.5)
   
   # Sample random treatment effect on clinical endpoint.
   beta_clin_treatment <- rnorm(1, mean = 0, sd = sd_beta_clin_treatment)
@@ -106,7 +106,7 @@ simulate_trial_vaccine = function(n, coefficients) {
   eta = coefficients$beta_clin_treatment * treatment - 
     (1 + coefficients$beta_clin_surrogate + 1 * X3) * surrogate +
     X1 - 2 * X3
-  prob_clin = (1 / (1 + exp(-1 * (eta)))) * 0.10 * exp(sin(1.5 * X2) + 1)
+  prob_clin = (1 / (1 + exp(-1 * (eta)))) * 0.10 * exp(sin(X2) + 1)
   clinical <- rbinom(n = n, size = 1, prob = prob_clin)
   
   # Data frame for a single trial
