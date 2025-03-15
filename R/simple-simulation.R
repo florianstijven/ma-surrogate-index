@@ -81,9 +81,9 @@ if (regime == "small") {
   }
   # This regime corresponds to the large N small n asymptotic regime. This
   # scenario is artifical and just meant to show when methods can break. 
-  N = c(5e2, 1e3, 2e3, 5e3)  # Number of trials in each meta-analytic data set
+  N = c(100, 500, 1e3, 2e3)  # Number of trials in each meta-analytic data set
   # The within-trial sample size is set to something small. 
-  n = 40
+  n = c(100, 500, 1e3, 2e3)
   
   # The approximation accuracy for the true rho is increased for the large N
   # setting. In this setting, the SD of the estimators will be much smaller; so,

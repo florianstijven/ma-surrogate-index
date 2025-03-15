@@ -75,7 +75,7 @@ simulate_trial_proof_of_concept <- function(n, coefficients) {
   # Simulate clinical endpoint with no random coefficients. We're assuming that
   # the regression of the clinical endpoint on the surrogate and covariate is
   # the same across trials modulus some small random treatment effect.
-  clinical <- -1 * surrogate * X1 + surrogate * (1 - X1) + 
+  clinical <- -0.5 * surrogate * X1 + surrogate * (1 - X1) + 
     coefficients$beta_clin_treatment * treatment +
     coefficients$beta_clin_surrogate * surrogate ^ 2 +
     rnorm(n)
