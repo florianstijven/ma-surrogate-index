@@ -13,6 +13,7 @@ multiplier_bootstrap_sampling <- function(data, statistic, B) {
     estimate = statistic(data, weights)
     return(estimate)
   }
+
   # Compute estimate on reweighted data. A list of estimates is returned.
   bootstrap_est_list = purrr::map(.x = 1:B, .f = bootstrap_replicate_f)
   

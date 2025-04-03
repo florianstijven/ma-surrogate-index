@@ -37,7 +37,8 @@ moment_estimator = function(
     estimator_adjustment = "N - 1", # Finite-sample adjustment to the estimator
     sandwich_adjustment = "N -1", # Finite-sample adjustment to the sandwich estimator
     weights = rep(1, length(alpha_hat)),
-    SE = TRUE) 
+    SE = TRUE,
+    nearest_PD = FALSE) 
   {
   # Total number of independent units.
   N = length(alpha_hat)
@@ -111,7 +112,17 @@ moment_estimator = function(
     residual_var = NA
   }
   
+  # Find the nearest positive definite matrix, if this is asked by the user.
+  if (nearest_PD) {
+    S_adj = tryCatch({
+      Matrix::nearPD(S_adj)$mat
+    }, error = function(e) {
+      S_adj = matrix(NA, nrow = 2, ncol = 2)
+    })
+    
+  }
   
+
   # Return the estimated mean and covariance parameters and the corresponding 
   # sandwich estimator.
   return(list(
