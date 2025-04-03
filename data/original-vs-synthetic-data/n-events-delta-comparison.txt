@@ -1,0 +1,137 @@
+# A tibble: 134 × 7
+    trial.lbl          vax data      CC_stratum     n n_events n_Delta
+    <fct>            <int> <chr>     <fct>      <int>    <int>   <int>
+  1 Moderna              1 original  1_0_1_13     525        0     170
+  2 Moderna              1 synthetic 1_0_1_13     525        0     170
+  3 Moderna              1 original  1_0_1_14     768        0     143
+  4 Moderna              1 synthetic 1_0_1_14     768        0     143
+  5 Moderna              1 original  1_0_1_15    2780        0     187
+  6 Moderna              1 synthetic 1_0_1_15    2780        0     187
+  7 Moderna              1 original  1_0_1_16    3033        0     167
+  8 Moderna              1 synthetic 1_0_1_16    3033        0     167
+  9 Moderna              1 original  1_0_1_17    1310        0     146
+ 10 Moderna              1 synthetic 1_0_1_17    1310        0     146
+ 11 Moderna              1 original  1_0_1_18    5516        0     187
+ 12 Moderna              1 synthetic 1_0_1_18    5516        0     187
+ 13 Moderna              1 original  1_1_1_27      47       47      36
+ 14 Moderna              1 synthetic 1_1_1_27      47       47      36
+ 15 AstraZeneca          1 original  2_0_2_13    7435        0      89
+ 16 AstraZeneca          1 synthetic 2_0_2_13    7435        0      89
+ 17 AstraZeneca          1 original  2_0_2_14    2103        0      60
+ 18 AstraZeneca          1 synthetic 2_0_2_14    2103        0      60
+ 19 AstraZeneca          1 original  2_0_2_15    2013        0      73
+ 20 AstraZeneca          1 synthetic 2_0_2_15    2013        0      73
+ 21 AstraZeneca          1 original  2_0_2_16     262        0      67
+ 22 AstraZeneca          1 synthetic 2_0_2_16     262        0      67
+ 23 AstraZeneca          1 original  2_0_2_17    1504        0      86
+ 24 AstraZeneca          1 synthetic 2_0_2_17    1504        0      86
+ 25 AstraZeneca          1 original  2_0_2_18     130        0      63
+ 26 AstraZeneca          1 synthetic 2_0_2_18     130        0      63
+ 27 AstraZeneca          1 original  2_1_2_27      45       45      25
+ 28 AstraZeneca          1 synthetic 2_1_2_27      45       45      25
+ 29 Novavax              1 original  3_0_3_21    5203        0      99
+ 30 Novavax              1 synthetic 3_0_3_21    5203        0      99
+ 31 Novavax              1 original  3_0_3_22    4150        0      95
+ 32 Novavax              1 synthetic 3_0_3_22    4150        0      95
+ 33 Novavax              1 original  3_0_3_23     628        0      91
+ 34 Novavax              1 synthetic 3_0_3_23     628        0      91
+ 35 Novavax              1 original  3_0_3_24     791        0      80
+ 36 Novavax              1 synthetic 3_0_3_24     791        0      80
+ 37 Novavax              1 original  3_0_3_25    1979        0      74
+ 38 Novavax              1 synthetic 3_0_3_25    1979        0      74
+ 39 Novavax              1 original  3_0_3_26    2163        0      73
+ 40 Novavax              1 synthetic 3_0_3_26    2163        0      73
+ 41 Novavax              1 original  3_0_3_27     110        0      55
+ 42 Novavax              1 synthetic 3_0_3_27     110        0      55
+ 43 Novavax              1 original  3_0_3_28     188        0      69
+ 44 Novavax              1 synthetic 3_0_3_28     188        0      69
+ 45 Novavax              1 original  3_0_3_29     810        0      39
+ 46 Novavax              1 synthetic 3_0_3_29     810        0      39
+ 47 Novavax              1 original  3_0_3_30     109        0      39
+ 48 Novavax              1 synthetic 3_0_3_30     109        0      39
+ 49 Novavax              1 original  3_1_3_43      12       12      12
+ 50 Novavax              1 synthetic 3_1_3_43      12       12      12
+ 51 J&J (Brazil)         1 original  4_0_4_41    1389        0      22
+ 52 J&J (Brazil)         1 synthetic 4_0_4_41    1389        0      22
+ 53 J&J (Brazil)         1 original  4_0_4_42     605        0      15
+ 54 J&J (Brazil)         1 synthetic 4_0_4_42     605        0      15
+ 55 J&J (Brazil)         1 original  4_0_4_43     549        0      20
+ 56 J&J (Brazil)         1 synthetic 4_0_4_43     549        0      20
+ 57 J&J (Brazil)         1 original  4_0_4_44     621        0      35
+ 58 J&J (Brazil)         1 synthetic 4_0_4_44     621        0      35
+ 59 J&J (Brazil)         1 original  4_1_4_79      68       68      57
+ 60 J&J (Brazil)         1 synthetic 4_1_4_79      68       68      57
+ 61 J&J (Brazil)         1 original  4_1_4_80      27       27      26
+ 62 J&J (Brazil)         1 synthetic 4_1_4_80      27       27      26
+ 63 J&J (Colombia)       1 original  5_0_5_41    1010        0      18
+ 64 J&J (Colombia)       1 synthetic 5_0_5_41    1010        0      18
+ 65 J&J (Colombia)       1 original  5_0_5_42     238        0      12
+ 66 J&J (Colombia)       1 synthetic 5_0_5_42     238        0      12
+ 67 J&J (Colombia)       1 original  5_0_5_43     271        0      17
+ 68 J&J (Colombia)       1 synthetic 5_0_5_43     271        0      17
+ 69 J&J (Colombia)       1 original  5_0_5_44     154        0       6
+ 70 J&J (Colombia)       1 synthetic 5_0_5_44     154        0       6
+ 71 J&J (Colombia)       1 original  5_1_5_79      96       96      87
+ 72 J&J (Colombia)       1 synthetic 5_1_5_79      96       96      87
+ 73 J&J (Colombia)       1 original  5_1_5_80      14       14      10
+ 74 J&J (Colombia)       1 synthetic 5_1_5_80      14       14      10
+ 75 J&J (S. America)     1 original  6_0_6_41    1093        0      13
+ 76 J&J (S. America)     1 synthetic 6_0_6_41    1093        0      13
+ 77 J&J (S. America)     1 original  6_0_6_42     632        0      24
+ 78 J&J (S. America)     1 synthetic 6_0_6_42     632        0      24
+ 79 J&J (S. America)     1 original  6_0_6_43     393        0      16
+ 80 J&J (S. America)     1 synthetic 6_0_6_43     393        0      16
+ 81 J&J (S. America)     1 original  6_0_6_44     414        0      15
+ 82 J&J (S. America)     1 synthetic 6_0_6_44     414        0      15
+ 83 J&J (S. America)     1 original  6_1_6_79      91       91      84
+ 84 J&J (S. America)     1 synthetic 6_1_6_79      91       91      84
+ 85 J&J (S. America)     1 original  6_1_6_80      27       27      24
+ 86 J&J (S. America)     1 synthetic 6_1_6_80      27       27      24
+ 87 J&J (S. Africa)      1 original  7_0_7_45    1012        0      49
+ 88 J&J (S. Africa)      1 synthetic 7_0_7_45    1012        0      49
+ 89 J&J (S. Africa)      1 original  7_0_7_46     593        0      49
+ 90 J&J (S. Africa)      1 synthetic 7_0_7_46     593        0      49
+ 91 J&J (S. Africa)      1 original  7_0_7_47     238        0      50
+ 92 J&J (S. Africa)      1 synthetic 7_0_7_47     238        0      50
+ 93 J&J (S. Africa)      1 original  7_0_7_48     349        0      55
+ 94 J&J (S. Africa)      1 synthetic 7_0_7_48     349        0      55
+ 95 J&J (S. Africa)      1 original  7_1_7_81      20       20      17
+ 96 J&J (S. Africa)      1 synthetic 7_1_7_81      20       20      17
+ 97 J&J (S. Africa)      1 original  7_1_7_82       2        2       1
+ 98 J&J (S. Africa)      1 synthetic 7_1_7_82       2        2       1
+ 99 J&J (USA)            1 original  8_0_8_33     766        0      49
+100 J&J (USA)            1 synthetic 8_0_8_33     766        0      49
+101 J&J (USA)            1 original  8_0_8_34     823        0      52
+102 J&J (USA)            1 synthetic 8_0_8_34     823        0      52
+103 J&J (USA)            1 original  8_0_8_35     161        0      42
+104 J&J (USA)            1 synthetic 8_0_8_35     161        0      42
+105 J&J (USA)            1 original  8_0_8_36     342        0      55
+106 J&J (USA)            1 synthetic 8_0_8_36     342        0      55
+107 J&J (USA)            1 original  8_0_8_37    2189        0      48
+108 J&J (USA)            1 synthetic 8_0_8_37    2189        0      48
+109 J&J (USA)            1 original  8_0_8_38    1144        0      55
+110 J&J (USA)            1 synthetic 8_0_8_38    1144        0      55
+111 J&J (USA)            1 original  8_0_8_39    1448        0      47
+112 J&J (USA)            1 synthetic 8_0_8_39    1448        0      47
+113 J&J (USA)            1 original  8_0_8_40    1301        0      52
+114 J&J (USA)            1 synthetic 8_0_8_40    1301        0      52
+115 J&J (USA)            1 original  8_1_8_77      58       58      52
+116 J&J (USA)            1 synthetic 8_1_8_77      58       58      52
+117 J&J (USA)            1 original  8_1_8_78      17       17      15
+118 J&J (USA)            1 synthetic 8_1_8_78      17       17      15
+119 AstraZeneca          0 original  Placebo     6212       55      65
+120 AstraZeneca          0 synthetic Placebo     6212       55      65
+121 J&J (Brazil)         0 original  Placebo     3217      165      38
+122 J&J (Brazil)         0 synthetic Placebo     3217      165      38
+123 J&J (Colombia)       0 original  Placebo     1761      180      23
+124 J&J (Colombia)       0 synthetic Placebo     1761      180      23
+125 J&J (S. Africa)      0 original  Placebo     2176       58      44
+126 J&J (S. Africa)      0 synthetic Placebo     2176       58      44
+127 J&J (S. America)     0 original  Placebo     2653      202      17
+128 J&J (S. America)     0 synthetic Placebo     2653      202      17
+129 J&J (USA)            0 original  Placebo     8014      213      90
+130 J&J (USA)            0 synthetic Placebo     8014      213      90
+131 Moderna              0 original  Placebo    13682      656     572
+132 Moderna              0 synthetic Placebo    13682      656     572
+133 Novavax              0 original  Placebo     7250       44     125
+134 Novavax              0 synthetic Placebo     7250       44     125
