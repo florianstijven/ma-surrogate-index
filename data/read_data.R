@@ -44,7 +44,8 @@ p3001 = read.csv(p3001_file) %>% filter(Bserostatus == 0) %>%
   mutate(
     case_cohort_weight_nAb = case_cohort_weight_bAb,
     Delta_nAb = Delta_bAb,
-    protocol = "p3001"
+    protocol = "p3001",
+    trial = "Moderna"
   )
 
 # AstraZeneca
@@ -82,7 +83,8 @@ p3002 = read.csv(p3002_file) %>% filter(Bserostatus == 0) %>%
   mutate(
     case_cohort_weight_nAb = case_cohort_weight_bAb,
     Delta_nAb = Delta_bAb,
-    protocol = "p3002"
+    protocol = "p3002",
+    trial = "AstraZeneca"
   )
 
 # J&J
@@ -121,7 +123,8 @@ p3003 = read.csv(p3003_file) %>% filter(Bserostatus == 0) %>%
   mutate(
     case_cohort_weight_nAb = case_cohort_weight_bAb,
     Delta_nAb = Delta_bAb,
-    protocol = "p3003"
+    protocol = "p3003",
+    trial = "Janssen"
   )
 
 # Novavax
@@ -160,7 +163,8 @@ p3004 = read.csv(p3004_file) %>% filter(Bserostatus == 0) %>%
   mutate(
     case_cohort_weight_nAb = case_cohort_weight_bAb,
     Delta_nAb = Delta_bAb,
-    protocol = "p3004"
+    protocol = "p3004",
+    trial = "Novavax"
   )
 
 # Sanofi
@@ -202,7 +206,8 @@ p3005 = read.csv(p3005_file) %>%
     risk_score = risk_score
   ) %>%
   mutate(
-    protocol = "p3005"
+    protocol = "p3005",
+    trial = "Sanofi"
   )
 
 
@@ -236,15 +241,16 @@ data_all = data_all %>%
       HighRiskInd,
       CalendarDateEnrollment,
       Sex,
-      WhiteNonHispanic
+      WhiteNonHispanic,
+      BMI
     ),
     complete.cases
   )) 
 
 n3 = nrow(data_all)
 n2 - n3 
-# 2 rows were dropped.
+# 461 rows were dropped.
 
 
-write.csv(dat, "data/CrossProtocolData.csv")
+write.csv(data_all, "data/CrossProtocolData.csv")
 
