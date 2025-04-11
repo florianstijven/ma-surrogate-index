@@ -5,7 +5,7 @@ p3001_file = "S:/p3001/analysis/correlates/Part_A_Blinded_Phase_Data/adata/moder
 p3002_file = "S:/p3002/analysis/correlates/Part_A_Blinded_Phase_Data/adata/azd1222_data_processed_with_riskscore.csv"
 p3003_file = "S:/p3003/analysis/correlates/Part_A_Blinded_Phase_Data/adata/janssen_pooled_partA_data_processed_with_riskscore_20240305.csv"
 p3004_file = "S:/p3004/analysis/correlates/Part_A_Blinded_Phase_Data/adata/prevent19_data_processed_20250325.csv"
-
+p3005_file = "S:/p3005/analysis/correlates/Part_A_Blinded_Phase_Data/adata/vat08_combined_data_processed_20250321.csv"
 
 
 # Read the data from the individual trials.
@@ -35,17 +35,15 @@ p3001 = read.csv(p3001_file) %>% filter(Bserostatus == 0) %>%
   rename(
     bindSpike = Day57bindSpike,
     pseudoneutid50 = Day57pseudoneutid50,
-    wt.est = wt.D57,
-    ph1 = ph1.D57,
-    Delta = ph2.D57,
-    Y = EventIndPrimaryD57,
-    TTY = EventTimePrimaryD57
+    case_cohort_weight_bAb = wt.D57,
+    phase1_ind = ph1.D57,
+    Delta_bAb = ph2.D57,
+    event = EventIndPrimaryD57,
+    time_to_event = EventTimePrimaryD57
   ) %>%
   mutate(
-    trial = 1,
-    Y. = ifelse(Y == 1 & TTY <= 120, 1, 0),
-    TTY. = ifelse(Y. == 1, TTY, ifelse(TTY <= 120, TTY, 120)),
-    trial.lbl = "Moderna",
+    case_cohort_weight_nAb = case_cohort_weight_bAb,
+    Delta_nAb = Delta_bAb,
     protocol = "p3001"
   )
 
@@ -75,18 +73,15 @@ p3002 = read.csv(p3002_file) %>% filter(Bserostatus == 0) %>%
   rename(
     bindSpike = Day57bindSpike,
     pseudoneutid50 = Day57pseudoneutid50,
-    wt.est = wt.D57,
-    ph1 = ph1.D57,
-    Delta = ph2.D57,
-    Y = EventIndPrimaryD57,
-    TTY = EventTimePrimaryD57
+    case_cohort_weight_bAb = wt.D57,
+    phase1_ind = ph1.D57,
+    Delta_bAb = ph2.D57,
+    event = EventIndPrimaryD57,
+    time_to_event = EventTimePrimaryD57
   ) %>%
   mutate(
-    trial = 2,
-    Trt = ifelse(Trt == 1, 2, 0),
-    Y. = ifelse(Y == 1 & TTY <= 120, 1, 0),
-    TTY. = ifelse(Y. == 1, TTY, ifelse(TTY <= 120, TTY, 120)),
-    trial.lbl = "AstraZeneca",
+    case_cohort_weight_nAb = case_cohort_weight_bAb,
+    Delta_nAb = Delta_bAb,
     protocol = "p3002"
   )
 
@@ -117,16 +112,15 @@ p3003 = read.csv(p3003_file) %>% filter(Bserostatus == 0) %>%
   rename(
     bindSpike = Day29bindSpike,
     pseudoneutid50 = Day29pseudoneutid50,
-    wt.est = wt.D29,
-    ph1 = ph1.D29,
-    Delta = ph2.D29,
-    Y = EventIndPrimaryD29,
-    TTY = EventTimePrimaryD29
+    case_cohort_weight_bAb = wt.D29,
+    phase1_ind = ph1.D29,
+    Delta_bAb = ph2.D29,
+    event = EventIndPrimaryD29,
+    time_to_event = EventTimePrimaryD29
   ) %>%
   mutate(
-    Y. = ifelse(Y == 1 & TTY <= 120, 1, 0),
-    TTY. = ifelse(Y. == 1, TTY, ifelse(TTY <= 120, TTY, 120)),
-    trial.lbl = "Novavax",
+    case_cohort_weight_nAb = case_cohort_weight_bAb,
+    Delta_nAb = Delta_bAb,
     protocol = "p3003"
   )
 
@@ -156,62 +150,86 @@ p3004 = read.csv(p3004_file) %>% filter(Bserostatus == 0) %>%
   rename(
     bindSpike = Day35bindSpike,
     pseudoneutid50 = Day35pseudoneutid50,
-    wt.est = wt.D35,
-    ph1 = ph1.D35,
-    Delta = ph2.D35,
-    Y = EventIndPrimaryD35,
-    TTY = EventTimePrimaryD35,
+    case_cohort_weight_bAb = wt.D35,
+    phase1_ind = ph1.D35,
+    Delta_bAb = ph2.D35,
+    event = EventIndPrimaryD35,
+    time_to_event = EventTimePrimaryD35,
     risk_score = risk_score2
   ) %>%
   mutate(
-    trial = 3,
-    Trt = ifelse(Trt == 1, 3, 0),
-    Y. = ifelse(Y == 1 & TTY <= 120, 1, 0),
-    TTY. = ifelse(Y. == 1, TTY, ifelse(TTY <= 120, TTY, 120)),
+    case_cohort_weight_nAb = case_cohort_weight_bAb,
+    Delta_nAb = Delta_bAb,
     protocol = "p3004"
   )
 
+# Sanofi
+p3005 = read.csv(p3005_file) %>% 
+  filter(Bserostatus == 0) %>%
+  dplyr::select(
+    Ptid,
+    Trt,
+    Day43pseudoneutid50,
+    Day43bindSpike,
+    wt.D43.bAb,
+    wt.D43.nAb,
+    age.geq.65,
+    HighRiskInd, 
+    risk_score, 
+    CalendarDateEnrollment,
+    Wstratum, 
+    EventIndPrimaryD43,
+    ph1.D43, 
+    ph2.D43.bAb,
+    ph2.D43.nAb,
+    EventTimePrimaryD43, 
+    Country,
+    WhiteNonHispanic,
+    Sex,
+    Age,
+    BMI
+  ) %>%
+  rename(
+    bindSpike = Day43bindSpike,
+    pseudoneutid50 = Day43pseudoneutid50,
+    case_cohort_weight_bAb = wt.D43.bAb,
+    case_cohort_weight_nAb = wt.D43.nAb,
+    phase1_ind = ph1.D43,
+    Delta_bAb = ph2.D43.bAb,
+    Delta_nAb = ph2.D43.nAb,
+    event = EventIndPrimaryD43,
+    time_to_event = EventTimePrimaryD43,
+    risk_score = risk_score
+  ) %>%
+  mutate(
+    protocol = "p3005"
+  )
 
-# separate p3003 into 5 separate trial units
-p3003_brazil = p3003 %>% filter(Country == 2) %>%
-  mutate(trial = 4,
-         Trt = ifelse(Trt == 1, 4, 0),
-         trial.lbl = "J&J (Brazil)")
-
-p3003_colombia = p3003 %>% filter(Country == 4) %>%
-  mutate(trial = 5,
-         Trt = ifelse(Trt == 1, 5, 0),
-         trial.lbl = "J&J (Colombia)")
-
-p3003_southam = p3003 %>% filter(Country %in% c(1, 3, 5, 6)) %>%
-  mutate(trial = 6,
-         Trt = ifelse(Trt == 1, 6, 0),
-         trial.lbl = "J&J (S. America)")
-
-p3003_zaf = p3003 %>% filter(Country == 7) %>%
-  mutate(trial = 7,
-         Trt = ifelse(Trt == 1, 7, 0),
-         trial.lbl = "J&J (S. Africa)")
-
-p3003_usa = p3003 %>% filter(Country == 0) %>%
-  mutate(trial = 8,
-         Trt = ifelse(Trt == 1, 8, 0),
-         trial.lbl = "J&J (USA)") 
 
 # combine trials into one dataframe
-dat = bind_rows(
+data_all = bind_rows(
   p3001,
   p3002,
+  p3003,
   p3004,
-  p3003_brazil,
-  p3003_colombia,
-  p3003_southam,
-  p3003_zaf,
-  p3003_usa
+  p3005
 ) %>%
-  rename(A = Trt) %>%
-  filter(ph1 == TRUE) %>% # drops 9570 pts
-  mutate(Wstratum = as.factor(Wstratum)) %>%
+  rename(treatment = Trt) 
+
+# Record number of rows before filtering the data. 
+n1 = nrow(data_all)
+
+# Drop patients that were not included in the phase 1 set. 
+data_all = data_all %>%
+  filter(phase1_ind == TRUE) 
+
+n2 = nrow(data_all)
+n1 - n2
+# 9899 rows were dropped.
+
+
+# Drop patients with missing covariates. 
+data_all = data_all %>%
   filter(if_all(
     c(
       age.geq.65,
@@ -221,22 +239,11 @@ dat = bind_rows(
       WhiteNonHispanic
     ),
     complete.cases
-  )) # filters out 2 missing values of HighRiskInd 
+  )) 
 
-
-dat = dat %>% rename(w = wt.est)
-
-## Replace relative calendar date of enrollment for J&J trials
-dat = dat %>% group_by(trial) %>% mutate(CalendarDate2 = ifelse(
-  trial %in% c(4, 5, 6, 7, 8),
-  CalendarDateEnrollment -
-    min(CalendarDateEnrollment),
-  CalendarDateEnrollment
-))
-
-## EARLYIND - was the pt enrolled during the first or second half of the enrollment period?
-dat <- dat %>% group_by(trial) %>% mutate(EarlyInd = ifelse(CalendarDate2 < (max(CalendarDate2 /
-                                                                                   2)), 1, 0))
+n3 = nrow(data_all)
+n2 - n3 
+# 2 rows were dropped.
 
 
 write.csv(dat, "data/CrossProtocolData.csv")
