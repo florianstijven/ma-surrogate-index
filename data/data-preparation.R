@@ -156,8 +156,10 @@ data_joined = data_joined %>%
       prop.ba.1 * BA.1 +
       prop.ba.2 * BA.2 +
       prop.ba.4.5 * BA.4.5
-  )
+  ) %>%
+  # Compute circulating-variant adjusted neutralization titer.
+  mutate(pseudoneutid50_adjusted = pseudoneutid50 / abrogation_coefficient)
 
 
 # Save processed data set.
-write.csv(df, "data/processed_data.csv")
+write.csv(data_joined, "data/processed_data.csv")
