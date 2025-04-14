@@ -42,6 +42,7 @@ p3001 = read.csv(p3001_file) %>% filter(Bserostatus == 0) %>%
     time_to_event = EventTimePrimaryD57
   ) %>%
   mutate(
+    USUBJID = paste0("mRNA-1273-P301-", stringr::str_sub(Ptid, 1, 5), "-", stringr::str_sub(Ptid, 6, 9)),
     case_cohort_weight_nAb = case_cohort_weight_bAb,
     Delta_nAb = Delta_bAb,
     protocol = "p3001",
@@ -81,6 +82,7 @@ p3002 = read.csv(p3002_file) %>% filter(Bserostatus == 0) %>%
     time_to_event = EventTimePrimaryD57
   ) %>%
   mutate(
+    USUBJID = Ptid,
     case_cohort_weight_nAb = case_cohort_weight_bAb,
     Delta_nAb = Delta_bAb,
     protocol = "p3002",
@@ -121,6 +123,7 @@ p3003 = read.csv(p3003_file) %>% filter(Bserostatus == 0) %>%
     time_to_event = EventTimePrimaryD29
   ) %>%
   mutate(
+    USUBJID = Ptid,
     case_cohort_weight_nAb = case_cohort_weight_bAb,
     Delta_nAb = Delta_bAb,
     protocol = "p3003",
@@ -161,6 +164,7 @@ p3004 = read.csv(p3004_file) %>% filter(Bserostatus == 0) %>%
     risk_score = risk_score2
   ) %>%
   mutate(
+    USUBJID = paste0("2019nCoV-", stringr::str_sub(Ptid, 9, 22)),
     case_cohort_weight_nAb = case_cohort_weight_bAb,
     Delta_nAb = Delta_bAb,
     protocol = "p3004",
@@ -206,6 +210,7 @@ p3005 = read.csv(p3005_file) %>%
     risk_score = risk_score
   ) %>%
   mutate(
+    USUBJID = Ptid,
     protocol = "p3005",
     trial = "Sanofi"
   )
