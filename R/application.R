@@ -1,26 +1,24 @@
 # Load libraries
 library(tidyverse)
+library(scales)
 library(splines)
 library(WeightedROC)
 library(mgcv)
-library(hal9001)
 library(future)
 library(furrr)
 
-# # Set up parallel computing
-# if (parallelly::supportsMulticore()) {
-#   plan("multicore")
-# } else {
-#   plan(multisession)
-# }
+# Set up parallel computing
+if (parallelly::supportsMulticore()) {
+  plan("multicore")
+} else {
+  plan(multisession)
+}
 
 ## Analysis Parameters -------------------------------------------------- 
 
-# Number of knots for HAL. 
-num_knots = c(25, 10)
 # Number of bootstrap replications for computing within-trial covariance
 # matrices.
-B_within_trial = 5e2
+B_within_trial = 50
 # Number of bootstrap replications for the multiplier bootstrap for the
 # meta-analytic parameters.
 B_multiplier = 5e3
@@ -31,11 +29,12 @@ B_multiplier = 5e3
 # frames.
 ipd_tbl = read.csv("data/processed_data.csv") %>%
   tibble() %>%
-  # The clinical outcome Y should be an integer.
-  mutate(Y = as.integer(Y)) %>%
+  # Compute the binary endpoint as observed infection before 120 days. Note that
+  # we're ignoring censoring to some extent by doing so because subjects
+  # censored before 120 days cannot have the event. 
+  mutate(Y = ifelse(event == 1 & time_to_event < 120, 1, 0)) %>%
   # Code the BMI dummy variables into a single factor variable.
   mutate(
-    CC_stratum = as.factor(CC_stratum),
     BMI_stratum = case_when(
       BMI_underweight == 1 ~ "Underweight",
       BMI_normal == 1 ~ "Normal",
@@ -46,51 +45,37 @@ ipd_tbl = read.csv("data/processed_data.csv") %>%
     BMI_stratum = as.factor(BMI_stratum)
   )
 
-# Recode all J&J subunits into a single trial.
-ipd_tbl = ipd_tbl %>%
-  mutate(
-    trial.lbl = ifelse(str_detect(trial.lbl, "J&J"), "J&J", trial.lbl)
-  )
-
-# Estimate case-cohort sampling weights and add these to the data set.
-ipd_tbl = ipd_tbl %>%
-  left_join(ipd_tbl %>%
-              group_by(CC_stratum) %>%
-              summarize(weight = 1 / mean(Delta)) %>%
-              ungroup())
-
 # The weights should be set to one for placebo patients. Their titers were set
 # to the lower limits of the assays.
 ipd_tbl = ipd_tbl %>%
-  mutate(weight = ifelse(vax == 0, 1, weight))
+  mutate(
+    case_cohort_weight_nAb = ifelse(treatment == 0, 1, case_cohort_weight_nAb),
+    case_cohort_weight_bAb = ifelse(treatment == 0, 1, case_cohort_weight_bAb)
+  )
  
-# Set weights to zero for patients in the vaccine groups for whom the titers
-# were not measured.
-ipd_tbl = ipd_tbl %>%
-  mutate(weight = ifelse((vax == 1) & (Delta == 0), 0, weight))
 
 # Make sure that each trial-treatment group combination gets the same total
 # weight. We don't want one trial to have an undue influence on the predictions.
 ipd_tbl = ipd_tbl %>%
   left_join(ipd_tbl %>%
-              group_by(trial.lbl, vax) %>%
-              summarize(total_weight = sum(weight)) %>%
+              group_by(trial, treatment) %>%
+              summarize(total_weight = sum(case_cohort_weight_nAb)) %>%
               ungroup()) %>%
-  mutate(weight = weight / total_weight)
+  mutate(weight_prediction = case_cohort_weight_nAb / total_weight)
 
 # Ensure that the weights sum to the total number of observations. 
 ipd_tbl = ipd_tbl %>%
-  mutate(weight = weight / mean(weight))
+  mutate(weight_prediction = weight_prediction / mean(weight_prediction))
 
 # Every trial now receives the same total weight.
 ipd_tbl %>%
-  group_by(trial.lbl, vax) %>%
-  summarise(sum(weight))
+  group_by(trial, treatment) %>%
+  summarise(sum(weight_prediction))
 
 # Add variable that indicates whether the titers were at or below the limit of
 # detection.
-lod_bindSpike = ipd_tbl$bindSpike[ipd_tbl$vax == 0][1]
-lod_pseudoneutid50 = ipd_tbl$pseudoneutid50[ipd_tbl$vax == 0][1]
+lod_bindSpike = ipd_tbl$bindSpike[ipd_tbl$treatment == 0][1]
+lod_pseudoneutid50 = ipd_tbl$pseudoneutid50[ipd_tbl$treatment == 0][1]
 ipd_tbl = ipd_tbl %>%
   mutate(
     detected_bindSpike = ifelse(bindSpike == lod_bindSpike, "Not Detected", "Detected"),
@@ -195,89 +180,89 @@ surrogate_index_models_tbl = surrogate_index_models_tbl %>%
     surrogate = c("bindSpike", "pseudoneutid50", "bindSpike + pseudoneutid50", "none")
   ))
 
-## HAL ------------------------------------------------------------------
-
-
-glm_baseline = glm(
-  Y ~ risk_score + Age,
-  ipd_tbl,
-  family = gaussian(),
-  weights = weight,
-  subset = (ipd_tbl$Delta == 1) |
-    (ipd_tbl$vax == 0)
-)
-hal_fit_baseline = fit_hal(
-  X = model.matrix(glm_baseline)[, -1],
-  Y = glm_baseline$model$Y,
-  family = "binomial",
-  max_degree = 2,
-  num_knots = num_knots,
-  weights = glm_baseline$prior.weights
-)
-
-glm_spike = glm(
-  Y ~ detected_bindSpike + bindSpike + risk_score + Age,
-  ipd_tbl,
-  family = gaussian(),
-  weights = weight,
-  subset = (ipd_tbl$Delta == 1) |
-    (ipd_tbl$vax == 0)
-)
-hal_fit_spike = fit_hal(
-  X = model.matrix(glm_spike)[, -1],
-  Y = glm_spike$model$Y,
-  family = "binomial",
-  max_degree = 2,
-  num_knots = num_knots,
-  weights = glm_spike$prior.weights
-)
-
-glm_neut = glm(
-  Y ~ detected_pseudoneut50 + pseudoneutid50 + risk_score + Age,
-  ipd_tbl,
-  family = gaussian(),
-  weights = weight,
-  subset = (ipd_tbl$Delta == 1) |
-    (ipd_tbl$vax == 0),
-  
-)
-hal_fit_neut = fit_hal(
-  X = model.matrix(glm_neut)[, -1],
-  Y = glm_neut$model$Y,
-  family = "binomial",
-  max_degree = 2,
-  num_knots = num_knots,
-  weights = glm_neut$prior.weights
-)
-
-glm_both = glm(
-  Y ~ detected_pseudoneut50 + pseudoneutid50 + detected_bindSpike + bindSpike + risk_score + Age,
-  ipd_tbl,
-  family = gaussian(),
-  weights = weight,
-  subset = (ipd_tbl$Delta == 1) |
-    (ipd_tbl$vax == 0)
-)
-hal_fit_both = fit_hal(
-  X = model.matrix(glm_both)[, -1],
-  Y = glm_both$model$Y,
-  family = "binomial",
-  max_degree = 2,
-  num_knots = num_knots,
-  weights = glm_both$prior.weights
-)
-
-surrogate_index_models_tbl = surrogate_index_models_tbl %>%
-  bind_rows(tibble(
-    fitted_model = list(hal_fit_spike, hal_fit_neut, hal_fit_both, hal_fit_baseline),
-    method = rep("hal", 4),
-    surrogate = c(
-      "bindSpike",
-      "pseudoneutid50",
-      "bindSpike + pseudoneutid50",
-      "none"
-    )
-  ))
+# ## HAL ------------------------------------------------------------------
+# 
+# 
+# glm_baseline = glm(
+#   Y ~ risk_score + Age,
+#   ipd_tbl,
+#   family = gaussian(),
+#   weights = weight,
+#   subset = (ipd_tbl$Delta == 1) |
+#     (ipd_tbl$vax == 0)
+# )
+# hal_fit_baseline = fit_hal(
+#   X = model.matrix(glm_baseline)[, -1],
+#   Y = glm_baseline$model$Y,
+#   family = "binomial",
+#   max_degree = 2,
+#   num_knots = num_knots,
+#   weights = glm_baseline$prior.weights
+# )
+# 
+# glm_spike = glm(
+#   Y ~ detected_bindSpike + bindSpike + risk_score + Age,
+#   ipd_tbl,
+#   family = gaussian(),
+#   weights = weight,
+#   subset = (ipd_tbl$Delta == 1) |
+#     (ipd_tbl$vax == 0)
+# )
+# hal_fit_spike = fit_hal(
+#   X = model.matrix(glm_spike)[, -1],
+#   Y = glm_spike$model$Y,
+#   family = "binomial",
+#   max_degree = 2,
+#   num_knots = num_knots,
+#   weights = glm_spike$prior.weights
+# )
+# 
+# glm_neut = glm(
+#   Y ~ detected_pseudoneut50 + pseudoneutid50 + risk_score + Age,
+#   ipd_tbl,
+#   family = gaussian(),
+#   weights = weight,
+#   subset = (ipd_tbl$Delta == 1) |
+#     (ipd_tbl$vax == 0),
+#   
+# )
+# hal_fit_neut = fit_hal(
+#   X = model.matrix(glm_neut)[, -1],
+#   Y = glm_neut$model$Y,
+#   family = "binomial",
+#   max_degree = 2,
+#   num_knots = num_knots,
+#   weights = glm_neut$prior.weights
+# )
+# 
+# glm_both = glm(
+#   Y ~ detected_pseudoneut50 + pseudoneutid50 + detected_bindSpike + bindSpike + risk_score + Age,
+#   ipd_tbl,
+#   family = gaussian(),
+#   weights = weight,
+#   subset = (ipd_tbl$Delta == 1) |
+#     (ipd_tbl$vax == 0)
+# )
+# hal_fit_both = fit_hal(
+#   X = model.matrix(glm_both)[, -1],
+#   Y = glm_both$model$Y,
+#   family = "binomial",
+#   max_degree = 2,
+#   num_knots = num_knots,
+#   weights = glm_both$prior.weights
+# )
+# 
+# surrogate_index_models_tbl = surrogate_index_models_tbl %>%
+#   bind_rows(tibble(
+#     fitted_model = list(hal_fit_spike, hal_fit_neut, hal_fit_both, hal_fit_baseline),
+#     method = rep("hal", 4),
+#     surrogate = c(
+#       "bindSpike",
+#       "pseudoneutid50",
+#       "bindSpike + pseudoneutid50",
+#       "none"
+#     )
+#   ))
 
 ## Prediction Accuracies of all Prediction Models --------------------------
 
@@ -295,69 +280,68 @@ ipd_surr_indices_tbl = bind_rows(
   ipd_surr_indices_tbl,
   surrogate_index_models_tbl %>%
     rowwise(method, surrogate) %>%
-    filter(method != "hal") %>%
     reframe(tibble(
       surrogate_index = predict(fitted_model, newdata = ipd_tbl, type = "response"),
       ipd_tbl
     ))
 )
 
-# For doing predictions based on HAL, we have to reconstruct design matrices for
-# the entire data set. Missing predictor values are replaced by zeroes. The
-# corresponding predictions have to be replaced with NAs in a second step. 
-ipd_tbl_imputed = ipd_tbl %>%
-  mutate(detected_bindSpike = ifelse(is.na(detected_bindSpike), "Detected", detected_bindSpike),
-         detected_pseudoneut50 = ifelse(is.na(detected_pseudoneut50), "Detected", detected_pseudoneut50),
-         bindSpike = ifelse(is.na(bindSpike), 0, bindSpike),
-         pseudoneutid50 = ifelse(is.na(pseudoneutid50), 0, pseudoneutid50))
-glm_baseline = glm(Y ~ risk_score + Age, ipd_tbl_imputed, family = gaussian())
-glm_spike = glm(
-  Y ~ detected_bindSpike + bindSpike + risk_score + Age,
-  ipd_tbl_imputed,
-  family = gaussian()
-)
-glm_neut = glm(
-  Y ~ detected_pseudoneut50 + pseudoneutid50 + risk_score + Age,
-  ipd_tbl_imputed,
-  family = gaussian()
-)
-glm_both = glm(
-  Y ~ detected_pseudoneut50 + pseudoneutid50 + detected_bindSpike + bindSpike + risk_score + Age,
-  ipd_tbl_imputed,
-  family = gaussian()
-)
-
-ipd_surr_indices_tbl = bind_rows(
-  ipd_surr_indices_tbl,
-  surrogate_index_models_tbl %>%
-    rowwise(method, surrogate) %>%
-    filter(method == "hal", surrogate == "none") %>%
-    reframe(tibble(
-      surrogate_index = predict(fitted_model, new_data = model.matrix(glm_baseline)[, -1], type = "response"),
-      ipd_tbl
-    )),
-  surrogate_index_models_tbl %>%
-    rowwise(method, surrogate) %>%
-    filter(method == "hal", surrogate == "bindSpike") %>%
-    reframe(tibble(
-      surrogate_index = predict(fitted_model, new_data = model.matrix(glm_spike)[, -1], type = "response"),
-      ipd_tbl
-    )),
-  surrogate_index_models_tbl %>%
-    rowwise(method, surrogate) %>%
-    filter(method == "hal", surrogate == "pseudoneutid50") %>%
-    reframe(tibble(
-      surrogate_index = predict(fitted_model, new_data = model.matrix(glm_neut)[, -1], type = "response"),
-      ipd_tbl
-    )),  
-  surrogate_index_models_tbl %>%
-    rowwise(method, surrogate) %>%
-    filter(method == "hal", surrogate == "bindSpike + pseudoneutid50") %>%
-    reframe(tibble(
-      surrogate_index = predict(fitted_model, new_data = model.matrix(glm_both)[, -1], type = "response"),
-      ipd_tbl
-    ))
-)
+# # For doing predictions based on HAL, we have to reconstruct design matrices for
+# # the entire data set. Missing predictor values are replaced by zeroes. The
+# # corresponding predictions have to be replaced with NAs in a second step. 
+# ipd_tbl_imputed = ipd_tbl %>%
+#   mutate(detected_bindSpike = ifelse(is.na(detected_bindSpike), "Detected", detected_bindSpike),
+#          detected_pseudoneut50 = ifelse(is.na(detected_pseudoneut50), "Detected", detected_pseudoneut50),
+#          bindSpike = ifelse(is.na(bindSpike), 0, bindSpike),
+#          pseudoneutid50 = ifelse(is.na(pseudoneutid50), 0, pseudoneutid50))
+# glm_baseline = glm(Y ~ risk_score + Age, ipd_tbl_imputed, family = gaussian())
+# glm_spike = glm(
+#   Y ~ detected_bindSpike + bindSpike + risk_score + Age,
+#   ipd_tbl_imputed,
+#   family = gaussian()
+# )
+# glm_neut = glm(
+#   Y ~ detected_pseudoneut50 + pseudoneutid50 + risk_score + Age,
+#   ipd_tbl_imputed,
+#   family = gaussian()
+# )
+# glm_both = glm(
+#   Y ~ detected_pseudoneut50 + pseudoneutid50 + detected_bindSpike + bindSpike + risk_score + Age,
+#   ipd_tbl_imputed,
+#   family = gaussian()
+# )
+# 
+# ipd_surr_indices_tbl = bind_rows(
+#   ipd_surr_indices_tbl,
+#   surrogate_index_models_tbl %>%
+#     rowwise(method, surrogate) %>%
+#     filter(method == "hal", surrogate == "none") %>%
+#     reframe(tibble(
+#       surrogate_index = predict(fitted_model, new_data = model.matrix(glm_baseline)[, -1], type = "response"),
+#       ipd_tbl
+#     )),
+#   surrogate_index_models_tbl %>%
+#     rowwise(method, surrogate) %>%
+#     filter(method == "hal", surrogate == "bindSpike") %>%
+#     reframe(tibble(
+#       surrogate_index = predict(fitted_model, new_data = model.matrix(glm_spike)[, -1], type = "response"),
+#       ipd_tbl
+#     )),
+#   surrogate_index_models_tbl %>%
+#     rowwise(method, surrogate) %>%
+#     filter(method == "hal", surrogate == "pseudoneutid50") %>%
+#     reframe(tibble(
+#       surrogate_index = predict(fitted_model, new_data = model.matrix(glm_neut)[, -1], type = "response"),
+#       ipd_tbl
+#     )),  
+#   surrogate_index_models_tbl %>%
+#     rowwise(method, surrogate) %>%
+#     filter(method == "hal", surrogate == "bindSpike + pseudoneutid50") %>%
+#     reframe(tibble(
+#       surrogate_index = predict(fitted_model, new_data = model.matrix(glm_both)[, -1], type = "response"),
+#       ipd_tbl
+#     ))
+# )
 
 # Replace predictions based on imputed predictors with NAs.
 ipd_surr_indices_tbl = bind_rows(
@@ -382,6 +366,7 @@ roc_tbl = ipd_surr_indices_tbl %>%
   ))
 
 roc_tbl %>%
+  filter(method != "untransformed surrogate") %>%
   ggplot(aes(color = surrogate, linetype = method)) +
   geom_path(aes(FPR, TPR)) +
   coord_equal()
@@ -393,7 +378,10 @@ ggsave(filename = "results/figures/application/roc-surrogate-indices.pdf",
        units = "cm")
 
 roc_tbl %>% group_by(method, surrogate) %>%
-summarise(AUC = WeightedAUC(pick(c(TPR, FPR, FP, FN, threshold)))) %>%
+  filter(method != "untransformed surrogate") %>%
+  summarise(AUC = WeightedAUC(pick(c(
+    TPR, FPR, FP, FN, threshold
+  )))) %>%
   pivot_wider(names_from = "method", values_from = "AUC") %>%
   write.csv("results/tables/application/auc-surrogate-indices.csv")
 
@@ -592,14 +580,21 @@ ma_trt_effects_tbl = ma_trt_effects_tbl %>%
 
 ## Summarize Trial-level Results ------------------------------------------
 
+# Define transformation for VE scale.
+transform_VE = new_transform(
+  name = "VE",
+  transform = function(x) -1 * log(1 - x),
+  inverse = function(x) 1 - exp(-x)
+)
+
 # Summarize the estimated trial-level treatment effects in meta-analytic plots.
 ma_trt_effects_tbl %>% 
   filter(method == "untransformed surrogate") %>%
-  ggplot(aes(x = trt_effect_surrogate_index_est, y = -1 * log_RR_est, color = trial.lbl)) +
+  ggplot(aes(x = trt_effect_surrogate_index_est, y = 1 - exp(log_RR_est), color = trial.lbl)) +
   geom_point() +
   geom_errorbar(aes(
-    ymin = -1 * (log_RR_est - 1.96 * log_RR_est_se),
-    ymax = -1 * (log_RR_est + 1.96 * log_RR_est_se)
+    ymin = 1 - exp(log_RR_est - 1.96 * log_RR_est_se),
+    ymax = 1 - exp(log_RR_est + 1.96 * log_RR_est_se)
   ),
   width = 0.01) +
   geom_errorbarh(
@@ -609,7 +604,8 @@ ma_trt_effects_tbl %>%
     ),
     height = 0.01
   ) +
-  facet_grid(~surrogate) +
+  scale_y_continuous(transform = transform_VE, breaks = c(0.5, 0.75, 0.90, 0.95)) +
+  facet_grid(~surrogate, scales = "free_x") +
   xlab("Estimated Treatment Effect on Titer") +
   ylab("Estimated -log(1 - VE)")
 
@@ -623,24 +619,30 @@ ggsave(
 )
 
 ma_trt_effects_tbl %>% filter(method != "untransformed surrogate") %>%
-  ggplot(aes(x = -1 * trt_effect_surrogate_index_est, y = -1 * log_RR_est, color = trial.lbl)) +
+  ggplot(aes(
+    x = 1 - exp(trt_effect_surrogate_index_est),
+    y = 1 - exp(log_RR_est),
+    color = trial.lbl
+  )) +
   geom_point() +
   geom_errorbar(aes(
-    ymin = -1 * (log_RR_est - 1.96 * log_RR_est_se),
-    ymax = -1 * (log_RR_est + 1.96 * log_RR_est_se)
-  ),
-  width = 0.01) +
-  geom_errorbarh(
-    aes(
-      xmin = -1 * (trt_effect_surrogate_index_est - 1.96 * trt_effect_surrogate_index_est_se),
-      xmax = -1 * (trt_effect_surrogate_index_est + 1.96 * trt_effect_surrogate_index_est_se)
+    ymin = 1 - exp(log_RR_est - 1.96 * log_RR_est_se),
+    ymax = 1 - exp(log_RR_est + 1.96 * log_RR_est_se)
+  ), width = 0.01) +
+  geom_errorbarh(aes(
+    xmin = 1 - exp(
+      trt_effect_surrogate_index_est - 1.96 * trt_effect_surrogate_index_est_se
     ),
-    height = 0.01
-  ) +
+    xmax = 1 - exp(
+      trt_effect_surrogate_index_est + 1.96 * trt_effect_surrogate_index_est_se
+    )
+  ), height = 0.01) +
+  scale_y_continuous(transform = transform_VE, breaks = c(0.5, 0.75, 0.90, 0.95)) +
+  scale_x_continuous(transform = transform_VE, breaks = c(0.5, 0.75, 0.90, 0.95)) +
   geom_abline(intercept = 0, slope = 1) +
-  facet_grid(method~surrogate) +
-  xlab("Estimated -log(1 - VE) on Surr. Index") +
-  ylab("Estimated -log(1 - VE)")
+  facet_grid(method ~ surrogate) +
+  xlab("Estimated VE on Surr. Index") +
+  ylab("Estimated VE")
 
 ggsave(
   filename = "results/figures/application/ma-surrogate-indices.pdf",
@@ -664,8 +666,9 @@ statistic_f = function(data, weights) {
     alpha_hat = data$treatment_effect_surr,
     beta_hat = data$treatment_effect_clin,
     vcov_list = data$covariance_matrix,
-    estimator_adjustment = estimator_adjustment,
-    weights = weights
+    estimator_adjustment = "N - 1",
+    weights = weights,
+    nearest_PD = TRUE
   )
   rho = rho_delta_method(
     coefs = moment_estimate$coefs,
@@ -690,16 +693,17 @@ surrogate_results_tbl = ma_trt_effects_tbl %>%
         beta_hat = log_RR_est,
         vcov_list = vcov,
         estimator_adjustment = "N - 1",
-        sandwich_adjustment = "N - 1"
+        sandwich_adjustment = "N - 1",
+        nearest_PD = TRUE
       )
     ),
     bootstrap_ci = list(
       multiplier_bootstrap_ci(
         data = pick(everything()) %>%
-          rename(trt_surr = "trt_effect_surrogate_index_est", trt_clin = 'log_RR_est'),
+          rename(treatment_effect_surr = "trt_effect_surrogate_index_est", treatment_effect_clin = 'log_RR_est', covariance_matrix = "vcov"),
         statistic = statistic_f,
         B = B_multiplier,
-        type = "BCa"
+        type = "percentile"
       )
     )
   ) %>%
