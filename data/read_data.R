@@ -250,9 +250,7 @@ data_all = data_all %>%
     c(
       age.geq.65,
       HighRiskInd,
-      CalendarDateEnrollment,
       Sex,
-      WhiteNonHispanic,
       BMI
     ),
     complete.cases
@@ -269,12 +267,12 @@ n4 = nrow(data_all)
 n3 - n4 
 # 19 rows dropped.
 
-# Drop non-naive patients from Janssen and Moderna.
+# Drop non-naive patients from Janssen, Moderna, and Novavax.
 data_all = bind_rows(
   data_all %>%
-    filter(!(trial %in% c("Janssen", "Moderna"))),
+    filter(!(trial %in% c("Janssen", "Moderna", "Novavax"))),
   data_all %>%
-    filter(trial %in% c("Janssen", "Moderna")) %>%
+    filter(trial %in% c("Janssen", "Moderna", "Novavax")) %>%
     filter(!Bserostatus)
 )
 
