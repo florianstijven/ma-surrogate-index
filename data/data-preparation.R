@@ -18,21 +18,50 @@ df = read.csv("data/CrossProtocolData.csv") %>%
   mutate(Wstratum = as.factor(Wstratum)) %>%
   droplevels() 
 
-# Set all values of placebo to the LLOD divided by 2.
-df <- df %>% mutate(bindSpike = ifelse(treatment == 0, llod_spike_truncated, bindSpike))
-df <- df %>% mutate(pseudoneutid50 = ifelse(treatment == 0, llod_neut_truncated, pseudoneutid50))
+# Patients with a titer that should not have a measured value, those titers are
+# set to NA.
+df = df %>%
+  mutate(
+    pseudoneutid50 = ifelse(!is.na(pseudoneutid50) & Delta_nAb == 0 & treatment == 1, NA, pseudoneutid50),
+    bindSpike = ifelse(!is.na(bindSpike) & Delta_bAb == 0 & treatment == 1, NA, bindSpike)
+  )
+
+# Set all values of placebo naive subjects to the LLOD divided by 2. The same
+# subjects also get a weight of 1 because we by definition know their titers.
+df <- df %>% mutate(
+  bindSpike = ifelse(treatment == 0 &
+                       Bserostatus == 0, llod_spike_truncated, bindSpike),
+  case_cohort_weight_bAb = ifelse(treatment == 0 &
+                                    Bserostatus == 0, 1, case_cohort_weight_bAb)
+)
+df <- df %>% mutate(
+  pseudoneutid50 = ifelse(
+    treatment == 0 &
+      Bserostatus == 0,
+    llod_neut_truncated,
+    pseudoneutid50
+  ),
+  case_cohort_weight_nAb = ifelse(treatment == 0 &
+                                    Bserostatus == 0, 1, case_cohort_weight_nAb)
+)
 
 # Patients with measured titers, who have a titer below the LLOD, will have
 # their measurement truncated to the LLOD divided by 2.
-df <- df %>% mutate(bindSpike = ifelse(Delta_bAb == T &
-                                         bindSpike < llod_spike, llod_spike_truncated, bindSpike))
+df <- df %>% mutate(bindSpike = ifelse(
+  Delta_bAb == 1 &
+    bindSpike < llod_spike,
+  llod_spike_truncated,
+  bindSpike
+))
 df <- df %>% mutate(
   pseudoneutid50 = ifelse(
-    Delta_nAb == T & pseudoneutid50 < llod_neut,
+    Delta_nAb == 1 & pseudoneutid50 < llod_neut,
     llod_neut_truncated,
     pseudoneutid50
   )
 )
+
+
 
 # Drop variables which are currently not used in any analyses.
 df = df %>%
@@ -49,23 +78,23 @@ df = df %>%
 df = df %>%
   mutate(
     BMI_underweight = as.integer(ifelse(
-      stringr::str_detect(protocol, "p3005"), BMI == 1, BMI < 18.5
+      stringr::str_detect(protocol, "p3003"), BMI == 1, BMI < 18.5
     )),
     BMI_normal = as.integer(ifelse(
-      stringr::str_detect(protocol, "p3005"),
+      stringr::str_detect(protocol, "p3003"),
       BMI == 2,
       BMI >=  18.5 &
         BMI < 25
     )),
     BMI_overweight = as.integer(ifelse(
-      stringr::str_detect(protocol, "p3005"), BMI == 3, BMI >= 25 &
+      stringr::str_detect(protocol, "p3003"), BMI == 3, BMI >= 25 &
         BMI < 30
     )),
     BMI_obese = as.integer(ifelse(
-      stringr::str_detect(protocol, "p3005"), BMI == 4, BMI >= 30
+      stringr::str_detect(protocol, "p3003"), BMI == 4, BMI >= 30
     )),
     BMI_underweight_normal = as.integer(ifelse(
-      stringr::str_detect(protocol, "p3005"), BMI <= 2, BMI < 25
+      stringr::str_detect(protocol, "p3003"), BMI <= 2, BMI < 25
     ))
   )
 
@@ -91,13 +120,21 @@ data_joined = df %>%
   mutate(
     abrogation_key = trial,
     abrogation_key = ifelse(
-      abrogation_key == "Sanofi",
+      abrogation_key == "Sanofi-1",
       ifelse(
         treatment == 1,
-        "Sanofi 1 Non-Naive Vaccine",
-        "Sanofi 1 Non-Naive Placebo"
+        ifelse(Bserostatus == 1, "Sanofi 1 Non-Naive Vaccine", "Sanofi 1 Naive"),
+        ifelse(Bserostatus == 1, "Sanofi 1 Non-Naive Placebo", "Sanofi 1 Naive")
       ),
-      abrogation_key
+      ifelse(
+        abrogation_key == "Sanofi-2",
+        ifelse(
+          treatment == 1,
+          ifelse(Bserostatus == 1, "Sanofi 2 Non-Naive Vaccine", "Sanofi 2 Naive"),
+          ifelse(Bserostatus == 1, "Sanofi 2 Non-Naive Placebo", "Sanofi 2 Naive")
+        ),
+        abrogation_key
+      )
     )
   )
 
@@ -158,8 +195,23 @@ data_joined = data_joined %>%
       prop.ba.4.5 * BA.4.5
   ) %>%
   # Compute circulating-variant adjusted neutralization titer.
-  mutate(pseudoneutid50_adjusted = pseudoneutid50 / abrogation_coefficient)
+  mutate(pseudoneutid50_adjusted = pseudoneutid50 - log(abrogation_coefficient, base = 10))
 
+# Because of the adjustment, some patients may not have an adjusted titer below
+# the LLOD. We truncated these values as before.
+# Patients with measured titers, who have a titer below the LLOD, will have
+# their measurement truncated to the LLOD divided by 2.
+data_joined <- data_joined %>% mutate(
+  pseudoneutid50_adjusted = ifelse(
+    pseudoneutid50_adjusted < llod_neut,
+    llod_neut_truncated,
+    pseudoneutid50_adjusted
+  )
+)
+
+# Leave out variable we don't need anymore.
+data_joined = data_joined %>%
+  select(!(abrogation_key:prop.ba.4.5))
 
 # Save processed data set.
 write.csv(data_joined, "data/processed_data.csv")

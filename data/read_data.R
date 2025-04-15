@@ -11,7 +11,7 @@ p3005_file = "S:/p3005/analysis/correlates/Part_A_Blinded_Phase_Data/adata/vat08
 # Read the data from the individual trials.
 
 # Moderna
-p3001 = read.csv(p3001_file) %>% filter(Bserostatus == 0) %>%
+p3001 = read.csv(p3001_file) %>%
   dplyr::select(
     Ptid,
     Trt,
@@ -30,7 +30,8 @@ p3001 = read.csv(p3001_file) %>% filter(Bserostatus == 0) %>%
     WhiteNonHispanic,
     Sex,
     Age,
-    BMI
+    BMI,
+    Bserostatus
   ) %>%
   rename(
     bindSpike = Day57bindSpike,
@@ -70,7 +71,8 @@ p3002 = read.csv(p3002_file) %>% filter(Bserostatus == 0) %>%
     WhiteNonHispanic,
     Sex,
     Age,
-    BMI
+    BMI,
+    Bserostatus
   ) %>%
   rename(
     bindSpike = Day57bindSpike,
@@ -90,7 +92,7 @@ p3002 = read.csv(p3002_file) %>% filter(Bserostatus == 0) %>%
   )
 
 # J&J
-p3003 = read.csv(p3003_file) %>% filter(Bserostatus == 0) %>%
+p3003 = read.csv(p3003_file) %>%
   dplyr::select(
     Ptid,
     Trt,
@@ -111,7 +113,8 @@ p3003 = read.csv(p3003_file) %>% filter(Bserostatus == 0) %>%
     WhiteNonHispanic,
     Sex,
     Age,
-    BMI
+    BMI,
+    Bserostatus
   ) %>%
   rename(
     bindSpike = Day29bindSpike,
@@ -131,7 +134,7 @@ p3003 = read.csv(p3003_file) %>% filter(Bserostatus == 0) %>%
   )
 
 # Novavax
-p3004 = read.csv(p3004_file) %>% filter(Bserostatus == 0) %>%
+p3004 = read.csv(p3004_file) %>%
   dplyr::select(
     Ptid,
     Trt,
@@ -151,7 +154,8 @@ p3004 = read.csv(p3004_file) %>% filter(Bserostatus == 0) %>%
     WhiteNonHispanic,
     Sex,
     Age,
-    BMI
+    BMI,
+    Bserostatus
   ) %>%
   rename(
     bindSpike = Day35bindSpike,
@@ -173,7 +177,6 @@ p3004 = read.csv(p3004_file) %>% filter(Bserostatus == 0) %>%
 
 # Sanofi
 p3005 = read.csv(p3005_file) %>% 
-  filter(Bserostatus == 0) %>%
   dplyr::select(
     Ptid,
     Trt,
@@ -195,7 +198,9 @@ p3005 = read.csv(p3005_file) %>%
     WhiteNonHispanic,
     Sex,
     Age,
-    BMI
+    BMI,
+    Trialstage,
+    Bserostatus
   ) %>%
   rename(
     bindSpike = Day43bindSpike,
@@ -212,8 +217,9 @@ p3005 = read.csv(p3005_file) %>%
   mutate(
     USUBJID = Ptid,
     protocol = "p3005",
-    trial = "Sanofi"
-  )
+    trial = paste0("Sanofi-", Trialstage)
+  ) %>%
+  select(-Trialstage)
 
 
 # combine trials into one dataframe
@@ -235,7 +241,7 @@ data_all = data_all %>%
 
 n2 = nrow(data_all)
 n1 - n2
-# 9899 rows were dropped.
+# 10196 rows were dropped.
 
 
 # Drop patients with missing covariates. 
@@ -254,8 +260,23 @@ data_all = data_all %>%
 
 n3 = nrow(data_all)
 n2 - n3 
-# 461 rows were dropped.
+# 475 rows were dropped.
 
+# Drop patients with Infinite case-cohort weights.
+data_all = data_all %>%
+  filter(is.finite(case_cohort_weight_nAb) & is.finite(case_cohort_weight_bAb))
+n4 = nrow(data_all)
+n3 - n4 
+# 19 rows dropped.
+
+# Drop non-naive patients from Janssen and Moderna.
+data_all = bind_rows(
+  data_all %>%
+    filter(!(trial %in% c("Janssen", "Moderna"))),
+  data_all %>%
+    filter(trial %in% c("Janssen", "Moderna")) %>%
+    filter(!Bserostatus)
+)
 
 write.csv(data_all, "data/CrossProtocolData.csv")
 
