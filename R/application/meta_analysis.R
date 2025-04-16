@@ -1,0 +1,301 @@
+# Setup ------------------------------------------------------------------
+
+# Load libraries
+library(tidyverse)
+library(scales)
+library(splines)
+library(WeightedROC)
+library(mgcv)
+library(future)
+library(furrr)
+library(survival)
+
+# # Set up parallel computing
+# if (parallelly::supportsMulticore()) {
+#   plan("multicore")
+# } else {
+#   plan(multisession)
+# }
+
+## Analysis Parameters -------------------------------------------------- 
+
+# Number of bootstrap replications for the multiplier bootstrap for the
+# meta-analytic parameters.
+B_multiplier = 1e3
+
+time_cumulative_incidence = 120
+
+## Intermediate Results  --------------------------------------------------
+
+# Load data with trial-level treatment effects. 
+ma_trt_effects_tbl = readRDS("R/application/ma_trt_effects_tbl.rds")
+
+# Meta-Analytic Plots -----------------------------------------------------
+
+# Define transformation for VE scale.
+transform_VE = new_transform(
+  name = "VE",
+  transform = function(x) -1 * log(1 - x),
+  inverse = function(x) 1 - exp(-x)
+)
+
+# Summarize the estimated trial-level treatment effects in meta-analytic plots.
+ma_trt_effects_tbl %>% 
+  filter(method == "untransformed surrogate") %>%
+  ggplot(aes(x = trt_effect_surrogate_index_est, y = 1 - exp(log_RR_est), color = trial)) +
+  geom_point() +
+  geom_errorbar(aes(
+    ymin = 1 - exp(log_RR_est - 1.96 * log_RR_est_se),
+    ymax = 1 - exp(log_RR_est + 1.96 * log_RR_est_se)
+  ),
+  width = 0.01) +
+  geom_errorbarh(
+    aes(
+      xmin = trt_effect_surrogate_index_est - 1.96 * trt_effect_surrogate_index_est_se,
+      xmax = trt_effect_surrogate_index_est + 1.96 * trt_effect_surrogate_index_est_se
+    ),
+    height = 0.01
+  ) +
+  scale_y_continuous(transform = transform_VE, breaks = c(0, 0.5, 0.75, 0.90, 0.95)) +
+  coord_cartesian(ylim = c(0, 0.95)) +
+  facet_wrap(~surrogate, scales = "free_x", nrow = 2) +
+  xlab("Estimated Treatment Effect on Titer") +
+  ylab("Estimated -log(1 - VE)")
+
+ggsave(
+  filename = "results/figures/application/ma-standard.pdf",
+  height = double_height,
+  width = double_width,
+  dpi = res,
+  device = "pdf",
+  units = "cm"
+)
+
+ma_trt_effects_tbl %>% 
+  filter(method == "untransformed surrogate") %>%
+  ggplot(aes(x = trt_effect_surrogate_index_est, y = 1 - exp(log_RR_est), color = trial)) +
+  geom_point() +
+  geom_errorbar(aes(
+    ymin = 1 - exp(log_RR_est - 1.96 * log_RR_est_se),
+    ymax = 1 - exp(log_RR_est + 1.96 * log_RR_est_se)
+  ),
+  width = 0.01) +
+  geom_errorbarh(
+    aes(
+      xmin = trt_effect_surrogate_index_est - 1.96 * trt_effect_surrogate_index_est_se,
+      xmax = trt_effect_surrogate_index_est + 1.96 * trt_effect_surrogate_index_est_se
+    ),
+    height = 0.01
+  ) +
+  scale_y_continuous(breaks = c(0, 0.5, 0.75, 0.90, 0.95)) +
+  coord_cartesian(ylim = c(0, 0.95)) +
+  facet_wrap(~surrogate, scales = "free_x", nrow = 2) +
+  xlab("Estimated Treatment Effect on Titer") +
+  ylab("Estimated -log(1 - VE)")
+
+ggsave(
+  filename = "results/figures/application/ma-standard-ve-scale.pdf",
+  height = double_height,
+  width = double_width,
+  dpi = res,
+  device = "pdf",
+  units = "cm"
+)
+
+# Helper function for MA plots for the surrogate indices by weighting and
+# include_Bserostatus.
+ma_plot_helper = function(weighting, include_Bserostatus, VE_scale) {
+  ggplot_object = ma_trt_effects_tbl %>% filter(method != "untransformed surrogate", 
+                                weighting == "Normalized By Trial",
+                                include_Bserostatus == .env$include_Bserostatus) %>%
+    ggplot(aes(
+      x = 1 - exp(trt_effect_surrogate_index_est),
+      y = 1 - exp(log_RR_est),
+      color = trial
+    )) +
+    geom_point() +
+    geom_errorbar(aes(
+      ymin = 1 - exp(log_RR_est - 1.96 * log_RR_est_se),
+      ymax = 1 - exp(log_RR_est + 1.96 * log_RR_est_se)
+    ), width = 0.01) +
+    geom_errorbarh(aes(
+      xmin = 1 - exp(
+        trt_effect_surrogate_index_est - 1.96 * trt_effect_surrogate_index_est_se
+      ),
+      xmax = 1 - exp(
+        trt_effect_surrogate_index_est + 1.96 * trt_effect_surrogate_index_est_se
+      )
+    ), height = 0.01) +
+    geom_abline(intercept = 0, slope = 1) +
+    facet_grid(method ~ surrogate) +
+    xlab("Estimated VE on Surr. Index") +
+    ylab("Estimated VE")
+  
+  if (VE_scale) {
+    ggplot_object = ggplot_object +
+      scale_y_continuous(breaks = c(0, 0.5, 0.75, 0.90, 0.95)) +
+      scale_x_continuous(breaks = c(0, 0.5, 0.75, 0.90, 0.95))
+  } else{
+    ggplot_object = ggplot_object +
+      scale_y_continuous(transform = transform_VE, breaks = c(0, 0.5, 0.75, 0.90, 0.95)) +
+      scale_x_continuous(transform = transform_VE, breaks = c(0, 0.5, 0.75, 0.90, 0.95))
+  }
+  
+  weighting_chr = ifelse(weighting == "Normalized By Trial", "normalized", "unnormalized")
+  include_Bserostatus_chr = ifelse(include_Bserostatus, "Bsero-included", "Bsero-excluded")
+  VE_scale_chr = ifelse(VE_scale, "ve-scale", "transformed-scale")
+  
+  outfile = paste0(
+    "results/figures/application/ma-standard",
+    "-",
+    weighting_chr,
+    "-",
+    include_Bserostatus_chr,
+    "-",
+    VE_scale_chr,
+    ".pdf"
+    
+  )
+  
+  ggsave(
+    plot = ggplot_object,
+    filename = outfile,
+    height = double_height,
+    width = double_width,
+    dpi = res,
+    device = "pdf",
+    units = "cm"
+  )
+}
+
+expand_grid(
+  weighting = c("Unnormalized", "Normalized By Trial"),
+  include_Bserostatus = c(FALSE, TRUE),
+  VE_scale = c(FALSE, TRUE)
+) %>%
+  rowwise(everything()) %>%
+  summarise(ma_plot_helper(weighting, include_Bserostatus, VE_scale))
+
+
+# Formal Meta-Analysis -----------------------------------------------------
+
+source("R/helper-functions/moment-based-estimator.R")
+source("R/helper-functions/multiplier-bootstrap.R")
+source("R/helper-functions/delta-method-rho-trial.R")
+
+# Helper function that returns the trial-level correlation estimate given a
+# weighted data set.
+statistic_f = function(data, weights) {
+  moment_estimate = moment_estimator(
+    alpha_hat = data$treatment_effect_surr,
+    beta_hat = data$treatment_effect_clin,
+    vcov_list = data$covariance_matrix,
+    estimator_adjustment = "N - 1",
+    weights = weights,
+    nearest_PD = TRUE
+  )
+  rho = rho_delta_method(
+    coefs = moment_estimate$coefs,
+    vcov = moment_estimate$vcov,
+    method = "t-adjustment",
+    # N is only used for the t-adjustment, it doesn't matter for the estimate
+    # or SE.
+    N = 5
+  )
+  
+  return(list(estimate = rho$rho, se = rho$se))
+}
+
+# Estimate the surrogacy parameters on each data set of trial-level treatment
+# effect estimates.
+surrogate_results_tbl = ma_trt_effects_tbl %>%
+  group_by(surrogate, method, weighting, include_Bserostatus) %>%
+  summarise(
+    moment_estimate = list(
+      moment_estimator(
+        alpha_hat = trt_effect_surrogate_index_est,
+        beta_hat = log_RR_est,
+        vcov_list = vcov,
+        estimator_adjustment = "N - 1",
+        sandwich_adjustment = "N - 1",
+        nearest_PD = TRUE
+      )
+    ),
+    bootstrap_ci = list(
+      multiplier_bootstrap_ci(
+        data = pick(everything()) %>%
+          rename(treatment_effect_surr = "trt_effect_surrogate_index_est", treatment_effect_clin = 'log_RR_est', covariance_matrix = "vcov"),
+        statistic = statistic_f,
+        B = B_multiplier,
+        type = "percentile"
+      )
+    )
+  ) %>%
+  ungroup() 
+
+surrogate_results_tbl = surrogate_results_tbl %>%
+  mutate(
+    d_alpha = map_dbl(moment_estimate, function(x) x$coefs[3]),
+    d_beta = map_dbl(moment_estimate, function(x) x$coefs[4]),
+    d_alphabeta = map_dbl(moment_estimate, function(x) x$coefs[5]),
+    rho_trial = d_alphabeta / sqrt(d_alpha * d_beta),
+    residual_var = map_dbl(moment_estimate, function(x) x$residual_var)
+  )
+
+# Summarize inferences in a table.
+surrogate_results_tbl = surrogate_results_tbl %>%
+  mutate(
+    CI_lower_bs = purrr::map_dbl(bootstrap_ci, "ci_lower"),
+    CI_upper_bs = purrr::map_dbl(bootstrap_ci, "ci_upper")
+  ) %>%
+  select(-moment_estimate, -bootstrap_ci) 
+
+surrogate_results_tbl %>%
+  write.csv(file = "results/tables/application/surrogacy-inferences.csv")
+
+# Summarize the results in a plot. 
+surrogate_results_tbl %>%
+  # Multiply the correlations for the untransformed surrogate with -1 to get
+  # positive correlations which are comparable with those for the surrogate
+  # indices.
+  mutate(rho_trial = ifelse(method == "untransformed surrogate", -1 * rho_trial, rho_trial),
+         CI_lower_bs = ifelse(method == "untransformed surrogate", -1 * CI_lower_bs, CI_lower_bs),
+         CI_upper_bs = ifelse(method == "untransformed surrogate", -1 * CI_upper_bs, CI_upper_bs)) %>%
+  ggplot(aes(x = method, color = weighting, shape = include_Bserostatus, linetype = include_Bserostatus)) +
+  geom_point(aes(y = rho_trial), position = position_dodge(width = 0.5)) +
+  geom_errorbar(aes(ymin = CI_lower_bs, ymax = CI_upper_bs), position = position_dodge(width = 0.5), width = 0.2) +
+  coord_cartesian(ylim = c(0.40, 1)) +
+  facet_grid(surrogate~.) +
+  theme(legend.position = "bottom", legend.box = "vertical", legend.margin = margin())
+ggsave(
+  "results/figures/application/surrogacy-measures-summary.pdf",
+  height = double_height,
+  width = double_width,
+  dpi = res,
+  device = "pdf",
+  units = "cm"
+)
+
+
+surrogate_results_tbl %>%
+  # Multiply the correlations for the untransformed surrogate with -1 to get
+  # positive correlations which are comparable with those for the surrogate
+  # indices.
+  mutate(rho_trial = ifelse(method == "untransformed surrogate", -1 * rho_trial, rho_trial),
+         CI_lower_bs = ifelse(method == "untransformed surrogate", -1 * CI_lower_bs, CI_lower_bs),
+         CI_upper_bs = ifelse(method == "untransformed surrogate", -1 * CI_upper_bs, CI_upper_bs)) %>%
+  ggplot(aes(x = method, color = weighting, shape = include_Bserostatus, linetype = include_Bserostatus)) +
+  geom_point(aes(y = rho_trial), position = position_dodge(width = 0.5)) +
+  geom_errorbar(aes(ymin = CI_lower_bs, ymax = CI_upper_bs), position = position_dodge(width = 0.5), width = 0.2) +
+  scale_y_continuous(transform = "asn", breaks = c(0, 0.5, 0.75, 0.90, 0.975, 1)) +
+  coord_cartesian(ylim = c(0.40, 1)) +
+  facet_grid(surrogate~.) +
+  theme(legend.position = "bottom", legend.box = "vertical", legend.margin = margin())
+ggsave(
+  "results/figures/application/surrogacy-measures-summary-tanh.pdf",
+  height = double_height,
+  width = double_width,
+  dpi = res,
+  device = "pdf",
+  units = "cm"
+)

@@ -6,7 +6,8 @@ data = data/processed_data.csv
 .PHONY: all
 all: results/raw-results/simple-simulation/ma-sim-results-proof-of-concept-small.rds \
 	results/raw-results/simple-simulation/ma-sim-results-vaccine-small.rds \
-	results/raw-results/simple-simulation/ma-sim-results-proof-of-concept-large.rds
+	results/raw-results/simple-simulation/ma-sim-results-proof-of-concept-large.rds \
+	R/application/meta_analysis.Rout
 	
 
 results/raw-results/simple-simulation/ma-sim-results-proof-of-concept-small.rds: R/simple-simulation.R $(analysishelpers) $(simulationhelpers)
@@ -18,5 +19,11 @@ results/raw-results/simple-simulation/ma-sim-results-proof-of-concept-large.rds:
 results/raw-results/simple-simulation/ma-sim-results-vaccine-small.rds: R/simple-simulation.R $(analysishelpers) $(simulationhelpers)
 	Rscript R/simple-simulation.R vaccine small 100
 	
-# R/application.Rout: R/application.R $(analysishelpers) $(data)
-#	 Rscript --verbose R/application.R  > $@ 2> $@
+R/application/ipd_surr_indices_tbl.rds: R/application/surrogate_index_estimation.R $(data)
+	Rscript --verbose R/application/surrogate_index_estimation.R  > $@ 2> $@
+	
+R/application/ma_trt_effects_tbl.rds: R/application/trial-level-effects.R R/application/ipd_surr_indices_tbl.rds
+	Rscript --verbose R/application/trial-level-effects.R  > $@ 2> $@
+	
+R/application/meta_analysis.Rout: R/application/ma_trt_effects_tbl.rds $(analysishelpers)
+	Rscript --verbose R/application/meta_analysis.R  > $@ 2> $@
