@@ -3,8 +3,8 @@
 ## Setup ----------------------------------------------------------------------------
 
 # Specify options for saving the plots to files
-figures_dir = "results/figures/application/"
-tables_dir = "results/tables/application/"
+figures_dir = "results/figures/application/data-exploration"
+tables_dir = "results/tables/application/data-exploration"
 
 # Load required packages. 
 library(tidyverse)
@@ -33,6 +33,39 @@ df = df %>%
       trial
     )
   )) 
+
+
+# Rename the trials and put them in chronological order.
+df = df %>%
+  # Reorder trial factor.
+  mutate(
+    trial = forcats::fct_recode(
+      trial,
+      "Moderna (naive)" = "Moderna",
+      "AstraZeneca (naive)" = "AstraZeneca",
+      "Janssen (naive)" = "Janssen",
+      "Novavax (naive)" = "Novavax",
+      "Sanofi 1 (naive)" = "Sanofi-1 naive",
+      "Sanofi 1 (non-naive)" = "Sanofi-1 non-naive",
+      "Sanofi 2 (naive)" = "Sanofi-2 naive",
+      "Sanofi 2 (non-naive)" = "Sanofi-2 non-naive"
+    ),
+    trial = fct_relevel(
+      trial,
+      "Moderna (naive)",
+      "AstraZeneca (naive)",
+      "Janssen (naive)",
+      "Novavax (naive)",
+      "Sanofi 1 (naive)",
+      "Sanofi 1 (non-naive)",
+      "Sanofi 2 (naive)",
+      "Sanofi 2 (non-naive)"
+    )
+  )
+
+# Add `Treatment` character variables indicating placebo versus vaccine.
+df = df %>%
+  mutate(Treatment = ifelse(treatment == 1, "Vaccine", "Placebo"))
 
 # Compute pseudo-values. These are computed for each trial separately. We first
 # fit a separate KM curve by trial and treatment group.
@@ -100,11 +133,11 @@ df_long = bind_rows(
 ## Distribution of Baseline Covariates --------------------------------
 
 df %>%
-  mutate(Treatment = ifelse(treatment == 1, "Vaccine", "Placebo")) %>%
   ggplot(aes(x = risk_score, y = trial, fill = Treatment)) +
   geom_boxplot(color = "black") +
   ylab("Trial") +
-  xlab("Risk Score")
+  xlab("Risk Score") +
+  theme(legend.position = "bottom", legend.title = element_blank())
 
 ggsave(
   filename = "distribution-risk-score.pdf",
@@ -116,11 +149,11 @@ ggsave(
 )
 
 df %>%
-  mutate(Treatment = ifelse(treatment == 1, "Vaccine", "Placebo")) %>%
   ggplot(aes(x = Age, y = trial, fill = Treatment)) +
   geom_boxplot(color = "black") +
   ylab("Trial") +
-  xlab("Age")
+  xlab("Age (years)") +
+  theme(legend.position = "bottom", legend.title = element_blank())
 
 ggsave(
   filename = "distribution-age.pdf",
@@ -137,9 +170,9 @@ ggsave(
 # we use the case-cohort sampling weights in these boxplots.
 df_long %>%
   filter(!is.na(titer)) %>%
-  ggplot(aes(x = titer, y = trial, fill = trial)) +
+  ggplot(aes(x = titer, y = trial)) +
   geom_boxplot(aes(weight = sample_weight)) +
-  facet_grid(treatment~surrogate) +
+  facet_grid(Treatment~surrogate) +
   theme(legend.position = "none") +
   ylab("Trial")
 
@@ -155,32 +188,7 @@ ggsave(
 # Pairwise scatterplots of the distribution of the neutralization titer and the
 # corresponding titer adjusted to circulating variants.
 df %>%
-  filter(Delta_nAb, treatment == 1) %>%
-  # Reorder trial factor.
-  mutate(
-    trial = forcats::fct_recode(
-      trial,
-      "Moderna (naive)" = "Moderna",
-      "AstraZeneca (naive)" = "AstraZeneca",
-      "Janssen (naive)" = "Janssen",
-      "Novavax (naive)" = "Novavax",
-      "Sanofi 1 (naive)" = "Sanofi-1 naive",
-      "Sanofi 1 (non-naive)" = "Sanofi-1 non-naive",
-      "Sanofi 2 (naive)" = "Sanofi-2 naive",
-      "Sanofi 2 (non-naive)" = "Sanofi-2 non-naive"
-    ),
-    trial = fct_relevel(
-      trial,
-      "Moderna (naive)",
-      "AstraZeneca (naive)",
-      "Janssen (naive)",
-      "Novavax (naive)",
-      "Sanofi 1 (naive)",
-      "Sanofi 1 (non-naive)",
-      "Sanofi 2 (naive)",
-      "Sanofi 2 (non-naive)"
-    )
-  ) %>% 
+  filter(Delta_nAb, treatment == 1)  %>% 
   ggplot(aes(
     x = pseudoneutid50,
     y = pseudoneutid50_adjusted
@@ -189,7 +197,7 @@ df %>%
   facet_wrap( ~ trial) +
   geom_abline(slope = 1, intercept = 0) +
   xlab("Neutralizing antibody titer against the vaccine strain") +
-  ylab("Neutralizing antibody titer against the circualting strain")
+  ylab("Neutralizing antibody titer against circulating strains")
 
 ggsave(
   filename = "scatterplot-titer-adjustment.pdf",
@@ -206,38 +214,53 @@ df %>%
   group_by(trial) %>%
   summarise(
     cum_inc = cuminc(
-      formula = Surv(time_to_event, factor(event)) ~ treatment,
+      formula = Surv(time_to_event, factor(event)) ~ Treatment,
       data = pick(everything())
     ) %>%
       list()
   )
 
 
-ggarrange(
+figure = ggarrange(
   plotlist = df %>%
+    # Cut the data off at 120 days.
+    mutate(
+      event = ifelse(time_to_event > 120, 0, event),
+      time_to_event = ifelse(time_to_event > 120, 120, time_to_event)
+    ) %>%
     group_by(trial) %>%
     summarise(
       cum_inc_plot = list(
         cuminc(
-          formula = Surv(time_to_event, factor(event)) ~ treatment,
+          formula = Surv(time_to_event, factor(event)) ~ Treatment,
           data = pick(everything())
         ) %>%
           ggcuminc(outcome = "1") +
           add_confidence_interval() +
           scale_ggsurvfit() +
-          # add_pvalue(
-          #   pvalue_fun = function(x)
-          #     format_p(x, digits = 3)
-          # ) +
           ggtitle(trial) +
           coord_cartesian(xlim = c(0, time_cumulative_incidence)) +
-          scale_x_continuous(breaks = c(0, 40, 80, 120))
+          scale_x_continuous(breaks = c(0, 40, 80, 120)) +
+          ylab("") +
+          xlab("") +
+          theme(
+            plot.margin = unit(c(0.2, 0.5, 0, -0.5), 'lines'),
+            plot.title = element_text(hjust = 1)
+          )
       )
     ) %>%
     pull(cum_inc_plot),
   common.legend = TRUE,
-  legend = "bottom"
+  legend = "bottom",
+  align = "hv"
 )
+
+annotate_figure(
+  figure,
+  left = text_grob("Cumulative Incidence", rot = 90),
+  bottom = text_grob("Time (days)", vjust = -4.5)
+)
+
 
 ggsave(
   filename = "cumulative-incidence.pdf",
