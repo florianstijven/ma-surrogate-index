@@ -267,14 +267,12 @@ n4 = nrow(data_all)
 n3 - n4 
 # 19 rows dropped.
 
-# Drop non-naive patients from Janssen, Moderna, and Novavax.
-data_all = bind_rows(
-  data_all %>%
-    filter(!(trial %in% c("Janssen", "Moderna", "Novavax"))),
-  data_all %>%
-    filter(trial %in% c("Janssen", "Moderna", "Novavax")) %>%
-    filter(!Bserostatus)
-)
+# Drop non-naive patients from trial other than Sanofi.
+data_all = bind_rows(data_all %>%
+                       filter(protocol %in% c("p3005")),
+                     data_all %>%
+                       filter(!(protocol %in% c("p3005"))) %>%
+                       filter(!Bserostatus))
 
 write.csv(data_all, "data/CrossProtocolData.csv")
 

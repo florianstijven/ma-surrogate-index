@@ -39,13 +39,32 @@ ipd_tbl = read.csv("data/processed_data.csv") %>%
     BMI_stratum = as.factor(BMI_stratum)
   )
 
-# The weights should be set to one for placebo patients. Their titers were set
-# to the lower limits of the assays.
-# ipd_tbl = ipd_tbl %>%
-#   mutate(
-#     case_cohort_weight_nAb = ifelse(treatment == 0, 1, case_cohort_weight_nAb),
-#     case_cohort_weight_bAb = ifelse(treatment == 0, 1, case_cohort_weight_bAb)
-#   )
+# Center the risk scores by trial. 
+ipd_tbl = ipd_tbl %>%
+  group_by(trial) %>%
+  mutate(risk_score_centered = risk_score - mean(risk_score))
+
+# Split the Sanofi trials according to serological status.
+ipd_tbl = ipd_tbl %>%
+  mutate(trial = ifelse(
+    trial == "Sanofi-1",
+    ifelse(Bserostatus == 1, "Sanofi-1 non-naive", "Sanofi-1 naive"),
+    ifelse(
+      trial == "Sanofi-2",
+      ifelse(Bserostatus == 1, "Sanofi-2 non-naive", "Sanofi-2 naive"),
+      trial
+    )
+  ))
+
+# Add an indicator variable for each of the three analysis sets.
+ipd_tbl = ipd_tbl %>%
+  mutate(
+    first_four = trial %in% c("AstraZeneca", "Moderna", "Janssen", "Novavax"),
+    naive_only = !(trial %in% c(
+      "Sanofi-1 non-naive", "Sanofi-2 non-naive"
+    )),
+    mixed = TRUE
+  )
 
 
 # Make sure that each trial-treatment group combination gets the same total
@@ -57,28 +76,10 @@ ipd_tbl = ipd_tbl %>%
               ungroup()) %>%
   mutate(weight_prediction = case_cohort_weight_nAb / total_weight)
 
-# Ensure that the weights sum to the total number of observations.
-ipd_tbl = ipd_tbl %>%
-  mutate(weight_prediction = weight_prediction / mean(weight_prediction * !is.na(pseudoneutid50)))
-
 # Every trial now receives the same total weight.
 ipd_tbl %>%
   group_by(trial, treatment) %>%
   summarise(sum(weight_prediction * !is.na(pseudoneutid50)))
-
-# Add variable that indicates whether the titers were at or below the limit of
-# detection.
-lod_bindSpike = ipd_tbl$bindSpike[ipd_tbl$treatment == 0][1]
-lod_pseudoneutid50 = ipd_tbl$pseudoneutid50[ipd_tbl$treatment == 0][1]
-ipd_tbl = ipd_tbl %>%
-  mutate(
-    detected_bindSpike = ifelse(bindSpike == lod_bindSpike, "Not Detected", "Detected"),
-    detected_pseudoneut50 = ifelse(
-      pseudoneutid50 == lod_pseudoneutid50,
-      "Not Detected",
-      "Detected"
-    )
-  )
 
 # Compute pseudo-values. These are computed for each trial separately. We first
 # fit a separate KM curve by trial and treatment group.
@@ -109,7 +110,11 @@ ipd_tbl = ipd_tbl %>%
          -Ptid,
          -USUBJID,
          -(BMI_underweight:abrogation_coefficient),
-         -total_weight)
+         -total_weight, 
+         -Wstratum, 
+         -age.geq.65,
+         -Bserostatus, 
+         -HighRiskInd)
 
 # Convert Character variables to factors. This is more efficient in terms of
 # memory.
@@ -129,24 +134,20 @@ prediction_model_settings = tibble(
     "case_cohort_weight_nAb"
   ),
   case_cohort_ind_chr = c("Delta_nAb", "Delta_bAb", "Delta_nAb"),
-  weighting = rep("Normalized By Trial", 3)
+  weighting = rep("unnormalized", 3)
 )
 
-prediction_model_settings = prediction_model_settings %>%
-  bind_rows(tibble(
-    surrogate = c("pseudoneutid50", "bindSpike", "pseudoneutid50_adjusted"),
-    weights_chr = rep("weight_prediction", 3),
-    case_cohort_ind_chr = c("Delta_nAb", "Delta_bAb", "Delta_nAb"),
-    weighting = rep("Unnormalized", 3)
-  ))
+# For the current analysies, we only consider the unnormalized weights.
+# prediction_model_settings = prediction_model_settings %>%
+#   bind_rows(tibble(
+#     surrogate = c("pseudoneutid50", "bindSpike", "pseudoneutid50_adjusted"),
+#     weights_chr = rep("weight_prediction", 3),
+#     case_cohort_ind_chr = c("Delta_nAb", "Delta_bAb", "Delta_nAb"),
+#     weighting = rep("Unnormalized", 3)
+#   ))
 
-# We consider two sets of baseline covariates: (i) one including Bserostatus and
-# (ii) on excluding Bserostatus.
 prediction_model_settings = prediction_model_settings %>%
-  cross_join(
-    tibble(include_Bserostatus = c(FALSE, TRUE))
-  )
-
+  cross_join(tibble(analysis_set = c("first_four", "naive_only", "mixed")))
 
 ## Parametric Prediction Model --------------------------------------------
 
@@ -154,26 +155,29 @@ prediction_model_settings = prediction_model_settings %>%
 # baseline covariates and the surrogate. Note that we missing predictors: the
 # antibody titers are missing according to the case-cohort sampling mechanism. 
 
+
 # Function that fits a logistic regression model with the given predictors.
-glm_fitter = function(predictors_chr, weights_chr, case_cohort_ind_chr, include_Bserostatus) {
+glm_fitter = function(predictors_chr,
+                      weights_chr,
+                      case_cohort_ind_chr,
+                      analysis_set) {
+  data_temp = ipd_tbl %>%
+    filter(.data[[analysis_set]])
   # Redefine the predictors as smooth functions.
-  predictors_chr = paste0("bs(", predictors_chr, ", knots = c(1, 4))")
+  predictors_chr = paste0("bs(", predictors_chr, ")")
   # Define formula
   string_formula = paste0(
-    "infection_120d ~ bs(risk_score) + BMI_stratum + bs(Age) + logit_prob_infection_free +",
+    "infection_120d ~ bs(risk_score_centered) + BMI_stratum + bs(Age) + Sex + logit_prob_infection_free +",
     paste(predictors_chr, collapse = " + ")
   )
-  # Include Bserostatus in the formula if required. 
-  if (include_Bserostatus) {
-    string_formula = paste0(string_formula, " + Bserostatus")
-  }
   formula_final = as.formula(string_formula)
   
   # Fit logistic regression model.
   glm_fit = glm(
     formula = formula_final,
-    data = ipd_tbl, 
-    weights = ipd_tbl %>% pull(any_of(weights_chr)),
+    data = data_temp,
+    weights = data_temp %>%
+      pull(any_of(weights_chr)),
     family = quasibinomial(),
     model = FALSE,
     x = FALSE,
@@ -183,8 +187,8 @@ glm_fitter = function(predictors_chr, weights_chr, case_cohort_ind_chr, include_
 }
 
 glm_models_tbl = prediction_model_settings %>%
-  rowwise(surrogate, weighting, include_Bserostatus) %>%
-  summarise(fitted_model = list(glm_fitter(surrogate, weights_chr, case_cohort_ind_chr, include_Bserostatus)))
+  rowwise(surrogate, weighting, analysis_set) %>%
+  summarise(fitted_model = list(glm_fitter(surrogate, weights_chr, case_cohort_ind_chr, analysis_set)))
 
 surrogate_index_models_tbl = glm_models_tbl %>%
   mutate(method = "glm")
@@ -199,32 +203,34 @@ rm("glm_models_tbl")
 # antibody titers are missing according to the case-cohort sampling mechanism. 
 
 # Function that fits a logistic regression model with the given predictors.
-gam_fitter = function(predictors_chr, weights_chr, case_cohort_ind_chr, include_Bserostatus) {
+gam_fitter = function(predictors_chr, weights_chr, case_cohort_ind_chr, analysis_set) {
+  data_temp = ipd_tbl %>%
+    filter(.data[[analysis_set]])
   # Redefine the predictors as smooth functions.
   predictors_chr = paste0("s(", predictors_chr, ")")
   # Define formula
-  string_formula = paste0("infection_120d ~ s(risk_score) + BMI_stratum + s(Age) + logit_prob_infection_free +",
-                          paste(predictors_chr, collapse = " + "))
-  # Include Bserostatus in the formula if required. 
-  if (include_Bserostatus) {
-    string_formula = paste0(string_formula, " + Bserostatus")
-  }
+  string_formula = paste0(
+    "infection_120d ~ s(risk_score_centered) + BMI_stratum + s(Age) + Sex + logit_prob_infection_free +",
+    paste(predictors_chr, collapse = " + ")
+  )
   formula_final = as.formula(string_formula)
   
   # Fit logistic regression model.
   gam_fit = gam(
     formula = formula_final,
-    data = ipd_tbl %>% as.data.frame(), 
-    weights = ipd_tbl %>% pull(any_of(weights_chr)),
-    subset = (ipd_tbl[, case_cohort_ind_chr] %>% pull(any_of(case_cohort_ind_chr)) == 1) | (ipd_tbl$treatment == 0), 
+    data = data_temp %>% 
+      as.data.frame(), 
+    weights = data_temp %>% 
+      pull(any_of(weights_chr)),
+    # subset = (data_temp[, case_cohort_ind_chr] %>% pull(any_of(case_cohort_ind_chr)) == 1) | (data_temp$treatment == 0), 
     family = quasibinomial() 
   )
   return(gam_fit)
 }
 
 gam_models_tbl = prediction_model_settings %>%
-  rowwise(surrogate, weighting, include_Bserostatus) %>%
-  summarise(fitted_model = list(gam_fitter(surrogate, weights_chr, case_cohort_ind_chr, include_Bserostatus)))
+  rowwise(surrogate, weighting, analysis_set) %>%
+  summarise(fitted_model = list(gam_fitter(surrogate, weights_chr, case_cohort_ind_chr, analysis_set)))
 
 surrogate_index_models_tbl = surrogate_index_models_tbl %>%
   bind_rows(gam_models_tbl %>%
@@ -239,16 +245,19 @@ rm("gam_models_tbl")
 # `logit_prob_infection_free` as predictor in these models. 
 
 # Function that fits a Cox PH model with the given predictors.
-cox_fitter = function(predictors_chr, weights_chr, case_cohort_ind_chr, include_Bserostatus) {
+cox_fitter = function(predictors_chr, weights_chr, case_cohort_ind_chr, analysis_set) {
+  data_temp = ipd_tbl %>%
+    filter(.data[[analysis_set]])
+  # We truncate follow-up at 120 days to match the definition of the clinical
+  # endpoint.
+  data_temp = data_temp %>%
+    mutate(event = ifelse(time_to_event > time_cumulative_incidence, 0, event))
+  
   # Redefine the predictors as smooth functions.
-  predictors_chr = paste0("bs(", predictors_chr, ", knots = c(1, 4))")
+  predictors_chr = paste0("bs(", predictors_chr, ")")
   # Define formula
-  string_formula = paste0("Surv(time_to_event, event) ~ bs(risk_score) + BMI_stratum + bs(Age) + strata(trial) +",
+  string_formula = paste0("Surv(time_to_event, event) ~ bs(risk_score_centered) + BMI_stratum + bs(Age) + Sex + strata(trial) +",
                           paste(predictors_chr, collapse = " + "))
-  # Include Bserostatus in the formula if required. 
-  if (include_Bserostatus) {
-    string_formula = paste0(string_formula, " + Bserostatus")
-  }
   formula_final = as.formula(string_formula)
   
   # Fit logistic regression model.
@@ -256,7 +265,6 @@ cox_fitter = function(predictors_chr, weights_chr, case_cohort_ind_chr, include_
     formula = formula_final,
     data = ipd_tbl %>% as.data.frame(), 
     weights = ipd_tbl %>% pull(any_of(weights_chr)),
-    subset = (ipd_tbl[, case_cohort_ind_chr] %>% pull(any_of(case_cohort_ind_chr)) == 1) | (ipd_tbl$treatment == 0),
     model = FALSE,
     x = FALSE,
     y = FALSE
@@ -265,8 +273,8 @@ cox_fitter = function(predictors_chr, weights_chr, case_cohort_ind_chr, include_
 }
 
 cox_models_tbl = prediction_model_settings %>%
-  rowwise(surrogate, weighting, include_Bserostatus) %>%
-  summarise(fitted_model = list(cox_fitter(surrogate, weights_chr, case_cohort_ind_chr, include_Bserostatus)))
+  rowwise(surrogate, weighting, analysis_set) %>%
+  summarise(fitted_model = list(cox_fitter(surrogate, weights_chr, case_cohort_ind_chr, analysis_set)))
 
 surrogate_index_models_tbl = surrogate_index_models_tbl %>%
   bind_rows(cox_models_tbl %>%
@@ -309,7 +317,7 @@ ipd_surr_indices_tbl = bind_rows(
   surrogate_index_models_tbl %>%
     ungroup() %>%
     filter(method %in% c("gam", "glm")) %>%
-    rowwise(method, surrogate, weighting, include_Bserostatus) %>%
+    rowwise(method, surrogate, weighting, analysis_set) %>%
     reframe(tibble(
       surrogate_index = predict(fitted_model, newdata = ipd_tbl, type = "response"),
       ipd_tbl
@@ -318,7 +326,7 @@ ipd_surr_indices_tbl = bind_rows(
   surrogate_index_models_tbl %>%
     ungroup() %>%
     filter(method %in% c("cox")) %>%
-    rowwise(method, surrogate, weighting, include_Bserostatus) %>%
+    rowwise(method, surrogate, weighting, analysis_set) %>%
     reframe(tibble(
       surrogate_index = 1 - predict(fitted_model, newdata = ipd_tbl %>%
                                       mutate(time_to_event = time_cumulative_incidence), type = "survival"),
@@ -340,7 +348,7 @@ ipd_surr_indices_tbl = ipd_surr_indices_tbl %>%
   select(
     method,
     weighting,
-    include_Bserostatus,
+    analysis_set,
     trial,
     surrogate,
     sample_weight,
@@ -355,7 +363,7 @@ ipd_surr_indices_tbl = ipd_surr_indices_tbl %>%
 ## Prediction Model Performance -------------------------------------------
 
 roc_tbl = ipd_surr_indices_tbl %>%
-  group_by(method, surrogate, weighting, trial, include_Bserostatus) %>%
+  group_by(method, surrogate, weighting, trial, analysis_set) %>%
   filter(!is.na(surrogate_index)) %>%
   reframe(WeightedROC(
     guess = surrogate_index,
@@ -366,35 +374,34 @@ roc_tbl = ipd_surr_indices_tbl %>%
 # Make and save the plots for all combinations of `surrogate` and `weighting`.
 roc_ggplots = roc_tbl %>%
   filter(method != "untransformed surrogate") %>%
-  group_by(weighting, surrogate) %>%
+  group_by(analysis_set, surrogate) %>%
   summarise(data = list(pick(everything()))) %>%
   ungroup() %>%
   mutate(ggplot_object = purrr::pmap(
     .l = list(
       data = data,
-      weighting = weighting, 
+      analysis_set = analysis_set, 
       surrogate = surrogate
     ),
-    .f = function(data, weighting, surrogate) {
+    .f = function(data, analysis_set, surrogate) {
       data %>%
-        mutate(`Include Serostatus` = ifelse(include_Bserostatus, "Yes", "No")) %>%
-        ggplot(aes(linetype = `Include Serostatus`, color = method)) +
+        ggplot(aes(color = method)) +
         geom_path(aes(FPR, TPR)) +
         coord_equal() +
         facet_wrap(~ trial) +
-        theme(legend.position = "bottom", legend.box = "vertical", legend.spacing.y = unit(0, 'cm'), legend.margin = margin()) +
+        theme(legend.position = "bottom", legend.box = "vertical") +
         scale_color_discrete(name = "Method") +
         geom_abline(intercept = 0, slope = 1) +
-        ggtitle(paste0(weighting, " - ", surrogate)) 
+        ggtitle(paste0(analysis_set, " - ", surrogate)) 
     }
   ))
 
 roc_ggplots %>%
-  rowwise(weighting, surrogate) %>%
+  rowwise(analysis_set, surrogate) %>%
   summarise(
     ggsave(
       plot = ggplot_object,
-      paste0("results/figures/application/roc-", surrogate, "-", weighting, ".pdf"),
+      paste0("results/figures/application/roc-", surrogate, "-", analysis_set, ".pdf"),
       height = double_height,
       width = double_width,
       device = "pdf",
@@ -404,7 +411,7 @@ roc_ggplots %>%
 
 
 roc_tbl %>%
-  group_by(method, surrogate, weighting, trial, include_Bserostatus) %>%
+  group_by(method, surrogate, weighting, trial, analysis_set) %>%
   filter(method != "untransformed surrogate") %>%
   summarise(AUC = WeightedAUC(pick(c(
     TPR, FPR, FP, FN, threshold

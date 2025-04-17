@@ -22,6 +22,18 @@ time_cumulative_incidence = 120
 df = read.csv("data/processed_data.csv") %>%
   select(-X) 
 
+# Split Sanofi trials
+df = df %>%
+  mutate(trial = ifelse(
+    trial == "Sanofi-1",
+    ifelse(Bserostatus == 1, "Sanofi-1 non-naive", "Sanofi-1 naive"),
+    ifelse(
+      trial == "Sanofi-2",
+      ifelse(Bserostatus == 1, "Sanofi-2 non-naive", "Sanofi-2 naive"),
+      trial
+    )
+  )) 
+
 # Compute pseudo-values. These are computed for each trial separately. We first
 # fit a separate KM curve by trial and treatment group.
 surv_fit_all = survfit(Surv(time_to_event, event)~strata(treatment, trial), data = df)
@@ -144,20 +156,40 @@ ggsave(
 # corresponding titer adjusted to circulating variants.
 df %>%
   filter(Delta_nAb, treatment == 1) %>%
+  # Reorder trial factor.
+  mutate(
+    trial = forcats::fct_recode(
+      trial,
+      "Moderna (naive)" = "Moderna",
+      "AstraZeneca (naive)" = "AstraZeneca",
+      "Janssen (naive)" = "Janssen",
+      "Novavax (naive)" = "Novavax",
+      "Sanofi 1 (naive)" = "Sanofi-1 naive",
+      "Sanofi 1 (non-naive)" = "Sanofi-1 non-naive",
+      "Sanofi 2 (naive)" = "Sanofi-2 naive",
+      "Sanofi 2 (non-naive)" = "Sanofi-2 non-naive"
+    ),
+    trial = fct_relevel(
+      trial,
+      "Moderna (naive)",
+      "AstraZeneca (naive)",
+      "Janssen (naive)",
+      "Novavax (naive)",
+      "Sanofi 1 (naive)",
+      "Sanofi 1 (non-naive)",
+      "Sanofi 2 (naive)",
+      "Sanofi 2 (non-naive)"
+    )
+  ) %>% 
   ggplot(aes(
     x = pseudoneutid50,
-    y = pseudoneutid50_adjusted,
-    color = factor(
-      Bserostatus,
-      levels = 0:1,
-      labels = c("No", "Yes")
-    )
+    y = pseudoneutid50_adjusted
   )) +
   geom_point(alpha = 0.25) +
   facet_wrap( ~ trial) +
   geom_abline(slope = 1, intercept = 0) +
-  scale_color_discrete(name = "Previously Infected") +
-  ylab("Adjusted pseudoneutid50")
+  xlab("Neutralizing antibody titer against the vaccine strain") +
+  ylab("Neutralizing antibody titer against the circualting strain")
 
 ggsave(
   filename = "scatterplot-titer-adjustment.pdf",
@@ -193,11 +225,13 @@ ggarrange(
           ggcuminc(outcome = "1") +
           add_confidence_interval() +
           scale_ggsurvfit() +
-          add_pvalue(
-            pvalue_fun = function(x)
-              format_p(x, digits = 3)
-          ) +
-          ggtitle(trial)
+          # add_pvalue(
+          #   pvalue_fun = function(x)
+          #     format_p(x, digits = 3)
+          # ) +
+          ggtitle(trial) +
+          coord_cartesian(xlim = c(0, time_cumulative_incidence)) +
+          scale_x_continuous(breaks = c(0, 40, 80, 120))
       )
     ) %>%
     pull(cum_inc_plot),
