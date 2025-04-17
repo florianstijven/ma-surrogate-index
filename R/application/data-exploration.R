@@ -188,16 +188,18 @@ ggsave(
 # Pairwise scatterplots of the distribution of the neutralization titer and the
 # corresponding titer adjusted to circulating variants.
 df %>%
-  filter(Delta_nAb, treatment == 1)  %>% 
+  filter(Delta_nAb)  %>% 
   ggplot(aes(
     x = pseudoneutid50,
-    y = pseudoneutid50_adjusted
+    y = pseudoneutid50_adjusted,
+    color = Treatment
   )) +
   geom_point(alpha = 0.25) +
   facet_wrap( ~ trial) +
   geom_abline(slope = 1, intercept = 0) +
   xlab("Neutralizing antibody titer against the vaccine strain") +
-  ylab("Neutralizing antibody titer against circulating strains")
+  ylab("Neutralizing antibody titer against circulating strains") +
+  theme(legend.position = "bottom")
 
 ggsave(
   filename = "scatterplot-titer-adjustment.pdf",
