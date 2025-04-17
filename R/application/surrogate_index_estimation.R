@@ -9,7 +9,7 @@ library(future)
 library(furrr)
 library(survival)
 
-## Analysis Parameters -------------------------------------------------- 
+## Analysis Parameters --------------------------------------------------
 
 # Number of bootstrap replications for computing within-trial covariance
 # matrices.
@@ -39,7 +39,7 @@ ipd_tbl = read.csv("data/processed_data.csv") %>%
     BMI_stratum = as.factor(BMI_stratum)
   )
 
-# Center the risk scores by trial. 
+# Center the risk scores by trial.
 ipd_tbl = ipd_tbl %>%
   group_by(trial) %>%
   mutate(risk_score_centered = risk_score - mean(risk_score))
@@ -72,7 +72,9 @@ ipd_tbl = ipd_tbl %>%
 ipd_tbl = ipd_tbl %>%
   left_join(ipd_tbl %>%
               group_by(trial, treatment) %>%
-              summarize(total_weight = sum(case_cohort_weight_nAb * !is.na(pseudoneutid50))) %>%
+              summarize(total_weight = sum(
+                case_cohort_weight_nAb * !is.na(pseudoneutid50)
+              )) %>%
               ungroup()) %>%
   mutate(weight_prediction = case_cohort_weight_nAb / total_weight)
 
@@ -106,15 +108,9 @@ ipd_tbl = ipd_tbl %>%
 
 # Drop variables that are not needed further on.
 ipd_tbl = ipd_tbl %>%
-  select(-X,
-         -Ptid,
-         -USUBJID,
-         -(BMI_underweight:abrogation_coefficient),
-         -total_weight, 
-         -Wstratum, 
-         -age.geq.65,
-         -Bserostatus, 
-         -HighRiskInd)
+  select(
+    -X,-Ptid,-USUBJID,-(BMI_underweight:abrogation_coefficient),-total_weight,-Wstratum,-age.geq.65,-Bserostatus,-HighRiskInd
+  )
 
 # Convert Character variables to factors. This is more efficient in terms of
 # memory.
@@ -125,7 +121,7 @@ ipd_tbl = ipd_tbl %>%
 # Prediction Models -------------------------------------------------------
 
 # We first construct a tibble that contains on each row information about a
-# particular prediction model. 
+# particular prediction model.
 prediction_model_settings = tibble(
   surrogate = c("pseudoneutid50", "bindSpike", "pseudoneutid50_adjusted"),
   weights_chr = c(
@@ -151,59 +147,64 @@ prediction_model_settings = prediction_model_settings %>%
 
 ## Parametric Prediction Model --------------------------------------------
 
-# Estimate logistic regression model for the probability of infection given the
-# baseline covariates and the surrogate. Note that we missing predictors: the
-# antibody titers are missing according to the case-cohort sampling mechanism. 
+# We're currently not using the GLM because it's very similar to the GAM.
 
-
-# Function that fits a logistic regression model with the given predictors.
-glm_fitter = function(predictors_chr,
-                      weights_chr,
-                      case_cohort_ind_chr,
-                      analysis_set) {
-  data_temp = ipd_tbl %>%
-    filter(.data[[analysis_set]])
-  # Redefine the predictors as smooth functions.
-  predictors_chr = paste0("bs(", predictors_chr, ")")
-  # Define formula
-  string_formula = paste0(
-    "infection_120d ~ bs(risk_score_centered) + BMI_stratum + bs(Age) + Sex + logit_prob_infection_free +",
-    paste(predictors_chr, collapse = " + ")
-  )
-  formula_final = as.formula(string_formula)
-  
-  # Fit logistic regression model.
-  glm_fit = glm(
-    formula = formula_final,
-    data = data_temp,
-    weights = data_temp %>%
-      pull(any_of(weights_chr)),
-    family = quasibinomial(),
-    model = FALSE,
-    x = FALSE,
-    y = FALSE
-  )
-  return(glm_fit)
-}
-
-glm_models_tbl = prediction_model_settings %>%
-  rowwise(surrogate, weighting, analysis_set) %>%
-  summarise(fitted_model = list(glm_fitter(surrogate, weights_chr, case_cohort_ind_chr, analysis_set)))
-
-surrogate_index_models_tbl = glm_models_tbl %>%
-  mutate(method = "glm")
-
-rm("glm_models_tbl")
+# # Estimate logistic regression model for the probability of infection given the
+# # baseline covariates and the surrogate. Note that we missing predictors: the
+# # antibody titers are missing according to the case-cohort sampling mechanism.
+#
+#
+# # Function that fits a logistic regression model with the given predictors.
+# glm_fitter = function(predictors_chr,
+#                       weights_chr,
+#                       case_cohort_ind_chr,
+#                       analysis_set) {
+#   data_temp = ipd_tbl %>%
+#     filter(.data[[analysis_set]])
+#   # Redefine the predictors as smooth functions.
+#   predictors_chr = paste0("bs(", predictors_chr, ")")
+#   # Define formula
+#   string_formula = paste0(
+#     "infection_120d ~ bs(risk_score_centered) + BMI_stratum + bs(Age) + Sex + logit_prob_infection_free +",
+#     paste(predictors_chr, collapse = " + ")
+#   )
+#   formula_final = as.formula(string_formula)
+#
+#   # Fit logistic regression model.
+#   glm_fit = glm(
+#     formula = formula_final,
+#     data = data_temp,
+#     weights = data_temp %>%
+#       pull(any_of(weights_chr)),
+#     family = quasibinomial(),
+#     model = FALSE,
+#     x = FALSE,
+#     y = FALSE
+#   )
+#   return(glm_fit)
+# }
+#
+# glm_models_tbl = prediction_model_settings %>%
+#   rowwise(surrogate, weighting, analysis_set) %>%
+#   summarise(fitted_model = list(glm_fitter(surrogate, weights_chr, case_cohort_ind_chr, analysis_set)))
+#
+# surrogate_index_models_tbl = glm_models_tbl %>%
+#   mutate(method = "glm")
+#
+# rm("glm_models_tbl")
 
 
 ## GAM --------------------------------------------------------------------
 
 # Estimate logistic GAM for the probability of infection given the
 # baseline covariates and the surrogate. Note that we missing predictors: the
-# antibody titers are missing according to the case-cohort sampling mechanism. 
+# antibody titers are missing according to the case-cohort sampling mechanism.
 
 # Function that fits a logistic regression model with the given predictors.
-gam_fitter = function(predictors_chr, weights_chr, case_cohort_ind_chr, analysis_set) {
+gam_fitter = function(predictors_chr,
+                      weights_chr,
+                      case_cohort_ind_chr,
+                      analysis_set) {
   data_temp = ipd_tbl %>%
     filter(.data[[analysis_set]])
   # Redefine the predictors as smooth functions.
@@ -218,23 +219,24 @@ gam_fitter = function(predictors_chr, weights_chr, case_cohort_ind_chr, analysis
   # Fit logistic regression model.
   gam_fit = gam(
     formula = formula_final,
-    data = data_temp %>% 
-      as.data.frame(), 
-    weights = data_temp %>% 
+    data = data_temp %>%
+      as.data.frame(),
+    weights = data_temp %>%
       pull(any_of(weights_chr)),
-    # subset = (data_temp[, case_cohort_ind_chr] %>% pull(any_of(case_cohort_ind_chr)) == 1) | (data_temp$treatment == 0), 
-    family = quasibinomial() 
+    # subset = (data_temp[, case_cohort_ind_chr] %>% pull(any_of(case_cohort_ind_chr)) == 1) | (data_temp$treatment == 0),
+    family = quasibinomial()
   )
   return(gam_fit)
 }
 
 gam_models_tbl = prediction_model_settings %>%
   rowwise(surrogate, weighting, analysis_set) %>%
-  summarise(fitted_model = list(gam_fitter(surrogate, weights_chr, case_cohort_ind_chr, analysis_set)))
+  summarise(fitted_model = list(
+    gam_fitter(surrogate, weights_chr, case_cohort_ind_chr, analysis_set)
+  ))
 
-surrogate_index_models_tbl = surrogate_index_models_tbl %>%
-  bind_rows(gam_models_tbl %>%
-              mutate(method = "gam"))
+surrogate_index_models_tbl = gam_models_tbl %>%
+  mutate(method = "gam")
 
 rm("gam_models_tbl")
 
@@ -242,28 +244,40 @@ rm("gam_models_tbl")
 
 # Estimate Cox PH models using the time-to-event endpoint directly. Note that we
 # will be stratifying be trial in these models. We therefore do not include
-# `logit_prob_infection_free` as predictor in these models. 
+# `logit_prob_infection_free` as predictor in these models.
 
 # Function that fits a Cox PH model with the given predictors.
-cox_fitter = function(predictors_chr, weights_chr, case_cohort_ind_chr, analysis_set) {
+cox_fitter = function(predictors_chr,
+                      weights_chr,
+                      case_cohort_ind_chr,
+                      analysis_set) {
   data_temp = ipd_tbl %>%
     filter(.data[[analysis_set]])
   # We truncate follow-up at 120 days to match the definition of the clinical
   # endpoint.
   data_temp = data_temp %>%
-    mutate(event = ifelse(time_to_event > time_cumulative_incidence, 0, event))
+    mutate(
+      event = ifelse(time_to_event > time_cumulative_incidence, 0, event),
+      time_to_event = ifelse(
+        time_to_event > time_cumulative_incidence,
+        time_cumulative_incidence,
+        time_to_event
+      )
+    )
   
   # Redefine the predictors as smooth functions.
   predictors_chr = paste0("bs(", predictors_chr, ")")
   # Define formula
-  string_formula = paste0("Surv(time_to_event, event) ~ bs(risk_score_centered) + BMI_stratum + bs(Age) + Sex + strata(trial) +",
-                          paste(predictors_chr, collapse = " + "))
+  string_formula = paste0(
+    "Surv(time_to_event, event) ~ bs(risk_score_centered) + BMI_stratum + bs(Age) + Sex + strata(trial) +",
+    paste(predictors_chr, collapse = " + ")
+  )
   formula_final = as.formula(string_formula)
   
   # Fit logistic regression model.
   cox_fit = coxph(
     formula = formula_final,
-    data = ipd_tbl %>% as.data.frame(), 
+    data = ipd_tbl %>% as.data.frame(),
     weights = ipd_tbl %>% pull(any_of(weights_chr)),
     model = FALSE,
     x = FALSE,
@@ -274,7 +288,9 @@ cox_fitter = function(predictors_chr, weights_chr, case_cohort_ind_chr, analysis
 
 cox_models_tbl = prediction_model_settings %>%
   rowwise(surrogate, weighting, analysis_set) %>%
-  summarise(fitted_model = list(cox_fitter(surrogate, weights_chr, case_cohort_ind_chr, analysis_set)))
+  summarise(fitted_model = list(
+    cox_fitter(surrogate, weights_chr, case_cohort_ind_chr, analysis_set)
+  ))
 
 surrogate_index_models_tbl = surrogate_index_models_tbl %>%
   bind_rows(cox_models_tbl %>%
@@ -328,8 +344,12 @@ ipd_surr_indices_tbl = bind_rows(
     filter(method %in% c("cox")) %>%
     rowwise(method, surrogate, weighting, analysis_set) %>%
     reframe(tibble(
-      surrogate_index = 1 - predict(fitted_model, newdata = ipd_tbl %>%
-                                      mutate(time_to_event = time_cumulative_incidence), type = "survival"),
+      surrogate_index = 1 - predict(
+        fitted_model,
+        newdata = ipd_tbl %>%
+          mutate(time_to_event = time_cumulative_incidence),
+        type = "survival"
+      ),
       ipd_tbl
     )) %>%
     ungroup()
@@ -367,9 +387,9 @@ roc_tbl = ipd_surr_indices_tbl %>%
   filter(!is.na(surrogate_index)) %>%
   reframe(WeightedROC(
     guess = surrogate_index,
-    label = infection_120d, 
+    label = infection_120d,
     weight = sample_weight
-  )) 
+  ))
 
 # Make and save the plots for all combinations of `surrogate` and `weighting`.
 roc_ggplots = roc_tbl %>%
@@ -380,7 +400,7 @@ roc_ggplots = roc_tbl %>%
   mutate(ggplot_object = purrr::pmap(
     .l = list(
       data = data,
-      analysis_set = analysis_set, 
+      analysis_set = analysis_set,
       surrogate = surrogate
     ),
     .f = function(data, analysis_set, surrogate) {
@@ -388,11 +408,11 @@ roc_ggplots = roc_tbl %>%
         ggplot(aes(color = method)) +
         geom_path(aes(FPR, TPR)) +
         coord_equal() +
-        facet_wrap(~ trial) +
+        facet_wrap( ~ trial) +
         theme(legend.position = "bottom", legend.box = "vertical") +
         scale_color_discrete(name = "Method") +
         geom_abline(intercept = 0, slope = 1) +
-        ggtitle(paste0(analysis_set, " - ", surrogate)) 
+        ggtitle(paste0(analysis_set, " - ", surrogate))
     }
   ))
 
@@ -401,7 +421,13 @@ roc_ggplots %>%
   summarise(
     ggsave(
       plot = ggplot_object,
-      paste0("results/figures/application/roc-", surrogate, "-", analysis_set, ".pdf"),
+      paste0(
+        "results/figures/application/roc-",
+        surrogate,
+        "-",
+        analysis_set,
+        ".pdf"
+      ),
       height = double_height,
       width = double_width,
       device = "pdf",
