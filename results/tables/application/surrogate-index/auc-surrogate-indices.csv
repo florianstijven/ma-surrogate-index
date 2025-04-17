@@ -1,0 +1,73 @@
+"","surrogate","weighting","trial","analysis_set","cox","gam"
+"1","bindSpike","unnormalized","AstraZeneca","first_four",0.694293702104273,0.695854828287381
+"2","bindSpike","unnormalized","AstraZeneca","mixed",0.694293702104273,0.687643580375062
+"3","bindSpike","unnormalized","AstraZeneca","naive_only",0.694293702104273,0.692259985761741
+"4","bindSpike","unnormalized","Janssen","first_four",0.704597600993077,0.710946018061668
+"5","bindSpike","unnormalized","Janssen","mixed",0.704597600993077,0.707404353826866
+"6","bindSpike","unnormalized","Janssen","naive_only",0.704597600993077,0.70887232760012
+"7","bindSpike","unnormalized","Moderna","first_four",0.781917541069231,0.784147626401065
+"8","bindSpike","unnormalized","Moderna","mixed",0.781917541069231,0.778686909091754
+"9","bindSpike","unnormalized","Moderna","naive_only",0.781917541069231,0.784566060138165
+"10","bindSpike","unnormalized","Novavax","first_four",0.789357808578884,0.801301223633105
+"11","bindSpike","unnormalized","Novavax","mixed",0.789357808578884,0.779361519911786
+"12","bindSpike","unnormalized","Novavax","naive_only",0.789357808578884,0.795532040872495
+"13","bindSpike","unnormalized","Sanofi-1 naive","first_four",0.791433264055164,0.802084534974655
+"14","bindSpike","unnormalized","Sanofi-1 naive","mixed",0.791433264055164,0.785709114800447
+"15","bindSpike","unnormalized","Sanofi-1 naive","naive_only",0.791433264055164,0.787950046921145
+"16","bindSpike","unnormalized","Sanofi-1 non-naive","first_four",0.556751358324926,0.532208345704824
+"17","bindSpike","unnormalized","Sanofi-1 non-naive","mixed",0.556751358324926,0.556956279965691
+"18","bindSpike","unnormalized","Sanofi-1 non-naive","naive_only",0.556751358324926,0.486788172163438
+"19","bindSpike","unnormalized","Sanofi-2 naive","first_four",0.613958769481509,0.337606737506867
+"20","bindSpike","unnormalized","Sanofi-2 naive","mixed",0.613958769481509,0.70896401448251
+"21","bindSpike","unnormalized","Sanofi-2 naive","naive_only",0.613958769481509,0.672172247408685
+"22","bindSpike","unnormalized","Sanofi-2 non-naive","first_four",0.724463737830831,0.739588887564179
+"23","bindSpike","unnormalized","Sanofi-2 non-naive","mixed",0.724463737830831,0.671793980737208
+"24","bindSpike","unnormalized","Sanofi-2 non-naive","naive_only",0.724463737830831,0.681261407508848
+"25","pseudoneutid50","unnormalized","AstraZeneca","first_four",0.708765030976631,0.718887677802072
+"26","pseudoneutid50","unnormalized","AstraZeneca","mixed",0.708765030976631,0.71669813740348
+"27","pseudoneutid50","unnormalized","AstraZeneca","naive_only",0.708765030976631,0.716245444366627
+"28","pseudoneutid50","unnormalized","Janssen","first_four",0.701011095893364,0.706984314574528
+"29","pseudoneutid50","unnormalized","Janssen","mixed",0.701011095893364,0.70602709444173
+"30","pseudoneutid50","unnormalized","Janssen","naive_only",0.701011095893364,0.705399456659541
+"31","pseudoneutid50","unnormalized","Moderna","first_four",0.782128975542384,0.783995646629655
+"32","pseudoneutid50","unnormalized","Moderna","mixed",0.782128975542384,0.78229949506801
+"33","pseudoneutid50","unnormalized","Moderna","naive_only",0.782128975542384,0.783711584848897
+"34","pseudoneutid50","unnormalized","Novavax","first_four",0.787005055799666,0.789607161574004
+"35","pseudoneutid50","unnormalized","Novavax","mixed",0.787005055799666,0.781470291621429
+"36","pseudoneutid50","unnormalized","Novavax","naive_only",0.787005055799666,0.78326925786262
+"37","pseudoneutid50","unnormalized","Sanofi-1 naive","first_four",0.807178370156441,0.779671954014839
+"38","pseudoneutid50","unnormalized","Sanofi-1 naive","mixed",0.807178370156441,0.792571374006206
+"39","pseudoneutid50","unnormalized","Sanofi-1 naive","naive_only",0.807178370156441,0.807779482015296
+"40","pseudoneutid50","unnormalized","Sanofi-1 non-naive","first_four",0.520435264818854,0.429901674325993
+"41","pseudoneutid50","unnormalized","Sanofi-1 non-naive","mixed",0.520435264818854,0.53560114176196
+"42","pseudoneutid50","unnormalized","Sanofi-1 non-naive","naive_only",0.520435264818854,0.504840134503442
+"43","pseudoneutid50","unnormalized","Sanofi-2 naive","first_four",0.636227138520049,0.295669944779688
+"44","pseudoneutid50","unnormalized","Sanofi-2 naive","mixed",0.636227138520049,0.709059958128306
+"45","pseudoneutid50","unnormalized","Sanofi-2 naive","naive_only",0.636227138520049,0.689744681784221
+"46","pseudoneutid50","unnormalized","Sanofi-2 non-naive","first_four",0.747113189312729,0.757381532931304
+"47","pseudoneutid50","unnormalized","Sanofi-2 non-naive","mixed",0.747113189312729,0.690115343229105
+"48","pseudoneutid50","unnormalized","Sanofi-2 non-naive","naive_only",0.747113189312729,0.692394790496847
+"49","pseudoneutid50_adjusted","unnormalized","AstraZeneca","first_four",0.703614243542041,0.714761308151217
+"50","pseudoneutid50_adjusted","unnormalized","AstraZeneca","mixed",0.703614243542041,0.716993539711404
+"51","pseudoneutid50_adjusted","unnormalized","AstraZeneca","naive_only",0.703614243542041,0.716676541182287
+"52","pseudoneutid50_adjusted","unnormalized","Janssen","first_four",0.698503949516664,0.706840303005109
+"53","pseudoneutid50_adjusted","unnormalized","Janssen","mixed",0.698503949516664,0.704919110639109
+"54","pseudoneutid50_adjusted","unnormalized","Janssen","naive_only",0.698503949516664,0.704494011408194
+"55","pseudoneutid50_adjusted","unnormalized","Moderna","first_four",0.780180629670028,0.783677873749195
+"56","pseudoneutid50_adjusted","unnormalized","Moderna","mixed",0.780180629670028,0.781608884494725
+"57","pseudoneutid50_adjusted","unnormalized","Moderna","naive_only",0.780180629670028,0.782213743505741
+"58","pseudoneutid50_adjusted","unnormalized","Novavax","first_four",0.780030336577345,0.788066340259816
+"59","pseudoneutid50_adjusted","unnormalized","Novavax","mixed",0.780030336577345,0.778704079309228
+"60","pseudoneutid50_adjusted","unnormalized","Novavax","naive_only",0.780030336577345,0.779564048737807
+"61","pseudoneutid50_adjusted","unnormalized","Sanofi-1 naive","first_four",0.804020992890753,0.758268012312546
+"62","pseudoneutid50_adjusted","unnormalized","Sanofi-1 naive","mixed",0.804020992890753,0.792449345016997
+"63","pseudoneutid50_adjusted","unnormalized","Sanofi-1 naive","naive_only",0.804020992890753,0.796909693421314
+"64","pseudoneutid50_adjusted","unnormalized","Sanofi-1 non-naive","first_four",0.538134330975421,0.454997337058674
+"65","pseudoneutid50_adjusted","unnormalized","Sanofi-1 non-naive","mixed",0.538134330975421,0.549269844074246
+"66","pseudoneutid50_adjusted","unnormalized","Sanofi-1 non-naive","naive_only",0.538134330975421,0.52493668619267
+"67","pseudoneutid50_adjusted","unnormalized","Sanofi-2 naive","first_four",0.645878621285777,0.265982484020017
+"68","pseudoneutid50_adjusted","unnormalized","Sanofi-2 naive","mixed",0.645878621285777,0.654723780396862
+"69","pseudoneutid50_adjusted","unnormalized","Sanofi-2 naive","naive_only",0.645878621285777,0.629482278021575
+"70","pseudoneutid50_adjusted","unnormalized","Sanofi-2 non-naive","first_four",0.734556837172554,0.753902573532176
+"71","pseudoneutid50_adjusted","unnormalized","Sanofi-2 non-naive","mixed",0.734556837172554,0.750136909061688
+"72","pseudoneutid50_adjusted","unnormalized","Sanofi-2 non-naive","naive_only",0.734556837172554,0.770937369880683

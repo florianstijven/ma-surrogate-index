@@ -9,6 +9,10 @@ library(future)
 library(furrr)
 library(survival)
 
+# Specify options for saving the plots to files
+figures_dir = "results/figures/application/surrogate-index"
+tables_dir = "results/tables/application/surrogate-index"
+
 ## Analysis Parameters --------------------------------------------------
 
 # Number of bootstrap replications for computing within-trial covariance
@@ -404,15 +408,28 @@ roc_ggplots = roc_tbl %>%
       surrogate = surrogate
     ),
     .f = function(data, analysis_set, surrogate) {
+      surrogate_chr = switch(
+        surrogate,
+        bindSpike = "IgG Spike",
+        pseudoneutid50 = "nAb ID50",
+        pseudoneutid50_adjusted = "adjusted nAb ID50"
+      )
+      analysis_set_chr = switch(
+        analysis_set,
+        first_four = "first four trials",
+        naive_only = "all trials, naive subjects only",
+        mixed = "all trials"
+      )
+      subtitle = paste0("Surrogate index for ", surrogate_chr, " using ", analysis_set_chr)
       data %>%
         ggplot(aes(color = method)) +
         geom_path(aes(FPR, TPR)) +
-        coord_equal() +
         facet_wrap( ~ trial) +
         theme(legend.position = "bottom", legend.box = "vertical") +
         scale_color_discrete(name = "Method") +
         geom_abline(intercept = 0, slope = 1) +
-        ggtitle(paste0(analysis_set, " - ", surrogate))
+        ggtitle("ROC for estimated surrogate index") +
+        labs(subtitle = subtitle)
     }
   ))
 
@@ -422,12 +439,13 @@ roc_ggplots %>%
     ggsave(
       plot = ggplot_object,
       paste0(
-        "results/figures/application/roc-",
+        "roc-",
         surrogate,
         "-",
         analysis_set,
         ".pdf"
       ),
+      path = figures_dir,
       height = double_height,
       width = double_width,
       device = "pdf",
@@ -443,7 +461,7 @@ roc_tbl %>%
     TPR, FPR, FP, FN, threshold
   )))) %>%
   pivot_wider(names_from = "method", values_from = "AUC") %>%
-  write.csv("results/tables/application/auc-surrogate-indices.csv")
+  write.csv(paste0(tables_dir, "/auc-surrogate-indices.csv"))
 
 rm("roc_tbl")
 
