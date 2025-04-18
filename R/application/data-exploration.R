@@ -342,6 +342,6 @@ write.csv(
   table_infections %>%
     left_join(table_case_cohort_bAb) %>%
     left_join(table_case_cohort_nAb),
-  file = paste0(tables_dir, "infections-case-cohort.csv")
+  file = paste0(tables_dir, "/infections-case-cohort.csv")
 )
          

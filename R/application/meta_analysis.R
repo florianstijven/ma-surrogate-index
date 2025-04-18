@@ -9,6 +9,7 @@ library(mgcv)
 library(future)
 library(furrr)
 library(survival)
+library(RColorBrewer)
 
 # # Set up parallel computing
 # if (parallelly::supportsMulticore()) {
@@ -16,6 +17,10 @@ library(survival)
 # } else {
 #   plan(multisession)
 # }
+
+# Specify options for saving the plots to files
+figures_dir = "results/figures/application/meta-analysis"
+tables_dir = "results/tables/application/meta-analysis"
 
 ## Analysis Parameters -------------------------------------------------- 
 
@@ -27,22 +32,39 @@ time_cumulative_incidence = 120
 
 # Set of trials corresponding to each analysis set.
 
-trials_first_four = c("AstraZeneca", "Moderna", "Janssen", "Novavax")
-trials_naive_only = c("AstraZeneca",
-                      "Moderna",
+trials_first_four = c("Moderna", "AstraZeneca", "Janssen", "Novavax")
+trials_first_four_fct = trials_first_four
+trials_naive_only = c("Moderna",
+                      "AstraZeneca",
                       "Janssen",
                       "Novavax",
                       "Sanofi-1 naive",
                       "Sanofi-2 naive")
+trials_naive_only_fct = c("Moderna",
+                          "AstraZeneca",
+                          "Janssen",
+                          "Novavax",
+                          "Sanofi 1 (naive)",
+                          "Sanofi 2 (naive)")
 trials_mixed = c(
-  "AstraZeneca",
   "Moderna",
+  "AstraZeneca",
   "Janssen",
   "Novavax",
   "Sanofi-1 naive",
-  "Sanofi-2 naive",
   "Sanofi-1 non-naive",
+  "Sanofi-2 naive",
   "Sanofi-2 non-naive"
+)
+trials_mixed_fct = c(
+  "Moderna",
+  "AstraZeneca",
+  "Janssen",
+  "Novavax",
+  "Sanofi 1 (naive)",
+  "Sanofi 1 (non-naive)",
+  "Sanofi 2 (naive)",
+  "Sanofi 2 (non-naive)"
 )
 
 
@@ -51,7 +73,7 @@ trials_mixed = c(
 # Load data with trial-level treatment effects. 
 ma_trt_effects_tbl = readRDS("R/application/ma_trt_effects_tbl.rds")
 
-# Add poper name of the surrogates.
+# Add proper name of the surrogates.
 ma_trt_effects_tbl = ma_trt_effects_tbl %>%
   mutate(surrogate_name = case_when(
     surrogate == "bindSpike" ~ "IgG Spike",
@@ -64,6 +86,42 @@ ma_trt_effects_tbl = ma_trt_effects_tbl %>%
   mutate(
     only_naive = !(trial %in% c("Sanofi-1 non-naive", "Sanofi-2 non-naive"))
   )
+
+# Add better trial names.
+ma_trt_effects_tbl = ma_trt_effects_tbl %>%
+  # Reorder trial factor.
+  mutate(
+    trial_fct = forcats::fct_recode(
+      trial,
+      "Moderna" = "Moderna",
+      "AstraZeneca" = "AstraZeneca",
+      "Janssen" = "Janssen",
+      "Novavax" = "Novavax",
+      "Sanofi 1 (naive)" = "Sanofi-1 naive",
+      "Sanofi 1 (non-naive)" = "Sanofi-1 non-naive",
+      "Sanofi 2 (naive)" = "Sanofi-2 naive",
+      "Sanofi 2 (non-naive)" = "Sanofi-2 non-naive"
+    ),
+    trial_fct = fct_relevel(
+      trial_fct,
+      "Moderna",
+      "AstraZeneca",
+      "Janssen",
+      "Novavax",
+      "Sanofi 1 (naive)",
+      "Sanofi 1 (non-naive)",
+      "Sanofi 2 (naive)",
+      "Sanofi 2 (non-naive)"
+    )
+  )
+
+# Create a named vector as the palette
+class <- levels(ma_trt_effects_tbl$trial_fct)  # All factor levels across figures
+colors <- brewer.pal(length(class), "Dark2")  # Colors
+my_palette <- set_names(colors, class)  # Named vector
+# Create corresponding set of shapes that distinguish beween naive and non-naive
+# trials.
+my_shapes = set_names(c(19, 19, 19, 19, 19, 17, 19, 17), class)
 
 # Vector of trial names. We exclude 
 trial_names = levels(ma_trt_effects_tbl %>% pull(trial))
@@ -82,7 +140,7 @@ transform_VE = new_transform(
 # Summarize the estimated trial-level treatment effects in meta-analytic plots.
 ma_trt_effects_tbl %>% 
   filter(method == "untransformed surrogate") %>%
-  ggplot(aes(x = trt_effect_surrogate_index_est, y = 1 - exp(log_RR_est), color = trial, shape = trial)) +
+  ggplot(aes(x = trt_effect_surrogate_index_est, y = 1 - exp(log_RR_est), color = trial_fct, shape = trial_fct)) +
   geom_point() +
   geom_errorbar(aes(
     ymin = 1 - exp(log_RR_est - 1.96 * log_RR_est_se),
@@ -97,7 +155,8 @@ ma_trt_effects_tbl %>%
     height = 0.01
   ) +
   scale_y_continuous(transform = transform_VE, breaks = c(0, 0.5, 0.75, 0.90, 0.95)) +
-  scale_shape_manual(labels = trial_names, values = c(19, 19, 19, 19, 19, 17, 19, 17), drop = FALSE) +
+  scale_color_manual(values = my_palette, limits = trials_mixed_fct) +
+  scale_shape_manual(values = my_shapes, limits = trials_mixed_fct) +
   coord_cartesian(ylim = c(-0.2, 0.95)) +
   facet_wrap(~surrogate_name, scales = "free_x", nrow = 2) +
   xlab("Estimated Treatment Effect on Titer") +
@@ -105,7 +164,8 @@ ma_trt_effects_tbl %>%
   theme(legend.position = "bottom", legend.title = element_blank())
 
 ggsave(
-  filename = "results/figures/application/ma-standard.pdf",
+  filename = "ma-standard-all.pdf",
+  path = figures_dir,
   height = double_height,
   width = double_width,
   dpi = res,
@@ -113,9 +173,10 @@ ggsave(
   units = "cm"
 )
 
+# Summarize the estimated trial-level treatment effects in meta-analytic plots.
 ma_trt_effects_tbl %>% 
-  filter(method == "untransformed surrogate") %>%
-  ggplot(aes(x = trt_effect_surrogate_index_est, y = 1 - exp(log_RR_est), color = trial)) +
+  filter(method == "untransformed surrogate", trial %in% trials_first_four) %>%
+  ggplot(aes(x = trt_effect_surrogate_index_est, y = 1 - exp(log_RR_est), color = trial_fct, shape = trial_fct)) +
   geom_point() +
   geom_errorbar(aes(
     ymin = 1 - exp(log_RR_est - 1.96 * log_RR_est_se),
@@ -129,8 +190,9 @@ ma_trt_effects_tbl %>%
     ),
     height = 0.01
   ) +
-  scale_y_continuous(breaks = c(0, 0.5, 0.75, 0.90, 0.95)) +
-  scale_shape_manual(labels = trial_names, values = c(19, 19, 19, 19, 19, 17, 19, 17), drop = FALSE) +
+  scale_y_continuous(transform = transform_VE, breaks = c(0, 0.5, 0.75, 0.90, 0.95)) +
+  scale_color_manual(values = my_palette, limits = trials_first_four_fct) +
+  scale_shape_manual(values = my_shapes, limits = trials_first_four_fct) +
   coord_cartesian(ylim = c(-0.2, 0.95)) +
   facet_wrap(~surrogate_name, scales = "free_x", nrow = 2) +
   xlab("Estimated Treatment Effect on Titer") +
@@ -138,7 +200,8 @@ ma_trt_effects_tbl %>%
   theme(legend.position = "bottom", legend.title = element_blank())
 
 ggsave(
-  filename = "results/figures/application/ma-standard-ve-scale.pdf",
+  filename = "ma-standard-first-four.pdf",
+  path = figures_dir,
   height = double_height,
   width = double_width,
   dpi = res,
@@ -146,24 +209,29 @@ ggsave(
   units = "cm"
 )
 
+
+
+
 # Helper function for MA plots for the surrogate indices by weighting and
-# include_Bserostatus.
+# analysis_set.
 ma_plot_helper = function(weighting, analysis_set, VE_scale) {
   # Set of included trials according to analysis_set
   if (analysis_set == "first_four") {
-    trials_included = trials_first_four
+    trials_included = trials_first_four_fct
   } else if (analysis_set == "naive_only") {
-    trials_included = trials_naive_only
+    trials_included = trials_naive_only_fct
   } else if (analysis_set == "mixed") {
-    trials_included = trials_mixed
+    trials_included = trials_mixed_fct
   }
   ggplot_object = ma_trt_effects_tbl %>% filter(method != "untransformed surrogate", 
                                 analysis_set == .env$analysis_set, 
-                                trial %in% trials_included) %>%
+                                trial_fct %in% trials_included,
+                                weighting == .env$weighting) %>%
     ggplot(aes(
       x = 1 - exp(trt_effect_surrogate_index_est),
       y = 1 - exp(log_RR_est),
-      color = trial
+      color = trial_fct,
+      shape = trial_fct
     )) +
     geom_point() +
     geom_errorbar(aes(
@@ -179,7 +247,8 @@ ma_plot_helper = function(weighting, analysis_set, VE_scale) {
       )
     ), height = 0.01) +
     geom_abline(intercept = 0, slope = 1) +
-    scale_shape_manual(labels = trial_names, values = c(19, 19, 19, 19, 19, 17, 19, 17), drop = FALSE) +
+    scale_color_manual(values = my_palette, limits = trials_included) +
+    scale_shape_manual(values = my_shapes, limits = trials_included) +
     coord_cartesian(ylim = c(-0.2, 0.95)) +
     facet_grid(method ~ surrogate_name) +
     xlab("Estimated VE on Surr. Index") +
@@ -196,11 +265,11 @@ ma_plot_helper = function(weighting, analysis_set, VE_scale) {
       scale_x_continuous(transform = transform_VE, breaks = c(0, 0.5, 0.75, 0.90, 0.95))
   }
   
-  weighting_chr = ifelse(weighting == "Normalized By Trial", "normalized", "unnormalized")
+  weighting_chr = ifelse(weighting == "normalized", "normalized", "unnormalized")
   VE_scale_chr = ifelse(VE_scale, "ve-scale", "transformed-scale")
   
   outfile = paste0(
-    "results/figures/application/ma-standard",
+    "ma",
     "-",
     weighting_chr,
     "-",
@@ -214,6 +283,7 @@ ma_plot_helper = function(weighting, analysis_set, VE_scale) {
   ggsave(
     plot = ggplot_object,
     filename = outfile,
+    path = figures_dir,
     height = double_height,
     width = double_width,
     dpi = res,
@@ -223,9 +293,9 @@ ma_plot_helper = function(weighting, analysis_set, VE_scale) {
 }
 
 expand_grid(
-  weighting = c("Unnormalized"),
+  weighting = c("unnormalized"),
   analysis_set = c("first_four", "naive_only", "mixed"),
-  VE_scale = c(FALSE, TRUE)
+  VE_scale = c(FALSE)
 ) %>%
   rowwise(everything()) %>%
   summarise(ma_plot_helper(weighting, analysis_set, VE_scale))
@@ -234,14 +304,17 @@ expand_grid(
 # for the excluded trials are shown.
 ma_trt_effects_tbl %>% filter(
   method != "untransformed surrogate",
-  analysis_set == "first_four",!(trial %in% trials_first_four)
+  analysis_set == "first_four",
+  !(trial %in% trials_first_four),
+  weighting == "unnormalized"
 ) %>%
   ggplot(aes(
     x = 1 - exp(trt_effect_surrogate_index_est),
     y = 1 - exp(log_RR_est),
-    color = trial
+    color = trial_fct,
+    shape = trial_fct
   )) +
-  geom_point() +
+  geom_point(show.legend = TRUE) +
   geom_errorbar(aes(
     ymin = 1 - exp(log_RR_est - 1.96 * log_RR_est_se),
     ymax = 1 - exp(log_RR_est + 1.96 * log_RR_est_se)
@@ -255,19 +328,20 @@ ma_trt_effects_tbl %>% filter(
     )
   ), height = 0.01) +
   geom_abline(intercept = 0, slope = 1) +
-  scale_shape_manual(
-    labels = trial_names,
-    values = c(19, 19, 19, 19, 19, 17, 19, 17),
-    drop = FALSE
-  ) +
+  scale_color_manual(values = my_palette, limits = trials_mixed_fct[!(trials_mixed_fct %in% trials_first_four_fct)]) +
+  scale_shape_manual(values = my_shapes, limits = trials_mixed_fct[!(trials_mixed_fct %in% trials_first_four_fct)]) +
+  scale_y_continuous(transform = transform_VE, breaks = c(0, 0.5, 0.75, 0.90, 0.95)) +
+  scale_x_continuous(transform = transform_VE, breaks = c(0, 0.90, 0.99, 0.999)) +
+  coord_cartesian(ylim = c(-0.2, 0.95), xlim = c(-0.2, 0.9992)) +
   facet_grid(method ~ surrogate_name) +
-  xlab("Estimated VE on Surr. Index") +
+  xlab("Predicted VE/Estimated VE on Surr. Index") +
   ylab("Estimated VE") +
-  theme(legend.position = "bottom", legend.title = element_blank()) 
-
+  theme(legend.position = "bottom", legend.title = element_blank()) +
+  guides(color = guide_legend(nrow = 2))
 
 ggsave(
-  filename = "results/figures/application/ma-predictions.pdf",
+  filename = "ma-predictions-unnormalized.pdf",
+  path = figures_dir,
   height = double_height,
   width = double_width,
   dpi = res,
@@ -383,7 +457,7 @@ surrogate_results_tbl = surrogate_results_tbl %>%
   select(-moment_estimate, -bootstrap_ci) 
 
 surrogate_results_tbl %>%
-  write.csv(file = "results/tables/application/surrogacy-inferences.csv")
+  write.csv(file = paste0(tables_dir, "/surrogacy-inferences.csv"))
 
 # Summarize the results in a plot. 
 surrogate_results_tbl %>%
@@ -400,7 +474,8 @@ surrogate_results_tbl %>%
   facet_grid(surrogate~.) +
   theme(legend.position = "bottom", legend.box = "vertical", legend.margin = margin())
 ggsave(
-  "results/figures/application/surrogacy-measures-summary.pdf",
+  "/surrogacy-measures-summary.pdf",
+  path = figures_dir,
   height = double_height,
   width = double_width,
   dpi = res,

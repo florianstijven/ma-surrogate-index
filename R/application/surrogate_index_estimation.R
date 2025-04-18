@@ -76,7 +76,7 @@ ipd_tbl$pseudo_value = 1 - pseudo(surv_fit_all, times = time_cumulative_incidenc
 # on on some plots to standardize some things across trials.
 cumulative_incidence_control_tbl = ipd_tbl %>%
   group_by(trial, treatment) %>%
-  summarise(prob_infection_free = mean(pseudo_value)) %>%
+  summarise(prob_infection = mean(pseudo_value)) %>%
   ungroup() %>%
   filter(treatment == 0) %>%
   select(-treatment)
@@ -112,8 +112,8 @@ ipd_tbl = ipd_tbl %>%
 # infection across the trials.
 ipd_tbl = ipd_tbl %>%
   left_join(cumulative_incidence_control_tbl %>%
-              mutate(logit_prob_infection_free = log(
-                prob_infection_free / (1 - prob_infection_free)
+              mutate(logit_prob_infection = log(
+                prob_infection / (1 - prob_infection)
               )))
 
 
@@ -161,7 +161,7 @@ ipd_tbl %>%
 # Drop variables that are not needed further on.
 ipd_tbl = ipd_tbl %>%
   select(
-    -X,-Ptid,-USUBJID,-(BMI_underweight:abrogation_coefficient),-total_weight_nAb,-total_weight_bAb,-Wstratum,-age.geq.65,-Bserostatus,-HighRiskInd
+    -X,-Ptid,-USUBJID,-(BMI_underweight:abrogation_coefficient),-total_weight_nAb,-total_weight_bAb,-Wstratum,-Bserostatus
   )
 
 # Convert Character variables to factors. This is more efficient in terms of
@@ -190,25 +190,25 @@ prediction_model_settings = tibble(
   weighting = rep("unnormalized", 3)
 )
 
-# For the current analyses, we only consider the unnormalized weights.
-prediction_model_settings = prediction_model_settings %>%
-  bind_rows(
-    tibble(
-      surrogate = c("pseudoneutid50", "bindSpike", "pseudoneutid50_adjusted"),
-      weights_chr = c(
-        "weight_normalized_nAb",
-        "weight_normalized_bAb",
-        "weight_normalized_nAb"
-      ),
-      weights_chr_cox = c(
-        "weight_normalized_nAb_cox",
-        "weight_normalized_bAb_cox",
-        "weight_normalized_nAb_cox"
-      ),
-      case_cohort_ind_chr = c("Delta_nAb", "Delta_bAb", "Delta_nAb"),
-      weighting = rep("normalized", 3)
-    )
-  )
+# # For the current analyses, we only consider the unnormalized weights.
+# prediction_model_settings = prediction_model_settings %>%
+#   bind_rows(
+#     tibble(
+#       surrogate = c("pseudoneutid50", "bindSpike", "pseudoneutid50_adjusted"),
+#       weights_chr = c(
+#         "weight_normalized_nAb",
+#         "weight_normalized_bAb",
+#         "weight_normalized_nAb"
+#       ),
+#       weights_chr_cox = c(
+#         "weight_normalized_nAb_cox",
+#         "weight_normalized_bAb_cox",
+#         "weight_normalized_nAb_cox"
+#       ),
+#       case_cohort_ind_chr = c("Delta_nAb", "Delta_bAb", "Delta_nAb"),
+#       weighting = rep("normalized", 3)
+#     )
+#   )
 
 prediction_model_settings = prediction_model_settings %>%
   cross_join(tibble(analysis_set = c("first_four", "naive_only", "mixed")))
@@ -282,10 +282,10 @@ gam_fitter = function(predictors_chr,
     pull(any_of(weights_chr))
   
   # Redefine the predictors as smooth functions.
-  predictors_chr = paste0("s(", predictors_chr, ")")
+  predictors_chr = paste0("s(", predictors_chr, ", k = 4)")
   # Define formula
   string_formula = paste0(
-    "infection_120d ~ s(risk_score_centered) + BMI_stratum + s(Age) + Sex + logit_prob_infection_free +",
+    "infection_120d ~ risk_score_centered + Sex + HighRiskInd + BMI_stratum + s(Age) + logit_prob_infection +",
     paste(predictors_chr, collapse = " + ")
   )
   formula_final = as.formula(string_formula)
@@ -326,11 +326,15 @@ cox_fitter = function(predictors_chr,
                       analysis_set) {
   data_temp = ipd_tbl %>%
     filter(.data[[analysis_set]])
+  # Compute the inverse probability weights as the predict of the inverse
+  # probability of censoring and case-cohort weights.
+  weights = data_temp %>%
+    pull(any_of(weights_chr))
   # We truncate follow-up at 120 days to match the definition of the clinical
   # endpoint.
   data_temp = data_temp %>%
     mutate(
-      event = ifelse(time_to_event > time_cumulative_incidence, 0, event),
+      event = ifelse(time_to_event > time_cumulative_incidence + 40, 0, event),
       time_to_event = ifelse(
         time_to_event > time_cumulative_incidence,
         time_cumulative_incidence,
@@ -339,10 +343,10 @@ cox_fitter = function(predictors_chr,
     )
   
   # Redefine the predictors as smooth functions.
-  predictors_chr = paste0("bs(", predictors_chr, ")")
+  predictors_chr = paste0("ns(", predictors_chr, ", knots = c(1.5, 2.5), Boundary.knots = c(0, 4))")
   # Define formula
   string_formula = paste0(
-    "Surv(time_to_event, event) ~ bs(risk_score_centered) + BMI_stratum + bs(Age) + Sex + strata(trial) +",
+    "Surv(time_to_event, event) ~ risk_score_centered + Sex + HighRiskInd + BMI_stratum + bs(Age) + strata(trial) +",
     paste(predictors_chr, collapse = " + ")
   )
   formula_final = as.formula(string_formula)
@@ -350,8 +354,8 @@ cox_fitter = function(predictors_chr,
   # Fit logistic regression model.
   cox_fit = coxph(
     formula = formula_final,
-    data = ipd_tbl %>% as.data.frame(),
-    weights = ipd_tbl %>% pull(any_of(weights_chr)),
+    data = data_temp %>% as.data.frame(),
+    weights = weights,
     model = FALSE,
     x = FALSE,
     y = FALSE
@@ -364,6 +368,12 @@ cox_models_tbl = prediction_model_settings %>%
   summarise(fitted_model = list(
     cox_fitter(surrogate, weights_chr_cox, case_cohort_ind_chr, analysis_set)
   ))
+
+
+x = seq(from = 0, to = 5, length.out = 100)
+ns_matrix = ns(x = x, knots = c(1.5, 2.5), Boundary.knots = c(0, 4)) 
+coefs = coef(cox_models_tbl$fitted_model[[8]])[10:12]
+plot(x, ns_matrix %*% coefs)
 
 surrogate_index_models_tbl = surrogate_index_models_tbl %>%
   bind_rows(cox_models_tbl %>%
@@ -420,7 +430,8 @@ ipd_surr_indices_tbl = bind_rows(
       surrogate_index = 1 - predict(
         fitted_model,
         newdata = ipd_tbl %>%
-          mutate(time_to_event = time_cumulative_incidence),
+          mutate(time_to_event = time_cumulative_incidence,
+                 trial = "Janssen"),
         type = "survival"
       ),
       ipd_tbl

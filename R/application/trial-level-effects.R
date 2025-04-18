@@ -20,9 +20,9 @@ if (parallelly::supportsMulticore()) {
 
 # Number of bootstrap replications for computing within-trial covariance
 # matrices.
-B_within_trial = 20
+B_within_trial = 2e2
 
-time_cumulative_incidence = 120
+time_cumulative_incidence = 80
 
 ## Intermediate Results ----------------------------------------------------
 
@@ -173,19 +173,22 @@ estimate_treatment_effects = function(data,
         
         # Estimate treatment effects on surrogate index and clinical endpoint.
         trt_effect_surrogate_index_est = estimate_treatment_effect_surrogate_index(data_bs, VE_surr)
-        VE_est = estimate_treatment_effect_clinical(data_bs)
+        VE_est = estimate_treatment_effect_clinical_km(data_bs)
         
         if (log_RR_alpha) {
           trt_effect_surrogate_index_est = log(1 - trt_effect_surrogate_index_est)
         }
         if (log_RR_beta) {
           VE_est = log(1 - VE_est)
+          # If any estimates are not finite, we just set them to NA and ignore NA in
+          # the computation of the variance.
+          VE_est = ifelse(is.finite(VE_est), VE_est, NA)
         }
         
         return(c(trt_effect_surrogate_index_est, VE_est))
       }
     )
-    vcov_est = var(as.matrix(do.call(rbind, estimates_list)))
+    vcov_est = var(as.matrix(do.call(rbind, estimates_list)), na.rm = TRUE)
   }
   # Return treatment effect estimates.
   return(list(
