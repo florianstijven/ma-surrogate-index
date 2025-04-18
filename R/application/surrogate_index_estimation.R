@@ -9,6 +9,7 @@ library(future)
 library(furrr)
 library(survival)
 
+
 # Specify options for saving the plots to files
 figures_dir = "results/figures/application/surrogate-index"
 tables_dir = "results/tables/application/surrogate-index"
@@ -17,7 +18,7 @@ tables_dir = "results/tables/application/surrogate-index"
 
 # Number of bootstrap replications for computing within-trial covariance
 # matrices.
-time_cumulative_incidence = 120
+time_cumulative_incidence = 80
 
 ## Data Preparation ----------------------------------------------------
 
@@ -26,11 +27,6 @@ time_cumulative_incidence = 120
 # frames.
 ipd_tbl = read.csv("data/processed_data.csv") %>%
   tibble() %>%
-  # Compute the binary endpoint as observed infection before 120 days. Note that
-  # we're ignoring censoring to some extent by doing so because subjects
-  # censored before 120 days cannot have the event.
-  mutate(infection_120d = ifelse(event == 1 &
-                                   time_to_event < time_cumulative_incidence, 1L, 0L)) %>%
   # Code the BMI dummy variables into a single factor variable.
   mutate(
     BMI_stratum = case_when(
@@ -71,22 +67,6 @@ ipd_tbl = ipd_tbl %>%
   )
 
 
-# Make sure that each trial-treatment group combination gets the same total
-# weight. We don't want one trial to have an undue influence on the predictions.
-ipd_tbl = ipd_tbl %>%
-  left_join(ipd_tbl %>%
-              group_by(trial, treatment) %>%
-              summarize(total_weight = sum(
-                case_cohort_weight_nAb * !is.na(pseudoneutid50)
-              )) %>%
-              ungroup()) %>%
-  mutate(weight_prediction = case_cohort_weight_nAb / total_weight)
-
-# Every trial now receives the same total weight.
-ipd_tbl %>%
-  group_by(trial, treatment) %>%
-  summarise(sum(weight_prediction * !is.na(pseudoneutid50)))
-
 # Compute pseudo-values. These are computed for each trial separately. We first
 # fit a separate KM curve by trial and treatment group.
 surv_fit_all = survfit(Surv(time_to_event, event) ~ strata(treatment, trial), data = ipd_tbl)
@@ -101,19 +81,87 @@ cumulative_incidence_control_tbl = ipd_tbl %>%
   filter(treatment == 0) %>%
   select(-treatment)
 
-## Add placebo cumulative incidence rate as a covariate to the trial. We can
-## adjust for this variable later to indirectly adjust for different forces of
-## infection across the trials.
+# Compute inverse probability of censoring weights where we truncate at 120 days.
+surv_fit_censoring = coxph(
+  Surv(time_to_event, event) ~ 1 + strata(treatment, trial),
+  data = ipd_tbl %>%
+    mutate(time_to_event = pmin(
+      time_to_event, time_cumulative_incidence
+    ))
+)
+ipd_tbl$ipcw = 1 / predict(surv_fit_censoring, type = "survival")
+
+
+ipd_tbl = ipd_tbl %>%
+  mutate(# If the patient has an infection or censoring event before 120 days, we set
+    # the infection event to NA if the patients was censored. If a patient is
+    # under observation for more than 120 days, the infection event is set to
+    # zero.
+    infection_120d = ifelse(
+      time_to_event <= time_cumulative_incidence,
+      ifelse(event == 0, NA, 1),
+      0
+    ))
+
+ipd_tbl = ipd_tbl %>%
+  mutate(weight_default_nAb = case_cohort_weight_nAb * ipcw,
+         weight_default_bAb = case_cohort_weight_bAb * ipcw)
+
+# Add placebo cumulative incidence rate as a covariate to the trial. We can
+# adjust for this variable later to indirectly adjust for different forces of
+# infection across the trials.
 ipd_tbl = ipd_tbl %>%
   left_join(cumulative_incidence_control_tbl %>%
               mutate(logit_prob_infection_free = log(
                 prob_infection_free / (1 - prob_infection_free)
               )))
 
+
+# Make sure that each trial-treatment group combination gets the same total
+# weight. We don't want one trial to have an undue influence on the predictions.
+ipd_tbl = ipd_tbl %>%
+  left_join(
+    ipd_tbl %>%
+      group_by(trial, treatment) %>%
+      summarize(
+        # Complete case weights for models that use infection at day x as outcome.
+        total_weight_nAb = sum(
+          weight_default_nAb * !is.na(pseudoneutid50) * !is.na(infection_120d)
+        ),
+        total_weight_bAb = sum(
+          weight_default_bAb * !is.na(bindSpike) * !is.na(infection_120d)
+        ),
+        # Case-cohort weights (i.e., for the cox models)
+        total_weight_nAb_cox = sum(case_cohort_weight_nAb * !is.na(pseudoneutid50)),
+        total_weight_bAb_cox = sum(case_cohort_weight_bAb * !is.na(bindSpike))
+      ) %>%
+      ungroup()
+  ) %>%
+  mutate(
+    weight_normalized_nAb = (weight_default_nAb) / total_weight_nAb,
+    weight_normalized_bAb = (weight_default_bAb) / total_weight_bAb,
+    weight_normalized_nAb_cox = case_cohort_weight_nAb / total_weight_nAb_cox,
+    weight_normalized_bAb_cox = case_cohort_weight_bAb / total_weight_bAb_cox
+  )
+
+# Every trial now receives the same total weight.
+ipd_tbl %>%
+  group_by(trial, treatment) %>%
+  summarise(
+    sum(
+      weight_normalized_nAb * !is.na(pseudoneutid50) * !is.na(infection_120d)
+    ),
+    sum(
+      weight_normalized_bAb * !is.na(bindSpike) * !is.na(infection_120d)
+    ),
+    sum(weight_normalized_nAb_cox * !is.na(pseudoneutid50)),
+    sum(weight_normalized_bAb_cox * !is.na(bindSpike))
+  )
+
 # Drop variables that are not needed further on.
 ipd_tbl = ipd_tbl %>%
   select(
-    -X,-Ptid,-USUBJID,-(BMI_underweight:abrogation_coefficient),-total_weight,-Wstratum,-age.geq.65,-Bserostatus,-HighRiskInd
+    -X,-Ptid,-USUBJID,-(BMI_underweight:abrogation_coefficient),-total_weight_nAb,-total_weight_bAb,-Wstratum,-age.geq.65,-Bserostatus,-HighRiskInd
   )
 
 # Convert Character variables to factors. This is more efficient in terms of
@@ -129,6 +177,11 @@ ipd_tbl = ipd_tbl %>%
 prediction_model_settings = tibble(
   surrogate = c("pseudoneutid50", "bindSpike", "pseudoneutid50_adjusted"),
   weights_chr = c(
+    "weight_default_nAb",
+    "weight_default_bAb",
+    "weight_default_nAb"
+  ),
+  weights_chr_cox = c(
     "case_cohort_weight_nAb",
     "case_cohort_weight_bAb",
     "case_cohort_weight_nAb"
@@ -137,14 +190,25 @@ prediction_model_settings = tibble(
   weighting = rep("unnormalized", 3)
 )
 
-# For the current analysies, we only consider the unnormalized weights.
-# prediction_model_settings = prediction_model_settings %>%
-#   bind_rows(tibble(
-#     surrogate = c("pseudoneutid50", "bindSpike", "pseudoneutid50_adjusted"),
-#     weights_chr = rep("weight_prediction", 3),
-#     case_cohort_ind_chr = c("Delta_nAb", "Delta_bAb", "Delta_nAb"),
-#     weighting = rep("Unnormalized", 3)
-#   ))
+# For the current analyses, we only consider the unnormalized weights.
+prediction_model_settings = prediction_model_settings %>%
+  bind_rows(
+    tibble(
+      surrogate = c("pseudoneutid50", "bindSpike", "pseudoneutid50_adjusted"),
+      weights_chr = c(
+        "weight_normalized_nAb",
+        "weight_normalized_bAb",
+        "weight_normalized_nAb"
+      ),
+      weights_chr_cox = c(
+        "weight_normalized_nAb_cox",
+        "weight_normalized_bAb_cox",
+        "weight_normalized_nAb_cox"
+      ),
+      case_cohort_ind_chr = c("Delta_nAb", "Delta_bAb", "Delta_nAb"),
+      weighting = rep("normalized", 3)
+    )
+  )
 
 prediction_model_settings = prediction_model_settings %>%
   cross_join(tibble(analysis_set = c("first_four", "naive_only", "mixed")))
@@ -209,8 +273,14 @@ gam_fitter = function(predictors_chr,
                       weights_chr,
                       case_cohort_ind_chr,
                       analysis_set) {
+  # Select the subset of the data corresponding to `analysis_set`
   data_temp = ipd_tbl %>%
     filter(.data[[analysis_set]])
+  # Compute the inverse probability weights as the predict of the inverse
+  # probability of censoring and case-cohort weights.
+  weights = data_temp %>%
+    pull(any_of(weights_chr))
+  
   # Redefine the predictors as smooth functions.
   predictors_chr = paste0("s(", predictors_chr, ")")
   # Define formula
@@ -227,7 +297,6 @@ gam_fitter = function(predictors_chr,
       as.data.frame(),
     weights = data_temp %>%
       pull(any_of(weights_chr)),
-    # subset = (data_temp[, case_cohort_ind_chr] %>% pull(any_of(case_cohort_ind_chr)) == 1) | (data_temp$treatment == 0),
     family = quasibinomial()
   )
   return(gam_fit)
@@ -293,7 +362,7 @@ cox_fitter = function(predictors_chr,
 cox_models_tbl = prediction_model_settings %>%
   rowwise(surrogate, weighting, analysis_set) %>%
   summarise(fitted_model = list(
-    cox_fitter(surrogate, weights_chr, case_cohort_ind_chr, analysis_set)
+    cox_fitter(surrogate, weights_chr_cox, case_cohort_ind_chr, analysis_set)
   ))
 
 surrogate_index_models_tbl = surrogate_index_models_tbl %>%
@@ -381,19 +450,48 @@ ipd_surr_indices_tbl = ipd_surr_indices_tbl %>%
     infection_120d,
     event,
     time_to_event,
-    risk_score
+    risk_score,
+    ipcw
   )
 
 ## Prediction Model Performance -------------------------------------------
 
+
 roc_tbl = ipd_surr_indices_tbl %>%
+  # Reorder trial factor.
+  mutate(
+    trial = forcats::fct_recode(
+      trial,
+      "Moderna (naive)" = "Moderna",
+      "AstraZeneca (naive)" = "AstraZeneca",
+      "Janssen (naive)" = "Janssen",
+      "Novavax (naive)" = "Novavax",
+      "Sanofi 1 (naive)" = "Sanofi-1 naive",
+      "Sanofi 1 (non-naive)" = "Sanofi-1 non-naive",
+      "Sanofi 2 (naive)" = "Sanofi-2 naive",
+      "Sanofi 2 (non-naive)" = "Sanofi-2 non-naive"
+    ),
+    trial = fct_relevel(
+      trial,
+      "Moderna (naive)",
+      "AstraZeneca (naive)",
+      "Janssen (naive)",
+      "Novavax (naive)",
+      "Sanofi 1 (naive)",
+      "Sanofi 1 (non-naive)",
+      "Sanofi 2 (naive)",
+      "Sanofi 2 (non-naive)"
+    )
+  ) %>%
+  filter(!is.na(surrogate_index) & !(is.na(infection_120d))) %>%
   group_by(method, surrogate, weighting, trial, analysis_set) %>%
-  filter(!is.na(surrogate_index)) %>%
-  reframe(WeightedROC(
-    guess = surrogate_index,
-    label = infection_120d,
-    weight = sample_weight
-  ))
+  reframe(
+    WeightedROC(
+      guess = surrogate_index,
+      label = infection_120d,
+      weight = sample_weight * ipcw
+    )
+  )
 
 # Make and save the plots for all combinations of `surrogate` and `weighting`.
 roc_ggplots = roc_tbl %>%
@@ -420,16 +518,27 @@ roc_ggplots = roc_tbl %>%
         naive_only = "all trials, naive subjects only",
         mixed = "all trials"
       )
-      subtitle = paste0("Surrogate index for ", surrogate_chr, " using ", analysis_set_chr)
+      subtitle = paste0("Surrogate index for ",
+                        surrogate_chr,
+                        " using ",
+                        analysis_set_chr)
       data %>%
-        ggplot(aes(color = method)) +
+        mutate(
+          weighting = ifelse(weighting == "normalized", "Normalized", "Unnormalized"),
+          method = ifelse(method == "gam", "GAM logistic regression", "Cox PH")
+        ) %>%
+        ggplot(aes(color = method, linetype = weighting)) +
         geom_path(aes(FPR, TPR)) +
-        facet_wrap( ~ trial) +
+        facet_wrap(~ trial) +
         theme(legend.position = "bottom", legend.box = "vertical") +
         scale_color_discrete(name = "Method") +
         geom_abline(intercept = 0, slope = 1) +
+        scale_linetype(name = "Type of Weights") +
+        scale_color_discrete(name = "Model") +
         ggtitle("ROC for estimated surrogate index") +
-        labs(subtitle = subtitle)
+        labs(subtitle = subtitle) +
+        theme(legend.spacing.y = unit(0, "cm"),
+              legend.box.spacing = unit(0, "cm"))
     }
   ))
 
@@ -438,13 +547,7 @@ roc_ggplots %>%
   summarise(
     ggsave(
       plot = ggplot_object,
-      paste0(
-        "roc-",
-        surrogate,
-        "-",
-        analysis_set,
-        ".pdf"
-      ),
+      paste0("roc-", surrogate, "-", analysis_set, ".pdf"),
       path = figures_dir,
       height = double_height,
       width = double_width,
