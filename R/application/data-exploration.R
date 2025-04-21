@@ -14,7 +14,7 @@ library(ggsurvfit)
 library(tidycmprsk)
 library(ggpubr)
 
-time_cumulative_incidence = 120
+time_cumulative_incidence = 80
 
 ## Load data and Prepare for Analysis -----------------------------------
 
@@ -284,64 +284,63 @@ table_infections = df %>%
   mutate(
     treatment = ifelse(
       treatment == 1,
-      "Vaccine (number of events subjects/total number of subjects)",
-      "Placebo (number of events subjects/total number of subjects)"
+      "Vaccine",
+      "Placebo"
     )
   ) %>%
   group_by(trial, treatment) %>%
   summarise(
     n = n(),
-    n_infected = sum(event),
-    results = paste0(n_infected, "/", n)
+    n_event = sum(event),
+    n_not_event = n - n_event
   ) %>%
-  select(-n, -n_infected) %>%
-  pivot_wider(names_from = "treatment", values_from = c("results"))
+  pivot_wider(names_from = "treatment", values_from = c("n", "n_event", "n_not_event"), names_sep = " - ")
 
 # Compute the number of subjects sampled in the case-cohort sampling by trial
 # and infection status. We only select the vaccine recipients here because the
 # titer is not measured for placebo recipients.
 table_case_cohort_bAb = df %>%
-  filter(treatment == 1) %>%
   mutate(
     infected = ifelse(
       event,
-      "Cases (number of bAb titers measured/total number of subjects)",
-      "Non-Cases (number of bAb titers measured/total number of subjects)"
+      "Cases",
+      "Non-Cases"
     )
   ) %>%
-  group_by(trial, infected) %>%
+  group_by(trial, infected, Treatment) %>%
   summarise(
-    n = n(),
-    n_Delta = sum(Delta_bAb),
-    results = paste0(n_Delta, "/", n)
+    n_Delta = sum(Delta_bAb)
   ) %>%
-  select(-n, -n_Delta) %>%
-  pivot_wider(names_from = "infected", values_from = "results")
+  pivot_wider(names_from = c("infected", "Treatment"), values_from = "n_Delta", names_sep = " - ")
 
 table_case_cohort_nAb = df %>%
-  filter(treatment == 1) %>%
   mutate(
     infected = ifelse(
       event,
-      "Cases (number of nAb titers measured/total number of subjects)",
-      "Non-Cases (number of nAb titers measured/total number of subjects)"
+      "Cases",
+      "Non-Cases"
     )
   ) %>%
-  group_by(trial, infected) %>%
+  group_by(trial, infected, Treatment) %>%
   summarise(
-    n = n(),
-    n_Delta = sum(Delta_nAb),
-    results = paste0(n_Delta, "/", n)
+    n_Delta = sum(Delta_nAb)
   ) %>%
-  select(-n, -n_Delta) %>%
-  pivot_wider(names_from = "infected", values_from = "results")
+  pivot_wider(names_from = c("infected", "Treatment"), values_from = "n_Delta", names_sep = " - ")
 
 
-# Join two tables together and save.
+# Save the tables to a csv file.
 write.csv(
-  table_infections %>%
-    left_join(table_case_cohort_bAb) %>%
-    left_join(table_case_cohort_nAb),
-  file = paste0(tables_dir, "/infections-case-cohort.csv")
+  table_infections,
+  file = paste0(tables_dir, "/infections-by-treatment.csv")
+)
+
+write.csv(
+  table_case_cohort_bAb,
+  file = paste0(tables_dir, "/case-cohort-bAb.csv")
+)
+
+write.csv(
+  table_case_cohort_nAb,
+  file = paste0(tables_dir, "/case-cohort-nAb.csv")
 )
          
