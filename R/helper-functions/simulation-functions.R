@@ -60,8 +60,8 @@ generate_random_coefficients_vaccine <- function(sd_beta_clin_treatment, sd_beta
 
 # Function to simulate a single trial with passed trial-level parameters.
 simulate_trial_proof_of_concept <- function(n, coefficients) {
-  # Randomization: Treatment assignment (1 or 0). Simple randomization is
-  # assumed.
+  # Randomization: Treatment assignment (1 or 0). We assume an equal number of
+  # participants in each arm.
   treatment <- c(rep(0, n %/% 2), rep(1, (n + 1) %/% 2))  # 1 = treatment, 0 = control
   
   # Baseline covariates: One covariate from a Bernoulli distribution with
@@ -72,9 +72,8 @@ simulate_trial_proof_of_concept <- function(n, coefficients) {
   # distribution of the surrogate does not depend on the baseline covariate.
   surrogate <- coefficients$beta_surr_treatment * treatment + rnorm(n)
   
-  # Simulate clinical endpoint with no random coefficients. We're assuming that
-  # the regression of the clinical endpoint on the surrogate and covariate is
-  # the same across trials modulus some small random treatment effect.
+  # Simulate clinical endpoint. The corrsponding regression coefficients depend
+  # on the random trial-level coefficients in `coefficients`.
   clinical <- -0.5 * surrogate * X1 + surrogate * (1 - X1) + 
     coefficients$beta_clin_treatment * treatment +
     coefficients$beta_clin_surrogate * surrogate ^ 2 +
@@ -88,11 +87,12 @@ simulate_trial_proof_of_concept <- function(n, coefficients) {
 
 # Function to simulate a single vaccine trial. 
 simulate_trial_vaccine = function(n, coefficients) {
-  # Randomization: Treatment assignment (1 or 0). Simple randomization is
-  # assumed.
+  # Randomization: Treatment assignment (1 or 0). We assume an equal number of
+  # participants in each arm.
   treatment <- c(rep(0, n %/% 2), rep(1, (n + 1) %/% 2)) # 1 = treatment, 0 = control
   
-  # Baseline covariates: One covariate from a Bernoulli distribution with
+  # Baseline covariates: Two covariates that are normally distributed with
+  # trial-specific means and one covariate from a Bernoulli distribution with
   # probability p1.
   X1 = rnorm(n, mean = coefficients$mu1)
   X2 = rnorm(n, mean = coefficients$mu2)
@@ -102,7 +102,7 @@ simulate_trial_vaccine = function(n, coefficients) {
   # distribution of the surrogate does not depend on the baseline covariates.
   surrogate <- coefficients$beta_surr_treatment * treatment + rnorm(n)
   
-  # Simulate clinical endpoint with no random coefficients. 
+  # Simulate clinical endpoint. 
   eta = coefficients$beta_clin_treatment * treatment - 
     (1 + coefficients$beta_clin_surrogate + 1 * X3) * surrogate +
     X1 - 2 * X3
