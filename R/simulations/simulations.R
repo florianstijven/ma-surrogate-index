@@ -175,7 +175,6 @@ print(Sys.time() - a)
 
 ## Approximate the true trial-level correlation parameter ------------------
 
-
 # For each surrogate index prediction function, approximate the true trial-level
 # correlation through MC approximation.
 meta_analytic_data$rho_true = future_pmap_dbl(
@@ -193,7 +192,9 @@ meta_analytic_data$rho_true = future_pmap_dbl(
                 regime) {
     if (surrogate_index_estimator == "surrogate") {
       # We will not compute the true rho for the surrogate because this is the
-      # same true rho across simulations. This value is computed later on.
+      # same true rho across simulations. This value is computed later on just
+      # once per setting, so avoiding numerically computing the same thing many
+      # times.
       return(NA)
     } else {
       return(
@@ -241,10 +242,10 @@ rho_true_surrogate_tbl = tibble(
     )
   )
 
-
-
 print(Sys.time() - a)
-# Add the true trial-level rho parameters to the tibble with the simulation data
+
+
+# Add the true trial-level rho parameters to the tibble with the simulated data
 # sets.
 meta_analytic_data = meta_analytic_data %>%
   left_join(
@@ -268,7 +269,8 @@ print(Sys.time() - a)
 meta_analytic_data_simulated = meta_analytic_data %>%
   cross_join(expand_grid(
     estimator_adjustment = c("N - 1"),
-    sandwich_adjustment = c("N - 1")
+    sandwich_adjustment = c("N - 1"),
+    nearest_PD = c(TRUE, FALSE)
   )) %>%
   rowwise(everything()) %>%
   summarise(
@@ -279,7 +281,8 @@ meta_analytic_data_simulated = meta_analytic_data %>%
         treatment_effects$treatment_effect_clin,
         treatment_effects$covariance_matrix,
         estimator_adjustment = estimator_adjustment,
-        sandwich_adjustment = sandwich_adjustment
+        sandwich_adjustment = sandwich_adjustment,
+        nearest_PD = nearest_PD
       )
     ),
     # Estimate the trial-level Pearson correlation using the delta method.
@@ -302,14 +305,15 @@ meta_analytic_data_simulated = meta_analytic_data %>%
 
 print(Sys.time() - a)
 
-statistic_function_factory = function(estimator_adjustment) {
+statistic_function_factory = function(estimator_adjustment, nearest_PD) {
   statistic_f = function(data, weights) {
     moment_estimate = moment_estimator(
       alpha_hat = data$treatment_effect_surr,
       beta_hat = data$treatment_effect_clin,
       vcov_list = data$covariance_matrix,
       estimator_adjustment = estimator_adjustment,
-      weights = weights
+      weights = weights,
+      nearest_PD = nearest_PD
     )
     rho = rho_delta_method(
       coefs = moment_estimate$coefs,
@@ -334,18 +338,24 @@ if (regime == "small") {
     meta_analytic_data_simulated %>%
       mutate(CI_type = "sandwich"),
     meta_analytic_data_simulated %>%
+      cross_join(tibble(nearest_PD = c(TRUE, FALSE))) %>%
       mutate(
         # Compute CIs for rho based on the multiplier bootstrap.
-        rho_ci_bs = furrr::future_map2(
-          .x = treatment_effects,
-          .y = estimator_adjustment,
-          .f = function(treatment_effects, estimator_adjustment) {
+        rho_ci_bs = furrr::future_pmap(
+          .l = list(
+            treatment_effects = treatment_effects,
+            estimator_adjustment = estimator_adjustment,
+            nearest_PD = nearest_PD
+          ),
+          .f = function(treatment_effects,
+                        estimator_adjustment,
+                        nearest_PD) {
             multiplier_bootstrap_ci(
               data = treatment_effects,
-              statistic = statistic_function_factory(estimator_adjustment),
+              statistic = statistic_function_factory(estimator_adjustment, nearest_PD),
               B = B,
-              alpha = 0.05, 
-              type = "BCa"
+              alpha = 0.05,
+              type = "percentile"
             )
           }
         ),
@@ -372,7 +382,7 @@ print(Sys.time() - a)
 
 # Save the simulated MA data sets with the corresponding rho estimates and
 # confidence intervals. 
-saveRDS(meta_analytic_data_simulated, paste0("results/raw-results/simple-simulation/ma-sim-results-", 
+saveRDS(meta_analytic_data_simulated, paste0("results/raw-results/simulations/ma-sim-results-", 
         scenario, "-", regime, ".rds"))
  
 print(Sys.time() - a)

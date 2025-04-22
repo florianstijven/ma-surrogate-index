@@ -389,7 +389,8 @@ rho_MC_approximation = function(f = NULL,
 
   } else if (scenario == "vaccine") {
     # For the vaccine scenario, we use the log RR as effect measure, except when
-    # f is just the surrogate (which is true when f is NULL). In that case, we use the mean difference.
+    # f is just the surrogate (which is true when f is NULL). In that case, we
+    # use the mean difference.
     if (is.null(f)) {
       measure = c("mean difference", "log RR")
       f = function(x) x$surrogate
@@ -398,6 +399,7 @@ rho_MC_approximation = function(f = NULL,
     }
     # The covariance estimator for log RR is not unbiased (but it is
     # consistent). This means that `n_approximation_MC` should be large enough.
+    # We use 2000 as a cut-off, although this is arbitrary.
     if (n_approximation_MC < 2000) {
       stop(
         "The number of MC samples should be at least 2000 for the vaccine scenario to ensure a good approximation."
@@ -408,7 +410,6 @@ rho_MC_approximation = function(f = NULL,
   }
   
 
-  
   # Initialize a list to put the simulated estimated treatment effects etc in.
   # By defining this list before the for loop, we can speed up the for loop.
   treatment_effect_surr = rep(0L, N_approximation_MC)
@@ -470,7 +471,6 @@ rho_MC_approximation = function(f = NULL,
     vcov_list, 
     SE = FALSE
   )
-  
   
   # Estimate the trial-level Pearson correlation using the delta method. We only
   # need the point estimate in this MC approximation.
