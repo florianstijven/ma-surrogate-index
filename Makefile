@@ -6,6 +6,7 @@ data = data/processed_data.csv
 all: results/raw-results/simple-simulation/ma-sim-results-proof-of-concept-small.rds \
 	results/raw-results/simple-simulation/ma-sim-results-vaccine-small.rds \
 	results/raw-results/simple-simulation/ma-sim-results-proof-of-concept-large.rds \
+	R/application/data-exploration.Rout \
 	R/application/meta_analysis.Rout
 	
 
