@@ -17,51 +17,55 @@ if (parallelly::supportsMulticore()) {
 } else {
   plan(multisession)
 }
-# Extract arguments for analysis. 
-args = commandArgs(trailingOnly=TRUE)
+# Extract arguments for analysis.
+args = commandArgs(trailingOnly = TRUE)
 
-# Under which scenario should the simulations be conducted? 
+# Under which scenario should the simulations be conducted? ("vaccine" or
+# "proof-of-concept")
 scenario = args[1]
 # Are the simulations small or large sample? Large sample is just to illustrate
-# problems under some asymptotic regimes.
+# problems under some asymptotic regimes. ("small" or "large")
 regime = args[2]
 # Number of Monte Carlo simulations.
 N_MC = as.numeric(args[3])
 
 # This script simulates data. We set a seed to ensure reproducibility.
-set.seed(123) 
+set.seed(123)
 
 # Number of bootstrap replications for the multiplier bootstrap
-B = 5e2
+B = 1e3
 
- 
-# Set within-trial sample size depending on the scenario
+
+# Set different kinds of sample-size parameters depending on the scenario.
 if (scenario == "proof-of-concept") {
+  # Within-trial sample size
   n = 2e3
-  N = c(6, 12, 24)  # Number of trials in each meta-analytic data set
+  # Number of indepnedent trials
+  N = c(6, 12, 24)
   
   # Number of Monte Carlo trial replications for the approximation of the true
   # trial-level correlation.
-  N_approximation_MC = 2e4 
+  N_approximation_MC = 2e4
   # Number of patients in each trial for the approximation of the true
   # trial-level correlation. This can be small for the proof-of-concept scenario
-  # because that is based on differences in sample means, for the standard
+  # because that is based on differences in sample means for which the standard
   # covariance estimator is unbiased.
-  n_approximation_MC = 2e2  
-  
+  n_approximation_MC = 2e2
 } else if (scenario == "vaccine") {
+  # Within-trial sample size
   n = 4e3
-  N = c(6, 12)  # Number of trials in each meta-analytic data set
+  # Number of independent trials
+  N = c(6, 12, 24)
   
   
   # Number of Monte Carlo trial replications for the approximation of the true
   # trial-level correlation.
-  N_approximation_MC = 5e3 
+  N_approximation_MC = 5e3
   # Number of patients in each trial for the approximation of the true
   # trial-level correlation. This should be large in the vaccine scenario
   # because the standard covariance estimator (based on the delta method) for
-  # log RR estimators is consistent but biased. 
-  n_approximation_MC = 4e3  
+  # log RR estimators is consistent but biased.
+  n_approximation_MC = 4e3
 }
 
 
@@ -80,13 +84,13 @@ if (regime == "small") {
     stop("The large sample regime is not suitable for the vaccine scenario.")
   }
   # This regime corresponds to the large N small n asymptotic regime. This
-  # scenario is artifical and just meant to show when methods can break. 
+  # scenario is artificial and just meant to show when methods can break. 
   N = c(100, 500, 1e3, 2e3, 5e3)  # Number of trials in each meta-analytic data set
   # The within-trial sample size is set to something small. 
   n = c(100, 500, 1e3, 2e3, 5e3)
   
   # The approximation accuracy for the true rho is increased for the large N
-  # setting. In this setting, the SD of the estimators will be much smaller; so,
+  # setting. In this setting, the SE of the estimators will be much smaller; so,
   # the MC error in the true rho is relatively more important. 
   N_approximation_MC = 2e5
   n_approximation_MC = 5e2
@@ -107,17 +111,21 @@ source("R/helper-functions/delta-method-rho-trial.R")
 source("R/helper-functions/multiplier-bootstrap.R")
 source("R/helper-functions/train-clinical-prediction-models.R")
 
-# Formula for simple surrogate index estimator based on linear model.
+# Set the surrogate index estimation methods.
 if (scenario == "proof-of-concept") {
-  # Set surrogate index estimators
+  # The clinical endpoint for the proof-of-concept scenario is continuous and
+  # the underlying DGM is quite simple; so, we use linear regression here. 
   surrogate_index_estimator = c("surrogate", "lm")
   # We only look at the original surrogate for the large regime. This saves some
-  # computational time.
+  # computational time because the true correlation parameter is
+  # non-data-adaptive and thus only has to be computed once.
   if (regime == "large") {
     surrogate_index_estimator = c("surrogate")
   }
 } else if (scenario == "vaccine") {
-  # Set surrogate index estimators
+  # The clinical endpoint for the vaccine scenario is binary. So, we use
+  # logistic regression or a GAM logistic regression model to estimate the
+  # surrogate index here.
   surrogate_index_estimator = c("surrogate", "logistic", "gam")
 }
 
@@ -132,7 +140,7 @@ dgm_param_tbl = expand_grid(tibble(sd_beta, SI_violation), N, n) %>%
 ## Simulate IPD data and compute trial-level estimates  --------------------
 
 # Generate N meta-analytic data sets and compute the trial-level Pearson
-# correlation for (i) he treatment effects on the surrogate and clinical
+# correlation for (i) the treatment effects on the surrogate and clinical
 # endpoints and (ii) the treatment effects on the surrogate index and clinical
 # endpoint.
 data_set_indicator = 1:N_MC
