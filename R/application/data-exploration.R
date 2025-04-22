@@ -81,9 +81,9 @@ cumulative_incidence_control_tbl = df %>%
   filter(treatment == 0) %>%
   select(-treatment)
 
-# Define new variable indicating whether infection was observed by 120 days.
+# Define new variable indicating whether infection was observed by 80 days.
 df = df %>%
-  mutate(infection_120d = ifelse(time_to_event <= 120 & event == 1, 1, 0))
+  mutate(infection_120d = ifelse(time_to_event <= time_cumulative_incidence & event == 1, 1, 0))
 
 
 

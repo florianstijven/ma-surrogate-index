@@ -1,6 +1,7 @@
 library(tidyverse)
 
 
+
 p3001_file = "S:/p3001/analysis/correlates/Part_A_Blinded_Phase_Data/adata/moderna_real_data_processed_20230919.csv"
 p3002_file = "S:/p3002/analysis/correlates/Part_A_Blinded_Phase_Data/adata/azd1222_data_processed_with_riskscore.csv"
 p3003_file = "S:/p3003/analysis/correlates/Part_A_Blinded_Phase_Data/adata/janssen_pooled_partA_data_processed_with_riskscore_20240305.csv"
@@ -43,7 +44,12 @@ p3001 = read.csv(p3001_file) %>%
     time_to_event = EventTimePrimaryD57
   ) %>%
   mutate(
-    USUBJID = paste0("mRNA-1273-P301-", stringr::str_sub(Ptid, 1, 5), "-", stringr::str_sub(Ptid, 6, 9)),
+    USUBJID = paste0(
+      "mRNA-1273-P301-",
+      stringr::str_sub(Ptid, 1, 5),
+      "-",
+      stringr::str_sub(Ptid, 6, 9)
+    ),
     case_cohort_weight_nAb = case_cohort_weight_bAb,
     Delta_nAb = Delta_bAb,
     protocol = "p3001",
@@ -51,7 +57,7 @@ p3001 = read.csv(p3001_file) %>%
   )
 
 # AstraZeneca
-p3002 = read.csv(p3002_file) %>% filter(Bserostatus == 0) %>%
+p3002 = read.csv(p3002_file) %>%
   dplyr::select(
     Ptid,
     Trt,
@@ -176,7 +182,7 @@ p3004 = read.csv(p3004_file) %>%
   )
 
 # Sanofi
-p3005 = read.csv(p3005_file) %>% 
+p3005 = read.csv(p3005_file) %>%
   dplyr::select(
     Ptid,
     Trt,
@@ -185,15 +191,15 @@ p3005 = read.csv(p3005_file) %>%
     wt.D43.bAb,
     wt.D43.nAb,
     age.geq.65,
-    HighRiskInd, 
-    risk_score, 
+    HighRiskInd,
+    risk_score,
     CalendarDateEnrollment,
-    Wstratum, 
+    Wstratum,
     EventIndPrimaryD43,
-    ph1.D43, 
+    ph1.D43,
     ph2.D43.bAb,
     ph2.D43.nAb,
-    EventTimePrimaryD43, 
+    EventTimePrimaryD43,
     Country,
     WhiteNonHispanic,
     Sex,
@@ -223,49 +229,36 @@ p3005 = read.csv(p3005_file) %>%
 
 
 # combine trials into one dataframe
-data_all = bind_rows(
-  p3001,
-  p3002,
-  p3003,
-  p3004,
-  p3005
-) %>%
-  rename(treatment = Trt) 
+data_all = bind_rows(p3001, p3002, p3003, p3004, p3005) %>%
+  rename(treatment = Trt)
 
-# Record number of rows before filtering the data. 
+# Record number of rows before filtering the data.
 n1 = nrow(data_all)
 
-# Drop patients that were not included in the phase 1 set. 
+# Drop patients that were not included in the phase 1 set.
 data_all = data_all %>%
-  filter(phase1_ind == TRUE) 
+  filter(phase1_ind == TRUE)
 
 n2 = nrow(data_all)
 n1 - n2
-# 10196 rows were dropped.
+# 10350 rows were dropped.
 
 
-# Drop patients with missing covariates. 
+# Drop patients with missing covariates.
 data_all = data_all %>%
-  filter(if_all(
-    c(
-      age.geq.65,
-      HighRiskInd,
-      Sex,
-      BMI
-    ),
-    complete.cases
-  )) 
+  filter(if_all(c(age.geq.65, HighRiskInd, Sex, BMI, Age, risk_score), complete.cases))
 
 n3 = nrow(data_all)
-n2 - n3 
-# 475 rows were dropped.
+n2 - n3
+# 6686 rows were dropped.
 
 # Drop patients with Infinite case-cohort weights.
 data_all = data_all %>%
-  filter(is.finite(case_cohort_weight_nAb) & is.finite(case_cohort_weight_bAb))
+  filter(is.finite(case_cohort_weight_nAb) &
+           is.finite(case_cohort_weight_bAb))
 n4 = nrow(data_all)
-n3 - n4 
-# 19 rows dropped.
+n3 - n4
+# 0 rows dropped.
 
 # Drop non-naive patients from trial other than Sanofi.
 data_all = bind_rows(data_all %>%
@@ -273,6 +266,9 @@ data_all = bind_rows(data_all %>%
                      data_all %>%
                        filter(!(protocol %in% c("p3005"))) %>%
                        filter(!Bserostatus))
+n5 = nrow(data_all)
+n4 - n5
+# 435 rows dropped.
 
 write.csv(data_all, "data/CrossProtocolData.csv")
 

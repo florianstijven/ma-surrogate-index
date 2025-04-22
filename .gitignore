@@ -59,6 +59,7 @@ data/*.csv
 # Results
 results/*/*.csv
 results/*/*/*.csv
+results/*/*/*/*.csv
 *.Rout
 *.txt
 *.out
