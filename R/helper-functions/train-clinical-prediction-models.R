@@ -1,4 +1,4 @@
-# Function to emulate a prediction that just retuns the surrogate. 
+# Function to emulate a prediction that just returns the surrogate. 
 train_clinical_prediction_model_surrogate = function(simulated_data) {
   return(function(newdata) {
     return(newdata$surrogate)
@@ -15,6 +15,7 @@ train_clinical_prediction_model_lm <- function(simulated_data) {
     data = simulated_data,
     x = FALSE,
     y = FALSE,
+    model = FALSE,
     family = gaussian()
   )
   
@@ -33,6 +34,7 @@ train_clinical_prediction_model_logistic = function(simulated_data) {
     data = simulated_data,
     x = FALSE,
     y = FALSE,
+    model = FALSE,
     family = binomial()
   )
   
@@ -41,7 +43,7 @@ train_clinical_prediction_model_logistic = function(simulated_data) {
   })
 }
 
-# Function to train the clinical prediction mode based on GAM logistic regression
+# Function to train the clinical prediction model based on GAM logistic regression
 # for the vaccine scenario.
 train_clinical_prediction_model_gam = function(simulated_data) {
   # Fit GAM logistic model.
@@ -68,7 +70,7 @@ train_clinical_prediction_model_gam = function(simulated_data) {
   })
 }
 
-# Function to train the clinical prediction mode based on HAL logistic regression
+# Function to train the clinical prediction model based on HAL logistic regression
 # for the vaccine scenario.
 train_clinical_prediction_model_hal = function(simulated_data) {
   # Fit a GLM to get the correct model matrix.
