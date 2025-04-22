@@ -4,7 +4,7 @@
 # beta_surr_treatment is the mean treatment effect on the surrogate endpoint.
 # beta_clin_treatment is the "additional" treatment effect on the clinical
 # endpoint in a model conditional on the baseline covariate and surrogate.
-generate_random_coefficients_proof_of_concept <- function(sd_beta_clin_treatment = 0.10, sd_beta_clin_surrogate = 0.10) {
+generate_random_coefficients_proof_of_concept <- function(sd_beta_clin_treatment, sd_beta_clin_surrogate) {
   # Sample trial-level proportion parameter for baseline covariate from uniform
   # distribution. 
   p1 <- runif(1, min = 0.3, max = 0.7)
@@ -28,7 +28,7 @@ generate_random_coefficients_proof_of_concept <- function(sd_beta_clin_treatment
 }
 
 
-generate_random_coefficients_vaccine <- function(sd_beta_clin_treatment = 0.10, sd_beta_clin_surrogate = 0.10) {
+generate_random_coefficients_vaccine <- function(sd_beta_clin_treatment, sd_beta_clin_surrogate) {
   # Sample trial-level proportion parameter for X3 from uniform
   # distribution. 
   p1 <- runif(1, min = 0.25, max = 0.75)
@@ -134,9 +134,13 @@ simulate_trials_with_random_coefficients <- function(N, n, sd_beta, scenario) {
   trials <- lapply(1:N, function(i,
                                  sd_beta_clin_treatment,
                                  sd_beta_clin_surrogate) {
-    coefficients <- generate_random_coefficients(sd_beta_clin_treatment, sd_beta_clin_surrogate)  # generate new random coefficients for each trial
+    # generate new random coefficients for each trial
+    coefficients <- generate_random_coefficients(sd_beta_clin_treatment, sd_beta_clin_surrogate)
+    # Given the trial-level coefficients, generate the indivdual-patient data
+    # for the given trial.
     trial_data <- simulate_trial(n = n, coefficients = coefficients)
-    trial_data$trial <- i  # Add a trial-level variable
+    # Add a trial-level variable
+    trial_data$trial <- i
     return(trial_data)
   }, sd_beta_clin_treatment = sd_beta[1], sd_beta_clin_surrogate = sd_beta[2])
   
@@ -148,8 +152,8 @@ simulate_trials_with_random_coefficients <- function(N, n, sd_beta, scenario) {
 }
 
 # Function to compute treatment effects with robust standard errors and covariance matrix
-compute_treatment_effects <- function(trial_data, method = "adjusted", formula = NULL, measure = rep("mean difference", "mean difference")) {
-  # If adjusted treatment effects are requires, we fit two univariate linear
+compute_treatment_effects <- function(trial_data, method, formula = NULL, measure = rep("mean difference", "mean difference")) {
+  # If adjusted treatment effects are required, we fit two univariate linear
   # regression models and estimate the covariance of the treatment effect
   # estimators through the sandwich estimators.
   if (method == "adjusted") {
@@ -159,12 +163,14 @@ compute_treatment_effects <- function(trial_data, method = "adjusted", formula =
     }
     # Combine the coefficients into a single model to compute the covariance matrix for both treatment effects
     combined_model <- lm(formula, data = trial_data)
-    # Compute the covariance matrix using the sandwich estimator
+    # Compute the covariance matrix using the default sandwich estimator
+    # (indicated by `type = "HC0"`).
     cov_matrix <- sandwich::vcovHC(combined_model, type = "HC0")
     
     # Extract the covariance matrix between the treatment effects on surrogate and clinical
     cov_surr_clin <- cov_matrix[c("surrogate:treatment", "clinical:treatment"), c("surrogate:treatment", "clinical:treatment")]  # Covariance between treatment effects
-    # Return a tibble with the treatment effects, standard errors, and covariance matrix
+    # Return a tibble with the treatment effects, standard errors, and
+    # covariance matrix.
     treatment_effects <- tibble(
       treatment_effect_surr = coef(combined_model)["treatment", "surrogate"],  # Treatment effect on surrogate
       se_surr = sqrt(cov_surr_clin["surrogate:treatment", "surrogate:treatment"]),  # Robust standard error for surrogate treatment effect
@@ -175,8 +181,8 @@ compute_treatment_effects <- function(trial_data, method = "adjusted", formula =
   } else if (method == "mean") {
     # Compute treatment and outcome specific means.
     surr_mean_0 = mean(trial_data$surrogate[trial_data$treatment == 0])
-    surr_mean_1 = mean(trial_data$surrogate[trial_data$treatment == 1])
     clin_mean_0 = mean(trial_data$clinical[trial_data$treatment == 0])
+    surr_mean_1 = mean(trial_data$surrogate[trial_data$treatment == 1])
     clin_mean_1 = mean(trial_data$clinical[trial_data$treatment == 1])
     
     # Sample covariance matrices in each treatment group.
@@ -187,7 +193,8 @@ compute_treatment_effects <- function(trial_data, method = "adjusted", formula =
     n0 = sum(trial_data$treatment == 0)
     n1 = sum(trial_data$treatment == 1)
     
-    # Compute covariance matrix of (surr_mean_0, clin_mean_0, surr_mean_1, clin_mean_1)'.
+    # Compute covariance matrix of (surr_mean_0, clin_mean_0, surr_mean_1,
+    # clin_mean_1)'.
     covariance_matrix_means = Matrix::bdiag(list(vcov_0 / n0, vcov_1 / n1)) %>%
       as.matrix()
     
@@ -198,13 +205,13 @@ compute_treatment_effects <- function(trial_data, method = "adjusted", formula =
       
       # Vector of partial derivatives of surr_mean_1 - surr_mean_0 with
       # respect to (surr_mean_0, clin_mean_0, surr_mean_1, clin_mean_1)'.
-      partial_s = c(1, 0, 1, 0)
+      partial_s = c(-1, 0, 1, 0)
     } else if (measure[1] == "VE") {
       treatment_effect_surr = 1 - (surr_mean_1 / surr_mean_0)
       
       # Vector of partial derivatives of 1 - (surr_mean_1 / surr_mean_0) with
       # respect to (surr_mean_0, clin_mean_0, surr_mean_1, clin_mean_1)'.
-      partial_s = c(surr_mean_1 * surr_mean_0 ^ (-2), 0, -1 / surr_mean_0, 0)
+      partial_s = c(-1 * surr_mean_1 * surr_mean_0 ^ (-2), 0, -1 / surr_mean_0, 0)
     } else if (measure[1] == "log RR") {
       treatment_effect_surr = log(surr_mean_1 / surr_mean_0)
       
@@ -228,13 +235,13 @@ compute_treatment_effects <- function(trial_data, method = "adjusted", formula =
       
       # Vector of partial derivatives of clin_mean_1 - clin_mean_0 with
       # respect to (surr_mean_0, clin_mean_0, surr_mean_1, clin_mean_1)'.
-      partial_c = c(0, 1, 0, 1)
+      partial_c = c(0, -1, 0, 1)
     } else if (measure[2] == "VE") {
       treatment_effect_clin = 1 - (clin_mean_1 / clin_mean_0)
       
       # Vector of partial derivatives of 1 - (clin_mean_1 / clin_mean_0) with
       # respect to (surr_mean_0, clin_mean_0, surr_mean_1, clin_mean_1)'.
-      partial_c = c(0, clin_mean_1 * clin_mean_0 ^ (-2), 0, -1 / clin_mean_0)
+      partial_c = c(0, -1 * clin_mean_1 * clin_mean_0 ^ (-2), 0, -1 / clin_mean_0)
     } else if (measure[2] == "log RR") {
       treatment_effect_clin = log(clin_mean_1 / clin_mean_0)
       
@@ -274,7 +281,7 @@ compute_treatment_effects <- function(trial_data, method = "adjusted", formula =
 # index as a variable, and computes the treatment effects on (i) the surrogate
 # and clinical endpoints and (ii) the surrogate index and clinical endpoint.
 # This function uses the previously defined functions.
-generate_meta_analytic_data <- function(N, n, surrogate_index_estimators, sd_beta, scenario, regime = "small") {
+generate_meta_analytic_data <- function(N, n, surrogate_index_estimators, sd_beta, scenario, regime) {
   # Simulate data for N trials with random coefficients
   trials_data <- simulate_trials_with_random_coefficients(N = N, n = n, sd_beta = sd_beta, scenario = scenario) 
   
@@ -288,14 +295,15 @@ generate_meta_analytic_data <- function(N, n, surrogate_index_estimators, sd_bet
   for (i in seq_along(1:length(surrogate_index_estimators))) {
     if (scenario == "proof-of-concept") {
       if (regime == "small") {
-        # For the small N proof of concept scenario, we use adjusted treatment
+        # For the small N proof-of-concept scenario, we use adjusted treatment
         # effect estimators for the mean difference.
         method = "adjusted"
         formula = formula(cbind(surrogate, clinical) ~ treatment + X1)
         measure = c("mean difference", "mean difference")
       } else if (regime == "large") {
-        # For the small N proof of concept scenario, we use the exponentiated
-        # mean difference as effect measure.
+        # For the large N proof of concept scenario, we use adjusted treatment
+        # effect estimators for the mean differences where we adjust for "too
+        # many" covariates. This induces some bias in the sandwich SE estimator.
         method = "adjusted"
         formula = formula(cbind(surrogate, clinical) ~ treatment + X1 + bs(X2, df = 8))
         measure = c("mean difference", "mean difference")
@@ -312,7 +320,7 @@ generate_meta_analytic_data <- function(N, n, surrogate_index_estimators, sd_bet
       method = "mean"
       formula = NULL
       measure = c("log RR", "log RR")
-      # IF the surrogate index is just the surrogate, we still have to use the
+      # If the surrogate index is just the surrogate, we still have to use the
       # mean difference for the surrogate index.
       if (surrogate_index_estimators[i] == "surrogate") {
         measure[1] = "mean difference"
@@ -322,10 +330,12 @@ generate_meta_analytic_data <- function(N, n, surrogate_index_estimators, sd_bet
       stop("`scenario` is not valid.")
     }
     
-    # Train the clinical prediction model and add the surrogate index to the data
+    # Train the clinical prediction model and add the surrogate index to the
+    # data. If the `surrogate_index_estimator` is just the surrogate, the
+    # surrogate is simply returned by the following function.
     surrogate_index_f = train_clinical_prediction_model(trials_data, method = surrogate_index_estimators[i])
     trials_data$surr_index <- surrogate_index_f(trials_data)
-    # Compute treatment effects for each trial
+    # Compute treatment effects for each trial.
     MA_data_list[[i]] <- trials_data %>%
       group_by(trial) %>%
       reframe(
