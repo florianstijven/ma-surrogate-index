@@ -338,7 +338,6 @@ if (regime == "small") {
     meta_analytic_data_simulated %>%
       mutate(CI_type = "sandwich"),
     meta_analytic_data_simulated %>%
-      cross_join(tibble(nearest_PD = c(TRUE, FALSE))) %>%
       mutate(
         # Compute CIs for rho based on the multiplier bootstrap.
         rho_ci_bs = furrr::future_pmap(
