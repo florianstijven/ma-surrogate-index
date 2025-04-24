@@ -74,9 +74,9 @@ if (regime == "small") {
   # control the surrogacy and comparability assumptions. A non-zero variance
   # implies some violation of these assumptions.
   if (scenario == "vaccine") {
-    sd_beta = list(c(0.10, 0.10), c(0.25, 0.25))
+    sd_beta = list(c(0.125, 0.125), c(0.25, 0.25))
   } else if (scenario == "proof-of-concept") {
-    sd_beta = list(c(0.03, 0.03), c(0.1, 0.1))
+    sd_beta = list(c(0.05, 0.05), c(0.1, 0.1))
   }
   SI_violation = c("slight", "moderate")
 } else if (regime == "large") {
@@ -84,14 +84,14 @@ if (regime == "small") {
     stop("The large sample regime is not suitable for the vaccine scenario.")
   }
   # This regime corresponds to the large N small n asymptotic regime. This
-  # scenario is artificial and just meant to show when methods can break. 
+  # scenario is artificial and just meant to show when methods can break.
   N = c(100, 500, 1e3, 2e3, 5e3)  # Number of trials in each meta-analytic data set
-  # The within-trial sample size is set to something small. 
+  # The within-trial sample size is set to something small.
   n = c(100, 500, 1e3, 2e3, 5e3)
   
   # The approximation accuracy for the true rho is increased for the large N
   # setting. In this setting, the SE of the estimators will be much smaller; so,
-  # the MC error in the true rho is relatively more important. 
+  # the MC error in the true rho is relatively more important.
   N_approximation_MC = 2e5
   n_approximation_MC = 5e2
   
@@ -114,7 +114,7 @@ source("R/helper-functions/train-clinical-prediction-models.R")
 # Set the surrogate index estimation methods.
 if (scenario == "proof-of-concept") {
   # The clinical endpoint for the proof-of-concept scenario is continuous and
-  # the underlying DGM is quite simple; so, we use linear regression here. 
+  # the underlying DGM is quite simple; so, we use linear regression here.
   surrogate_index_estimator = c("surrogate", "lm")
   # We only look at the original surrogate for the large regime. This saves some
   # computational time because the true correlation parameter is
@@ -145,8 +145,7 @@ dgm_param_tbl = expand_grid(tibble(sd_beta, SI_violation), N, n) %>%
 # endpoint.
 data_set_indicator = 1:N_MC
 
-meta_analytic_data = expand_grid(data_set_indicator,
-                                 dgm_param_tbl) %>%
+meta_analytic_data = expand_grid(data_set_indicator, dgm_param_tbl) %>%
   mutate(
     list_of_ma_data_objects = future_pmap(
       .l = list(
@@ -158,8 +157,9 @@ meta_analytic_data = expand_grid(data_set_indicator,
       .f = generate_meta_analytic_data,
       scenario = scenario,
       regime = regime,
-      .options = furrr_options(seed = TRUE)),
-   ) %>%
+      .options = furrr_options(seed = TRUE)
+    ),
+  ) %>%
   rowwise(everything()) %>%
   reframe(
     tibble(
@@ -224,10 +224,7 @@ meta_analytic_data = meta_analytic_data %>%
 print(Sys.time() - a)
 
 # Approximate the true trial-level correlation using the surrogate endpoint.
-rho_true_surrogate_tbl = tibble(
-  sd_beta, 
-  SI_violation
-) %>%
+rho_true_surrogate_tbl = tibble(sd_beta, SI_violation) %>%
   mutate(surrogate_index_estimator = "surrogate") %>%
   mutate(
     rho_true = future_map_dbl(
@@ -251,7 +248,7 @@ meta_analytic_data = meta_analytic_data %>%
   left_join(
     rho_true_surrogate_tbl %>%
       select(-sd_beta),
-    by = c("SI_violation", "surrogate_index_estimator"), 
+    by = c("SI_violation", "surrogate_index_estimator"),
     relationship = "many-to-one"
   ) %>%
   # rho_true is present in both tibbles before joining. Hence, we get rho_true.x
@@ -298,7 +295,7 @@ meta_analytic_data_simulated = meta_analytic_data %>%
     rho_se = rho_delta_method$se,
     rho_ci_lower = rho_delta_method$ci[1],
     rho_ci_upper = rho_delta_method$ci[2]
-  ) %>% 
+  ) %>%
   ungroup() %>%
   # Drop superfluous variables
   select(-moment_estimates, -rho_delta_method)
@@ -380,11 +377,18 @@ print(Sys.time() - a)
 # Save Results -------------------------------------------------------------
 
 # Save the simulated MA data sets with the corresponding rho estimates and
-# confidence intervals. 
-saveRDS(meta_analytic_data_simulated, paste0("results/raw-results/simulations/ma-sim-results-", 
-        scenario, "-", regime, ".rds"))
- 
+# confidence intervals.
+saveRDS(
+  meta_analytic_data_simulated,
+  paste0(
+    "results/raw-results/simulations/ma-sim-results-",
+    scenario,
+    "-",
+    regime,
+    ".rds"
+  )
+)
+
 print(Sys.time() - a)
 
-  
 
