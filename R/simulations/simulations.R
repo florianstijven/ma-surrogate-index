@@ -53,7 +53,7 @@ if (scenario == "proof-of-concept") {
   n_approximation_MC = 2e2
 } else if (scenario == "vaccine") {
   # Within-trial sample size
-  n = 4e3
+  n = 5e3
   # Number of independent trials
   N = c(6, 12, 24)
   
@@ -65,7 +65,7 @@ if (scenario == "proof-of-concept") {
   # trial-level correlation. This should be large in the vaccine scenario
   # because the standard covariance estimator (based on the delta method) for
   # log RR estimators is consistent but biased.
-  n_approximation_MC = 4e3
+  n_approximation_MC = 5e3
 }
 
 

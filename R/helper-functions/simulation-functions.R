@@ -38,7 +38,7 @@ generate_random_coefficients_vaccine <- function(sd_beta_clin_treatment, sd_beta
   mu2 = runif(1, min = -1, max = 1)
   
   # Sample random treatment effect on surrogate. 
-  beta_surr_treatment <- runif(1, min = 0.25, max = 2.5)
+  beta_surr_treatment <- runif(1, min = 0, max = 2.5)
   
   # Sample random treatment effect on clinical endpoint.
   beta_clin_treatment <- rnorm(1, mean = 0, sd = sd_beta_clin_treatment)
