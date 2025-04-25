@@ -109,6 +109,19 @@ estimand_plot_1 = ma_sim_results %>%
   scale_color_discrete(name = "Surr. Index Estimator", drop = FALSE) +
   facet_grid(SI_violation ~ N, scales = "free")
 
+estimand_plot_1
+ggsave(
+  filename = "distribution-estimands-proof-of-concept.pdf",
+  path = figures_dir,
+  height = double_height,
+  width = double_width,
+  dpi = res,
+  device = "pdf",
+  units = "cm"
+)
+
+
+
 estimand_plot_2 = ma_sim_results %>%
   filter(
     surrogate_index_estimator != "surrogate",
@@ -135,10 +148,9 @@ estimand_plot_2 = ma_sim_results %>%
   scale_color_discrete(name = "Surr. Index Estimator", drop = FALSE) +
   facet_grid(SI_violation ~ N, scales = "free")
 
-ggarrange(estimand_plot_1, estimand_plot_2, common.legend = TRUE, legend = "bottom", labels = "auto")
-
+estimand_plot_2
 ggsave(
-  filename = "distribution-estimands.pdf",
+  filename = "distribution-estimands-vaccine.pdf",
   path = figures_dir,
   height = double_height,
   width = double_width,
@@ -146,6 +158,18 @@ ggsave(
   device = "pdf",
   units = "cm"
 )
+
+# ggarrange(estimand_plot_1, estimand_plot_2, common.legend = TRUE, legend = "bottom", labels = "auto")
+
+# ggsave(
+#   filename = "distribution-estimands.pdf",
+#   path = figures_dir,
+#   height = double_height,
+#   width = double_width,
+#   dpi = res,
+#   device = "pdf",
+#   units = "cm"
+# )
 
 
 ## Estimation Accuracies --------------------------------------------------
@@ -220,7 +244,7 @@ ma_sim_summary %>%
   geom_line() +
   geom_abline(intercept = 0, slope = 0) +
   scale_x_continuous(breaks = c(6, 12, 24)) +
-  scale_y_continuous(name = "MSE") +
+  scale_y_continuous(name = "MSE", transform = "log10") +
   scale_color_discrete(name = "Surr. Index Estimator") +
   facet_grid(SI_violation ~ scenario) + 
   theme(legend.position = "bottom", legend.box = "vertical")
@@ -286,6 +310,72 @@ ma_sim_summary %>%
 
 ggsave(
   filename = "coverage-bootstrap.pdf",
+  path = figures_dir,
+  height = double_height,
+  width = double_width,
+  dpi = res,
+  device = "pdf",
+  units = "cm"
+)
+
+### Distribution of lower limits ------------------------------------------
+
+ma_sim_results %>%
+  filter(
+    surrogate_index_estimator != "surrogate",
+    setting == "small N, large n",
+    scenario == "proof-of-concept",
+    nearest_PD == TRUE,
+    CI_type == "multiplier bootstrap"
+  ) %>%
+  mutate(surrogate_index_estimator = fct_drop(surrogate_index_estimator, only = c("surrogate"))) %>%
+  ggplot(aes(x = rho_ci_lower), fill = "gray") +
+  geom_histogram(alpha = 0.5, position = "identity", color = "black") +
+  scale_x_continuous(lim = c(-1, 1), name = expr(rho[trial])) +
+  scale_color_discrete(name = "Surr. Index Estimator", drop = FALSE) +
+  facet_grid(SI_violation ~ N, scales = "free") +
+  theme(legend.position = "bottom")
+
+ggsave(
+  filename = "lower-limit-proof-of-concept-nearest-PD-bootstrap.pdf",
+  path = figures_dir,
+  height = double_height,
+  width = double_width,
+  dpi = res,
+  device = "pdf",
+  units = "cm"
+)
+
+ma_sim_results %>%
+  filter(
+    setting == "small N, large n",
+    scenario == "vaccine",
+    nearest_PD == TRUE,
+    CI_type == "multiplier bootstrap"
+  ) %>%
+  mutate(surrogate_index_estimator = fct_drop(surrogate_index_estimator, only = c("surrogate"))) %>%
+  # There is a negative trial-level correlation for the untransformed surrogate.
+  # We therefore use -1 * the upper limit for this setting to be comparable to
+  # with the estimated surrogate index.
+  mutate(
+    rho_ci_lower = ifelse(
+      surrogate_index_estimator == "surrogate",
+      -1 * rho_ci_upper,
+      rho_ci_lower
+    )
+  ) %>%
+  ggplot(aes(x = rho_ci_lower, fill = SI_violation)) +
+  geom_histogram(alpha = 0.5,
+                 position = "identity",
+                 color = "black",
+                 bins = 20) +
+  scale_x_continuous( name = expr(rho[trial])) +
+  scale_color_discrete(name = "Surr. Index Estimator", drop = FALSE) +
+  facet_grid(surrogate_index_estimator ~ N, scales = "free") +
+  theme(legend.position = "bottom")
+
+ggsave(
+  filename = "lower-limit-vaccine-nearest-PD-bootstrap.pdf",
   path = figures_dir,
   height = double_height,
   width = double_width,

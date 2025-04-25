@@ -95,7 +95,7 @@ if (regime == "small") {
   N_approximation_MC = 2e5
   n_approximation_MC = 5e2
   
-  sd_beta = list(c(0.1, 0.1))
+  sd_beta = list(c(0.125, 0.125))
   SI_violation = c("moderate")
 }
 
