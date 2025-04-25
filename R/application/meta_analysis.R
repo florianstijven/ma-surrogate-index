@@ -28,7 +28,7 @@ tables_dir = "results/tables/application/meta-analysis"
 # meta-analytic parameters.
 B_multiplier = 1e3
 
-time_cumulative_incidence = 120
+time_cumulative_incidence = 80
 
 # Set of trials corresponding to each analysis set.
 
@@ -214,7 +214,7 @@ ggsave(
 
 # Helper function for MA plots for the surrogate indices by weighting and
 # analysis_set.
-ma_plot_helper = function(weighting, analysis_set, VE_scale) {
+ma_plot_helper = function(weighting, analysis_set, VE_scale, include_risk_score) {
   # Set of included trials according to analysis_set
   if (analysis_set == "first_four") {
     trials_included = trials_first_four_fct
@@ -226,7 +226,8 @@ ma_plot_helper = function(weighting, analysis_set, VE_scale) {
   ggplot_object = ma_trt_effects_tbl %>% filter(method != "untransformed surrogate", 
                                 analysis_set == .env$analysis_set, 
                                 trial_fct %in% trials_included,
-                                weighting == .env$weighting) %>%
+                                weighting == .env$weighting, 
+                                include_risk_score == .env$include_risk_score) %>%
     ggplot(aes(
       x = 1 - exp(trt_effect_surrogate_index_est),
       y = 1 - exp(log_RR_est),
@@ -267,6 +268,7 @@ ma_plot_helper = function(weighting, analysis_set, VE_scale) {
   
   weighting_chr = ifelse(weighting == "normalized", "normalized", "unnormalized")
   VE_scale_chr = ifelse(VE_scale, "ve-scale", "transformed-scale")
+  include_risk_score_chr = ifelse(include_risk_score, "w-riskscore", "wo-riskscore")
   
   outfile = paste0(
     "ma",
@@ -274,6 +276,8 @@ ma_plot_helper = function(weighting, analysis_set, VE_scale) {
     weighting_chr,
     "-",
     analysis_set,
+    "-",
+    include_risk_score_chr, 
     "-",
     VE_scale_chr,
     ".pdf"
@@ -295,10 +299,11 @@ ma_plot_helper = function(weighting, analysis_set, VE_scale) {
 expand_grid(
   weighting = c("unnormalized"),
   analysis_set = c("first_four", "naive_only", "mixed"),
-  VE_scale = c(FALSE)
+  VE_scale = c(FALSE),
+  include_risk_score = c(TRUE, FALSE)
 ) %>%
   rowwise(everything()) %>%
-  summarise(ma_plot_helper(weighting, analysis_set, VE_scale))
+  summarise(ma_plot_helper(weighting, analysis_set, VE_scale, include_risk_score))
 
 # Create extra plots for the four-trial analysis set where the treatment effects
 # for the excluded trials are shown.
@@ -306,7 +311,8 @@ ma_trt_effects_tbl %>% filter(
   method != "untransformed surrogate",
   analysis_set == "first_four",
   !(trial %in% trials_first_four),
-  weighting == "unnormalized"
+  weighting == "unnormalized",
+  include_risk_score == FALSE
 ) %>%
   ggplot(aes(
     x = 1 - exp(trt_effect_surrogate_index_est),
@@ -331,8 +337,8 @@ ma_trt_effects_tbl %>% filter(
   scale_color_manual(values = my_palette, limits = trials_mixed_fct[!(trials_mixed_fct %in% trials_first_four_fct)]) +
   scale_shape_manual(values = my_shapes, limits = trials_mixed_fct[!(trials_mixed_fct %in% trials_first_four_fct)]) +
   scale_y_continuous(transform = transform_VE, breaks = c(0, 0.5, 0.75, 0.90, 0.95)) +
-  scale_x_continuous(transform = transform_VE, breaks = c(0, 0.90, 0.99, 0.999)) +
-  coord_cartesian(ylim = c(-0.2, 0.95), xlim = c(-0.2, 0.9992)) +
+  scale_x_continuous(transform = transform_VE, breaks = c(0, 0.5, 0.75, 0.90, 0.95)) +
+  coord_cartesian(ylim = c(-0.2, 0.95), xlim = c(-0.2, 0.95)) +
   facet_grid(method ~ surrogate_name) +
   xlab("Predicted VE/Estimated VE on Surr. Index") +
   ylab("Estimated VE") +
@@ -340,7 +346,55 @@ ma_trt_effects_tbl %>% filter(
   guides(color = guide_legend(nrow = 2))
 
 ggsave(
-  filename = "ma-predictions-unnormalized.pdf",
+  filename = "ma-predictions-unnormalized-wo-riskscore.pdf",
+  path = figures_dir,
+  height = double_height,
+  width = double_width,
+  dpi = res,
+  device = "pdf",
+  units = "cm"
+)
+
+ma_trt_effects_tbl %>% filter(
+  method != "untransformed surrogate",
+  analysis_set == "first_four",
+  !(trial %in% trials_first_four),
+  weighting == "unnormalized",
+  include_risk_score == TRUE
+) %>%
+  ggplot(aes(
+    x = 1 - exp(trt_effect_surrogate_index_est),
+    y = 1 - exp(log_RR_est),
+    color = trial_fct,
+    shape = trial_fct
+  )) +
+  geom_point(show.legend = TRUE) +
+  geom_errorbar(aes(
+    ymin = 1 - exp(log_RR_est - 1.96 * log_RR_est_se),
+    ymax = 1 - exp(log_RR_est + 1.96 * log_RR_est_se)
+  ), width = 0.01) +
+  geom_errorbarh(aes(
+    xmin = 1 - exp(
+      trt_effect_surrogate_index_est - 1.96 * trt_effect_surrogate_index_est_se
+    ),
+    xmax = 1 - exp(
+      trt_effect_surrogate_index_est + 1.96 * trt_effect_surrogate_index_est_se
+    )
+  ), height = 0.01) +
+  geom_abline(intercept = 0, slope = 1) +
+  scale_color_manual(values = my_palette, limits = trials_mixed_fct[!(trials_mixed_fct %in% trials_first_four_fct)]) +
+  scale_shape_manual(values = my_shapes, limits = trials_mixed_fct[!(trials_mixed_fct %in% trials_first_four_fct)]) +
+  scale_y_continuous(transform = transform_VE, breaks = c(0, 0.5, 0.75, 0.90, 0.95)) +
+  scale_x_continuous(transform = transform_VE, breaks = c(0, 0.5, 0.75, 0.90, 0.95)) +
+  coord_cartesian(ylim = c(-0.2, 0.95), xlim = c(-0.2, 0.95)) +
+  facet_grid(method ~ surrogate_name) +
+  xlab("Predicted VE/Estimated VE on Surr. Index") +
+  ylab("Estimated VE") +
+  theme(legend.position = "bottom", legend.title = element_blank()) +
+  guides(color = guide_legend(nrow = 2))
+
+ggsave(
+  filename = "ma-predictions-unnormalized-w-riskscore.pdf",
   path = figures_dir,
   height = double_height,
   width = double_width,
@@ -360,7 +414,7 @@ source("R/helper-functions/delta-method-rho-trial.R")
 
 # Helper function that returns the trial-level correlation estimate given a
 # weighted data set.
-statistic_f = function(data, weights) {
+statistic_f_rho = function(data, weights) {
   moment_estimate = moment_estimator(
     alpha_hat = data$treatment_effect_surr,
     beta_hat = data$treatment_effect_clin,
@@ -379,6 +433,22 @@ statistic_f = function(data, weights) {
   )
   
   return(list(estimate = rho$rho, se = rho$se))
+}
+
+statistic_f_residual_var = function(data, weights) {
+  moment_estimate = moment_estimator(
+    alpha_hat = data$treatment_effect_surr,
+    beta_hat = data$treatment_effect_clin,
+    vcov_list = data$covariance_matrix,
+    estimator_adjustment = "N - 1",
+    weights = weights,
+    nearest_PD = TRUE
+  )
+  # Residual variance
+  residual_var = moment_estimate$residual_var
+  
+  
+  return(list(estimate = residual_var, se = NA))
 }
 
 # Construct data set for the treatment effect estimates on the untransformed
@@ -411,7 +481,7 @@ surrogate_results_tbl = ma_trt_effects_tbl %>%
     trial %in% trials_first_four,
     ifelse(analysis_set == "naive_only", trial %in% trials_naive_only, TRUE)
   )) %>%
-  group_by(surrogate, method, weighting, analysis_set) %>%
+  group_by(surrogate, method, weighting, analysis_set, include_risk_score) %>%
   summarise(
     moment_estimate = list(
       moment_estimator(
@@ -431,7 +501,30 @@ surrogate_results_tbl = ma_trt_effects_tbl %>%
             treatment_effect_clin = 'log_RR_est',
             covariance_matrix = "vcov"
           ),
-        statistic = statistic_f,
+        statistic = statistic_f_rho,
+        B = B_multiplier,
+        type = "percentile"
+      )
+    ),
+    rho_sandwich_inference = list(
+      rho_delta_method(
+        coefs = moment_estimate[[1]]$coefs,
+        vcov = moment_estimate[[1]]$vcov,
+        method = "t-adjustment",
+        # N is only used for the t-adjustment, it doesn't matter for the estimate
+        # or SE.
+        N = n()
+      )
+    ),
+    bootstrap_ci_residual_var = list(
+      multiplier_bootstrap_ci(
+        data = pick(everything()) %>%
+          rename(
+            treatment_effect_surr = "trt_effect_surrogate_index_est",
+            treatment_effect_clin = 'log_RR_est',
+            covariance_matrix = "vcov"
+          ),
+        statistic = statistic_f_residual_var,
         B = B_multiplier,
         type = "percentile"
       )
@@ -441,26 +534,37 @@ surrogate_results_tbl = ma_trt_effects_tbl %>%
 
 surrogate_results_tbl = surrogate_results_tbl %>%
   mutate(
-    d_alpha = map_dbl(moment_estimate, function(x) x$coefs[3]),
-    d_beta = map_dbl(moment_estimate, function(x) x$coefs[4]),
-    d_alphabeta = map_dbl(moment_estimate, function(x) x$coefs[5]),
+    d_alpha = map_dbl(moment_estimate, function(x)
+      x$coefs[3]),
+    d_beta = map_dbl(moment_estimate, function(x)
+      x$coefs[4]),
+    d_alphabeta = map_dbl(moment_estimate, function(x)
+      x$coefs[5]),
     rho_trial = d_alphabeta / sqrt(d_alpha * d_beta),
-    residual_var = map_dbl(moment_estimate, function(x) x$residual_var)
+    residual_var = map_dbl(moment_estimate, function(x)
+      x$residual_var),
+    CI_lower_bs = purrr::map_dbl(bootstrap_ci, "ci_lower"),
+    CI_upper_bs = purrr::map_dbl(bootstrap_ci, "ci_upper"),
+    CI_lower_bs_residual_var = purrr::map_dbl(bootstrap_ci_residual_var, "ci_lower"),
+    CI_upper_bs_residual_var = purrr::map_dbl(bootstrap_ci_residual_var, "ci_upper"),
+    CI_lower_sandwich = map_dbl(rho_sandwich_inference, function(x)
+      x$ci[[1]]),
+    CI_upper_sandwich = map_dbl(rho_sandwich_inference, function(x)
+      x$ci[[2]]),
+    rho_se = map_dbl(rho_sandwich_inference, function(x)
+      x$se)
   )
 
 # Summarize inferences in a table.
 surrogate_results_tbl = surrogate_results_tbl %>%
-  mutate(
-    CI_lower_bs = purrr::map_dbl(bootstrap_ci, "ci_lower"),
-    CI_upper_bs = purrr::map_dbl(bootstrap_ci, "ci_upper")
-  ) %>%
-  select(-moment_estimate, -bootstrap_ci) 
+  select(-moment_estimate, -bootstrap_ci, -bootstrap_ci_residual_var, -rho_sandwich_inference) 
 
 surrogate_results_tbl %>%
   write.csv(file = paste0(tables_dir, "/surrogacy-inferences.csv"))
 
 # Summarize the results in a plot. 
 surrogate_results_tbl %>%
+  filter(include_risk_score == FALSE | method == "untransformed surrogate") %>%
   # Multiply the correlations for the untransformed surrogate with -1 to get
   # positive correlations which are comparable with those for the surrogate
   # indices.
@@ -473,8 +577,84 @@ surrogate_results_tbl %>%
   coord_cartesian(ylim = c(-1, 1)) +
   facet_grid(surrogate~.) +
   theme(legend.position = "bottom", legend.box = "vertical", legend.margin = margin())
+
 ggsave(
-  "/surrogacy-measures-summary.pdf",
+  "/surrogacy-measures-summary-wo-riskscore-bs.pdf",
+  path = figures_dir,
+  height = double_height,
+  width = double_width,
+  dpi = res,
+  device = "pdf",
+  units = "cm"
+)
+
+surrogate_results_tbl %>%
+  filter(include_risk_score == FALSE | method == "untransformed surrogate") %>%
+  # Multiply the correlations for the untransformed surrogate with -1 to get
+  # positive correlations which are comparable with those for the surrogate
+  # indices.
+  mutate(rho_trial = ifelse(method == "untransformed surrogate", -1 * rho_trial, rho_trial),
+         CI_lower_sandwich = ifelse(method == "untransformed surrogate", -1 * CI_lower_sandwich, CI_lower_sandwich),
+         CI_upper_sandwich = ifelse(method == "untransformed surrogate", -1 * CI_upper_sandwich, CI_upper_sandwich)) %>%
+  ggplot(aes(x = analysis_set, color = method)) +
+  geom_point(aes(y = rho_trial), position = position_dodge(width = 0.5)) +
+  geom_errorbar(aes(ymin = CI_lower_sandwich, ymax = CI_upper_sandwich), position = position_dodge(width = 0.5), width = 0.2) +
+  coord_cartesian(ylim = c(-1, 1)) +
+  facet_grid(surrogate~.) +
+  theme(legend.position = "bottom", legend.box = "vertical", legend.margin = margin())
+
+ggsave(
+  "/surrogacy-measures-summary-wo-riskscore-sandwich.pdf",
+  path = figures_dir,
+  height = double_height,
+  width = double_width,
+  dpi = res,
+  device = "pdf",
+  units = "cm"
+)
+
+surrogate_results_tbl %>%
+  filter(include_risk_score == TRUE | method == "untransformed surrogate") %>%
+  # Multiply the correlations for the untransformed surrogate with -1 to get
+  # positive correlations which are comparable with those for the surrogate
+  # indices.
+  mutate(rho_trial = ifelse(method == "untransformed surrogate", -1 * rho_trial, rho_trial),
+         CI_lower_bs = ifelse(method == "untransformed surrogate", -1 * CI_lower_bs, CI_lower_bs),
+         CI_upper_bs = ifelse(method == "untransformed surrogate", -1 * CI_upper_bs, CI_upper_bs)) %>%
+  ggplot(aes(x = analysis_set, color = method)) +
+  geom_point(aes(y = rho_trial), position = position_dodge(width = 0.5)) +
+  geom_errorbar(aes(ymin = CI_lower_bs, ymax = CI_upper_bs), position = position_dodge(width = 0.5), width = 0.2) +
+  coord_cartesian(ylim = c(-1, 1)) +
+  facet_grid(surrogate~.) +
+  theme(legend.position = "bottom", legend.box = "vertical", legend.margin = margin())
+
+ggsave(
+  "/surrogacy-measures-summary-w-riskscore-bs.pdf",
+  path = figures_dir,
+  height = double_height,
+  width = double_width,
+  dpi = res,
+  device = "pdf",
+  units = "cm"
+)
+
+surrogate_results_tbl %>%
+  filter(include_risk_score == TRUE | method == "untransformed surrogate") %>%
+  # Multiply the correlations for the untransformed surrogate with -1 to get
+  # positive correlations which are comparable with those for the surrogate
+  # indices.
+  mutate(rho_trial = ifelse(method == "untransformed surrogate", -1 * rho_trial, rho_trial),
+         CI_lower_sandwich = ifelse(method == "untransformed surrogate", -1 * CI_lower_sandwich, CI_lower_sandwich),
+         CI_upper_sandwich = ifelse(method == "untransformed surrogate", -1 * CI_upper_sandwich, CI_upper_sandwich)) %>%
+  ggplot(aes(x = analysis_set, color = method)) +
+  geom_point(aes(y = rho_trial), position = position_dodge(width = 0.5)) +
+  geom_errorbar(aes(ymin = CI_lower_sandwich, ymax = CI_upper_sandwich), position = position_dodge(width = 0.5), width = 0.2) +
+  coord_cartesian(ylim = c(-1, 1)) +
+  facet_grid(surrogate~.) +
+  theme(legend.position = "bottom", legend.box = "vertical", legend.margin = margin())
+
+ggsave(
+  "/surrogacy-measures-summary-w-riskscore-sandwich.pdf",
   path = figures_dir,
   height = double_height,
   width = double_width,

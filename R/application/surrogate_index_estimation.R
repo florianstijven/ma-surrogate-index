@@ -211,7 +211,8 @@ prediction_model_settings = tibble(
 #   )
 
 prediction_model_settings = prediction_model_settings %>%
-  cross_join(tibble(analysis_set = c("first_four", "naive_only", "mixed")))
+  cross_join(tibble(analysis_set = c("first_four", "naive_only", "mixed"))) %>%
+  cross_join(tibble(include_risk_score = c(TRUE, FALSE)))
 
 ## Parametric Prediction Model --------------------------------------------
 
@@ -272,7 +273,8 @@ prediction_model_settings = prediction_model_settings %>%
 gam_fitter = function(predictors_chr,
                       weights_chr,
                       case_cohort_ind_chr,
-                      analysis_set) {
+                      analysis_set, 
+                      include_risk_score) {
   # Select the subset of the data corresponding to `analysis_set`
   data_temp = ipd_tbl %>%
     filter(.data[[analysis_set]])
@@ -285,9 +287,15 @@ gam_fitter = function(predictors_chr,
   predictors_chr = paste0("s(", predictors_chr, ", k = 4)")
   # Define formula
   string_formula = paste0(
-    "infection_120d ~ risk_score_centered + Sex + HighRiskInd + BMI_stratum + s(Age) + logit_prob_infection +",
+    "infection_120d ~ Sex + HighRiskInd + BMI_stratum + s(Age) + logit_prob_infection +",
     paste(predictors_chr, collapse = " + ")
   )
+  if (include_risk_score) {
+    string_formula = paste0(
+      string_formula,
+      ' + risk_score_centered'
+    )
+  }
   formula_final = as.formula(string_formula)
   
   # Fit logistic regression model.
@@ -303,9 +311,9 @@ gam_fitter = function(predictors_chr,
 }
 
 gam_models_tbl = prediction_model_settings %>%
-  rowwise(surrogate, weighting, analysis_set) %>%
+  rowwise(surrogate, weighting, analysis_set, include_risk_score) %>%
   summarise(fitted_model = list(
-    gam_fitter(surrogate, weights_chr, case_cohort_ind_chr, analysis_set)
+    gam_fitter(surrogate, weights_chr, case_cohort_ind_chr, analysis_set, include_risk_score)
   ))
 
 surrogate_index_models_tbl = gam_models_tbl %>%
@@ -323,7 +331,8 @@ rm("gam_models_tbl")
 cox_fitter = function(predictors_chr,
                       weights_chr,
                       case_cohort_ind_chr,
-                      analysis_set) {
+                      analysis_set, 
+                      include_risk_score) {
   data_temp = ipd_tbl %>%
     filter(.data[[analysis_set]])
   # Compute the inverse probability weights as the predict of the inverse
@@ -349,6 +358,12 @@ cox_fitter = function(predictors_chr,
     "Surv(time_to_event, event) ~ risk_score_centered + Sex + HighRiskInd + BMI_stratum + bs(Age) + strata(trial) +",
     paste(predictors_chr, collapse = " + ")
   )
+  if (include_risk_score) {
+    string_formula = paste0(
+      string_formula,
+      ' + risk_score_centered'
+    )
+  }
   formula_final = as.formula(string_formula)
   
   # Fit logistic regression model.
@@ -364,9 +379,9 @@ cox_fitter = function(predictors_chr,
 }
 
 cox_models_tbl = prediction_model_settings %>%
-  rowwise(surrogate, weighting, analysis_set) %>%
+  rowwise(surrogate, weighting, analysis_set, include_risk_score) %>%
   summarise(fitted_model = list(
-    cox_fitter(surrogate, weights_chr_cox, case_cohort_ind_chr, analysis_set)
+    cox_fitter(surrogate, weights_chr_cox, case_cohort_ind_chr, analysis_set, include_risk_score)
   ))
 
 
@@ -416,7 +431,7 @@ ipd_surr_indices_tbl = bind_rows(
   surrogate_index_models_tbl %>%
     ungroup() %>%
     filter(method %in% c("gam", "glm")) %>%
-    rowwise(method, surrogate, weighting, analysis_set) %>%
+    rowwise(method, surrogate, weighting, analysis_set, include_risk_score) %>%
     reframe(tibble(
       surrogate_index = predict(fitted_model, newdata = ipd_tbl, type = "response"),
       ipd_tbl
@@ -425,7 +440,7 @@ ipd_surr_indices_tbl = bind_rows(
   surrogate_index_models_tbl %>%
     ungroup() %>%
     filter(method %in% c("cox")) %>%
-    rowwise(method, surrogate, weighting, analysis_set) %>%
+    rowwise(method, surrogate, weighting, analysis_set, include_risk_score) %>%
     reframe(tibble(
       surrogate_index = 1 - predict(
         fitted_model,
@@ -453,6 +468,7 @@ ipd_surr_indices_tbl = ipd_surr_indices_tbl %>%
     method,
     weighting,
     analysis_set,
+    include_risk_score,
     trial,
     surrogate,
     sample_weight,
@@ -495,7 +511,7 @@ roc_tbl = ipd_surr_indices_tbl %>%
     )
   ) %>%
   filter(!is.na(surrogate_index) & !(is.na(infection_120d))) %>%
-  group_by(method, surrogate, weighting, trial, analysis_set) %>%
+  group_by(method, surrogate, weighting, trial, analysis_set, include_risk_score) %>%
   reframe(
     WeightedROC(
       guess = surrogate_index,
@@ -538,13 +554,13 @@ roc_ggplots = roc_tbl %>%
           weighting = ifelse(weighting == "normalized", "Normalized", "Unnormalized"),
           method = ifelse(method == "gam", "GAM logistic regression", "Cox PH")
         ) %>%
-        ggplot(aes(color = method, linetype = weighting)) +
+        ggplot(aes(color = method, linetype = include_risk_score)) +
         geom_path(aes(FPR, TPR)) +
         facet_wrap(~ trial) +
         theme(legend.position = "bottom", legend.box = "vertical") +
         scale_color_discrete(name = "Method") +
         geom_abline(intercept = 0, slope = 1) +
-        scale_linetype(name = "Type of Weights") +
+        scale_linetype(name = "Risk Score as Predictor") +
         scale_color_discrete(name = "Model") +
         ggtitle("ROC for estimated surrogate index") +
         labs(subtitle = subtitle) +
@@ -569,7 +585,7 @@ roc_ggplots %>%
 
 
 roc_tbl %>%
-  group_by(method, surrogate, weighting, trial, analysis_set) %>%
+  group_by(method, surrogate, weighting, trial, analysis_set, include_risk_score) %>%
   filter(method != "untransformed surrogate") %>%
   summarise(AUC = WeightedAUC(pick(c(
     TPR, FPR, FP, FN, threshold

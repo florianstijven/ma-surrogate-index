@@ -204,7 +204,7 @@ estimate_treatment_effects = function(data,
 ma_trt_effects_tbl =
   ipd_surr_indices_tbl %>%
   filter(surrogate != "none") %>%
-  group_by(method, surrogate, trial, weighting, analysis_set) %>%
+  group_by(method, surrogate, trial, weighting, analysis_set, include_risk_score) %>%
   summarize(data = list(pick(everything()))) %>%
   ungroup() %>%
   # Add variables that determine which treatment effects are estimated. For the original surrogates,
