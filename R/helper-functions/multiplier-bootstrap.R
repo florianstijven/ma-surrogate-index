@@ -49,6 +49,9 @@ multiplier_bootstrap_ci = function(data, statistic, B, alpha = 0.05, type = "BCa
   } else if (type == "percentile") {
     # Compute percentile interval
     return(percentile_CI(bootstrap_replications_list$bootstrap_estimates, alpha))
+  } else if (type == "BC percentile") {
+    estimate = statistic(data, weights = rep(1, nrow(data)))$estimate
+    return(BC_percentile_CI(estimate, bootstrap_replications_list$bootstrap_estimates, alpha))
   } else {
     stop("Invalid type. Must be 'BCa' or 'percentile'.")
   }
@@ -61,7 +64,7 @@ percentile_CI = function(boot_replicates, alpha = 0.05) {
   # of problematic values such that the user can decide whether to ignore this.
   if (any(is.na(boot_replicates)) | any(is.nan(boot_replicates))) {
     warning_message = paste(
-      "Some bootstrap replicates have missing values. These are removed for computing BCa confidence intervals.",
+      "Some bootstrap replicates have missing values. These are removed for computing percentile confidence intervals.",
       "\nNumber of missing values in bootstrap replicates: ",
       sum(is.na(boot_replicates) | is.nan(boot_replicates)))
     # Remove missing values from the bootstrap replicates and standard errors.
@@ -74,6 +77,22 @@ percentile_CI = function(boot_replicates, alpha = 0.05) {
     ci_lower = ci_lower,
     ci_upper = ci_upper
   ))
+}
+
+# Compute the Bias-Corrected percentile confidence interval
+BC_percentile_CI = function(estimate, boot_replicates, alpha = 0.05) {
+  # Compute bias-correction value.
+  p0 = mean(boot_replicates < estimate) + 0.5 * mean(boot_replicates == estimate)
+  z0 = qnorm(p0)
+  
+  
+  alpha_lower = pnorm(2 * z0 + qnorm(alpha / 2))
+  alpha_upper = pnorm(2 * z0 + qnorm(1 - alpha / 2))
+  
+  ci_lower = quantile(x = boot_replicates, probs = alpha_lower, na.rm = TRUE)
+  ci_upper = quantile(x = boot_replicates, probs = alpha_upper, na.rm = TRUE)
+  
+  return(list(ci_lower = ci_lower, ci_upper = ci_upper))
 }
 
 

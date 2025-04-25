@@ -2,7 +2,7 @@
 # parameter based on the estimated variances and covariance, the corresponding
 # variance matrix. The confidence interval is based on the delta method and
 # Fisher's Z transformation.
-rho_delta_method = function(coefs, vcov, alpha = 0.05, method = "t-adjustment", N = NULL){
+rho_delta_method = function(coefs, vcov, alpha = 0.05, method = "t-adjustment", N = NULL, limit_rho = 0.999){
   # Extract the estimated parameters.
   mu_alpha = coefs[1]
   mu_beta = coefs[2]
@@ -29,9 +29,6 @@ rho_delta_method = function(coefs, vcov, alpha = 0.05, method = "t-adjustment", 
   se_rho_hat = sqrt(t(partial_rho) %*% vcov[3:5, 3:5] %*% partial_rho) %>%
     as.vector()
   
-  # Compute the SE for the fisher's z transformation of rho.
-  se_fisher_z = se_rho_hat / ((1 + rho) * (1 - rho))
-  
   if (method == "no adjustment") {
     # Compute the Z-score for the confidence interval.
     z = qnorm(1 - alpha / 2)
@@ -39,14 +36,23 @@ rho_delta_method = function(coefs, vcov, alpha = 0.05, method = "t-adjustment", 
     if (is.null(N)) stop("Number of independent trials N required for t-adjustment.")
     z = qt(1 - alpha / 2, df = N - 1)
   }
-
   
-  # Compute the confidence interval for the Pearson correlation parameter on the
+  # If the estimate for rho is at the boundary or is outside of the parameter
+  # space, the confidence interval is computed without first transforming to
   # Fisher's Z scale.
-  ci_fisher_z = atanh(rho) + c(-1, 1) * z * se_fisher_z
-  
-  # Transform the limits back to the rho scale.
-  ci_rho_hat = tanh(ci_fisher_z)
+  if (!is.na(rho) & abs(rho) > limit_rho) {
+    ci_rho_hat = rho + c(-1, 1) * z * se_rho_hat
+  } else {
+    # Compute the SE for the fisher's z transformation of rho.
+    se_fisher_z = se_rho_hat / ((1 + rho) * (1 - rho))
+    
+    # Compute the confidence interval for the Pearson correlation parameter on the
+    # Fisher's Z scale.
+    ci_fisher_z = atanh(rho) + c(-1, 1) * z * se_fisher_z
+    
+    # Transform the limits back to the rho scale.
+    ci_rho_hat = tanh(ci_fisher_z)
+  }
   
   return(list(rho = rho, se = se_rho_hat, ci = ci_rho_hat))
 }
