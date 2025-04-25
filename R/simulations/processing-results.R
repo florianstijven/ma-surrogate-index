@@ -53,6 +53,18 @@ ma_sim_results = ma_sim_results %>%
     scenario = as.factor(scenario),
   )
 
+# Add more informative variables that are useful for plotting.
+ma_sim_results = ma_sim_results %>%
+  mutate(
+    N_chr = factor(
+      x = N,
+      levels = sort(unique(ma_sim_results$N)),
+      labels = paste0("N = ", sort(unique(ma_sim_results$N))),
+      ordered = TRUE
+    ),
+    `PD correction` = ifelse(nearest_PD, "Yes", "No")
+  )
+
 
 # Compute summaries from the simulation results
 ma_sim_summary = ma_sim_results %>%
@@ -66,7 +78,8 @@ ma_sim_summary = ma_sim_results %>%
     scenario,
     N,
     n, 
-    nearest_PD
+    nearest_PD,
+    `PD correction`
   ) %>%
   summarise(
     coverage = mean((rho_true >= rho_ci_lower) &
@@ -105,20 +118,20 @@ estimand_plot_1 = ma_sim_results %>%
       slice_head(n = 1) %>%
       ungroup()
   ) +
-  scale_x_continuous(lim = c(0.4, 1), name = expr(rho[trial])) +
+  scale_x_continuous(lim = c(0.4, 1), name = expr(rho[trial]^{(g[N])}), n.breaks = 4) +
   scale_color_discrete(name = "Surr. Index Estimator", drop = FALSE) +
-  facet_grid(SI_violation ~ N, scales = "free")
+  facet_grid(SI_violation ~ N_chr, scales = "free")
 
-estimand_plot_1
-ggsave(
-  filename = "distribution-estimands-proof-of-concept.pdf",
-  path = figures_dir,
-  height = double_height,
-  width = double_width,
-  dpi = res,
-  device = "pdf",
-  units = "cm"
-)
+# estimand_plot_1
+# ggsave(
+#   filename = "distribution-estimands-proof-of-concept.pdf",
+#   path = figures_dir,
+#   height = double_height,
+#   width = double_width,
+#   dpi = res,
+#   device = "pdf",
+#   units = "cm"
+# )
 
 
 
@@ -144,25 +157,13 @@ estimand_plot_2 = ma_sim_results %>%
       slice_head(n = 1) %>%
       ungroup()
   ) +
-  scale_x_continuous(lim = c(0.82, 1), name = expr(rho[trial])) +
+  scale_x_continuous(lim = c(0.84, 1), name = expr(rho[trial]^{(g[N])}), n.breaks = 4) +
   scale_color_discrete(name = "Surr. Index Estimator", drop = FALSE) +
-  facet_grid(SI_violation ~ N, scales = "free")
+  facet_grid(SI_violation ~ N_chr, scales = "free")
 
-estimand_plot_2
-ggsave(
-  filename = "distribution-estimands-vaccine.pdf",
-  path = figures_dir,
-  height = double_height,
-  width = double_width,
-  dpi = res,
-  device = "pdf",
-  units = "cm"
-)
-
-# ggarrange(estimand_plot_1, estimand_plot_2, common.legend = TRUE, legend = "bottom", labels = "auto")
-
+# estimand_plot_2
 # ggsave(
-#   filename = "distribution-estimands.pdf",
+#   filename = "distribution-estimands-vaccine.pdf",
 #   path = figures_dir,
 #   height = double_height,
 #   width = double_width,
@@ -171,18 +172,30 @@ ggsave(
 #   units = "cm"
 # )
 
+ggarrange(estimand_plot_1, estimand_plot_2, common.legend = TRUE, legend = "bottom", labels = "auto", nrow = 2)
+
+ggsave(
+  filename = "distribution-estimands.pdf",
+  path = figures_dir,
+  height = double_height,
+  width = double_width,
+  dpi = res,
+  device = "pdf",
+  units = "cm"
+)
+
 
 ## Estimation Accuracies --------------------------------------------------
 
 ### Bias ------------------------------------------------------------------
 
-ma_sim_summary %>%
+mean_bias = ma_sim_summary %>%
   filter(setting == "small N, large n", CI_type == "sandwich") %>%
   ggplot(aes(
     x = N,
     y = mean_bias,
     color = surrogate_index_estimator,
-    linetype = nearest_PD
+    linetype = `PD correction`
   )) +
   geom_point(position = position_dodge(width = 0.1)) +
   geom_line() +
@@ -191,9 +204,10 @@ ma_sim_summary %>%
   scale_y_continuous(name = "Mean Bias") +
   scale_color_discrete(name = "Surr. Index Estimator") +
   facet_grid(SI_violation ~ scenario) + 
-  theme(legend.position = "bottom", legend.box = "vertical")
+  theme(legend.position = "bottom", legend.box = "vertical", legend.spacing.y = unit(0, "cm"))
 
 ggsave(
+  plot = mean_bias,
   filename = "mean-bias.pdf",
   path = figures_dir,
   height = double_height,
@@ -203,13 +217,13 @@ ggsave(
   units = "cm"
 )
 
-ma_sim_summary %>%
+median_bias = ma_sim_summary %>%
   filter(setting == "small N, large n", CI_type == "sandwich") %>%
   ggplot(aes(
     x = N,
     y = median_bias,
     color = surrogate_index_estimator,
-    linetype = nearest_PD
+    linetype = `PD correction`
   )) +
   geom_point(position = position_dodge(width = 0.1)) +
   geom_line() +
@@ -218,9 +232,10 @@ ma_sim_summary %>%
   scale_y_continuous(name = "Median Bias") +
   scale_color_discrete(name = "Surr. Index Estimator") +
   facet_grid(SI_violation ~ scenario) + 
-  theme(legend.position = "bottom", legend.box = "vertical")
+  theme(legend.position = "bottom", legend.box = "vertical", legend.spacing.y = unit(0, "cm"))
 
 ggsave(
+  plot = median_bias,
   filename = "median-bias.pdf",
   path = figures_dir,
   height = double_height,
@@ -232,13 +247,13 @@ ggsave(
 
 ### MSE -------------------------------------------------------------------
 
-ma_sim_summary %>%
+mse_plot = ma_sim_summary %>%
   filter(setting == "small N, large n", CI_type == "sandwich") %>%
   ggplot(aes(
     x = N,
     y = MSE,
     color = surrogate_index_estimator,
-    linetype = nearest_PD
+    linetype = `PD correction`
   )) +
   geom_point(position = position_dodge(width = 0.1)) +
   geom_line() +
@@ -247,10 +262,26 @@ ma_sim_summary %>%
   scale_y_continuous(name = "MSE", transform = "log10") +
   scale_color_discrete(name = "Surr. Index Estimator") +
   facet_grid(SI_violation ~ scenario) + 
-  theme(legend.position = "bottom", legend.box = "vertical")
+  theme(legend.position = "bottom", legend.box = "vertical", legend.spacing.y = unit(0, "cm"))
 
 ggsave(
+  plot = mse_plot,
   filename = "mse.pdf",
+  path = figures_dir,
+  height = double_height,
+  width = double_width,
+  dpi = res,
+  device = "pdf",
+  units = "cm"
+)
+
+# Put the mean bias and MSE plots into a single figure.
+ggarrange(
+  mean_bias, mse_plot, common.legend = TRUE, legend = "bottom", labels = "auto", nrow = 2
+)
+
+ggsave(
+  filename = "mse-mean-bias.pdf",
   path = figures_dir,
   height = double_height,
   width = double_width,
@@ -264,13 +295,13 @@ ggsave(
 
 ### Coverage --------------------------------------------------------------
 
-ma_sim_summary %>%
+coverage_sandwich = ma_sim_summary %>%
   filter(setting == "small N, large n", CI_type == "sandwich") %>%
   ggplot(aes(
     x = N,
     y = coverage,
     color = surrogate_index_estimator,
-    linetype = nearest_PD
+    linetype = `PD correction`
   )) +
   geom_point(position = position_dodge(width = 0.1)) +
   geom_line() +
@@ -279,9 +310,10 @@ ma_sim_summary %>%
   scale_y_continuous(name = "Coverage") +
   scale_color_discrete(name = "Surr. Index Estimator") +
   facet_grid(SI_violation ~ scenario) + 
-  theme(legend.position = "bottom", legend.box = "vertical")
+  theme(legend.position = "bottom", legend.box = "vertical", legend.spacing.y = unit(0, "cm"))
 
 ggsave(
+  plot = coverage_sandwich,
   filename = "coverage-sandwich.pdf",
   path = figures_dir,
   height = double_height,
@@ -291,13 +323,13 @@ ggsave(
   units = "cm"
 )
 
-ma_sim_summary %>%
+coverage_bs = ma_sim_summary %>%
   filter(setting == "small N, large n", CI_type == "multiplier bootstrap") %>%
   ggplot(aes(
     x = N,
     y = coverage,
     color = surrogate_index_estimator,
-    linetype = nearest_PD
+    linetype = `PD correction`
   )) +
   geom_point(position = position_dodge(width = 0.1)) +
   geom_line() +
@@ -306,10 +338,25 @@ ma_sim_summary %>%
   scale_y_continuous(name = "Coverage") +
   scale_color_discrete(name = "Surr. Index Estimator") +
   facet_grid(SI_violation ~ scenario) + 
-  theme(legend.position = "bottom", legend.box = "vertical")
+  theme(legend.position = "bottom", legend.box = "vertical", legend.spacing.y = unit(0, "cm"))
 
 ggsave(
+  plot = coverage_bs,
   filename = "coverage-bootstrap.pdf",
+  path = figures_dir,
+  height = double_height,
+  width = double_width,
+  dpi = res,
+  device = "pdf",
+  units = "cm"
+)
+
+ggarrange(
+  coverage_sandwich, coverage_bs, common.legend = TRUE, legend = "bottom", labels = "auto", nrow = 2
+)
+
+ggsave(
+  filename = "coverage-combined.pdf",
   path = figures_dir,
   height = double_height,
   width = double_width,
@@ -359,19 +406,20 @@ ma_sim_results %>%
   # with the estimated surrogate index.
   mutate(
     rho_ci_lower = ifelse(
-      surrogate_index_estimator == "surrogate",
-      -1 * rho_ci_upper,
+      surrogate_index_estimator == "surrogate",-1 * rho_ci_upper,
       rho_ci_lower
     )
   ) %>%
   ggplot(aes(x = rho_ci_lower, fill = SI_violation)) +
-  geom_histogram(alpha = 0.5,
-                 position = "identity",
-                 color = "black",
-                 bins = 20) +
-  scale_x_continuous( name = expr(rho[trial])) +
-  scale_color_discrete(name = "Surr. Index Estimator", drop = FALSE) +
-  facet_grid(surrogate_index_estimator ~ N, scales = "free") +
+  geom_density(alpha = 0.5,
+               color = "black",
+               bounds = c(-1, 1)) +
+  scale_x_continuous(name = expr(paste("Lower CI limit for ", rho[trial] ^
+                                         {
+                                           (g[N])
+                                         }))) +
+  scale_fill_discrete(name = "Violation of Surrogacy and Comparability", drop = FALSE) +
+  facet_grid(surrogate_index_estimator ~ N_chr, scales = "free") +
   theme(legend.position = "bottom")
 
 ggsave(
@@ -392,14 +440,16 @@ ggsave(
 ma_sim_results %>% filter(setting == "large N, small n") %>%
   mutate(
     Z = (rho_est - rho_true) / rho_se,
-    N_f = factor(
-      as.character(N),
-      levels = c("5000", "2000", "1000", "500", "100"),
+    N_chr = fct_rev(N_chr),
+    n_chr = factor(
+      x = n,
+      levels = c(100, 500, 1000, 2000, 5000),
+      labels = paste0("n = ", c(100, 500, 1000, 2000, 5000)),
       ordered = TRUE
     )
   ) %>%
-  ggplot(aes(x = Z, fill = N_f)) +
-  geom_histogram(aes(y = after_stat(density)), color = "black") +
+  ggplot(aes(x = Z)) +
+  geom_histogram(aes(y = after_stat(density)), fill = "gray", color = "black", bins = 16) +
   # Add standard normal density.
   geom_line(aes(x = x, y = d), 
             data = tibble(
@@ -419,9 +469,9 @@ ma_sim_results %>% filter(setting == "large N, small n") %>%
       levels = c("5000", "2000", "1000", "500", "100"),
       ordered = TRUE
     )
-  ))) +
+  )), color = "red") +
   xlim(c(-4, 4)) +
-  facet_grid(N_f ~ n)
+  facet_grid(N_chr ~ n_chr)
 
 ggsave(
   filename = "failure-asymptotics.pdf",
