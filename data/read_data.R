@@ -227,6 +227,14 @@ p3005 = read.csv(p3005_file) %>%
   ) %>%
   select(-Trialstage)
 
+# The titers are not in IU for the Sanofi trial. We have to adjust these
+# manually.
+p3005 = p3005 %>%
+  mutate(
+    bindSpike = bindSpike + log(0.009, base = 10),
+    pseudoneutid50 = pseudoneutid50 + log(0.0653, base = 10)
+  )
+
 
 # combine trials into one dataframe
 data_all = bind_rows(p3001, p3002, p3003, p3004, p3005) %>%
