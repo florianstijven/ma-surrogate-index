@@ -503,7 +503,7 @@ surrogate_results_tbl = ma_trt_effects_tbl %>%
           ),
         statistic = statistic_f_rho,
         B = B_multiplier,
-        type = "percentile"
+        type = "studentized"
       )
     ),
     rho_sandwich_inference = list(
@@ -526,7 +526,7 @@ surrogate_results_tbl = ma_trt_effects_tbl %>%
           ),
         statistic = statistic_f_residual_var,
         B = B_multiplier,
-        type = "percentile"
+        type = "BC percentile"
       )
     )
   ) %>%

@@ -52,6 +52,19 @@ multiplier_bootstrap_ci = function(data, statistic, B, alpha = 0.05, type = "BCa
   } else if (type == "BC percentile") {
     estimate = statistic(data, weights = rep(1, nrow(data)))$estimate
     return(BC_percentile_CI(estimate, bootstrap_replications_list$bootstrap_estimates, alpha))
+  } else if (type == "studentized") {
+    estimate = statistic(data, weights = rep(1, nrow(data)))
+    original_se = estimate$se
+    estimate = estimate$estimate
+    return(
+      studentized_CI(
+        bootstrap_replications_list$bootstrap_estimates,
+        bootstrap_replications_list$bootstrap_ses,
+        estimate,
+        original_se,
+        alpha
+      )
+    )
   } else {
     stop("Invalid type. Must be 'BCa' or 'percentile'.")
   }
@@ -171,6 +184,41 @@ BCa_CI <- function(boot_replicates,
   # Calculate the BCa intervals
   ci_lower <- quantile(boot_replicates, alpha1)
   ci_upper <- quantile(boot_replicates, alpha2)
+  
+  return(list(
+    ci_lower = ci_lower,
+    ci_upper = ci_upper
+  ))
+}
+
+studentized_CI = function(boot_replicates,
+                          se,
+                          estimate,
+                          original_se,
+                          alpha = 0.05) {
+  
+  if (any(is.na(boot_replicates)) | any(is.nan(boot_replicates)) | any(is.na(se)) | any(is.nan(se))) {
+    warning_message = paste(
+      "Some bootstrap replicates have missing values. These are removed for computing studentized confidence intervals.",
+      "\nNumber of missing values in bootstrap replicates: ",
+      sum(is.na(boot_replicates) | is.nan(boot_replicates) | is.na(se) | is.nan(se)))
+    # Remove missing values from the bootstrap replicates and standard errors.
+    good_indices = !is.na(boot_replicates) & !is.nan(boot_replicates) & !is.na(se) & !is.nan(se)
+    boot_replicates = boot_replicates[good_indices] 
+    se = se[good_indices] 
+  }
+  
+  # Compute studentized statistics.
+  t = (boot_replicates - estimate) / se
+  
+  # Determine percentiles of the studentized distribution
+  alpha <- 0.05
+  lower_percentile <- quantile(t, probs = alpha / 2)
+  upper_percentile <- quantile(t, probs = 1 - alpha / 2)
+  
+  # Step 5: Transform back to original scale
+  ci_lower <- estimate - upper_percentile * original_se
+  ci_upper <- estimate - lower_percentile * original_se
   
   return(list(
     ci_lower = ci_lower,
