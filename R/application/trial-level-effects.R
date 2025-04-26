@@ -37,7 +37,7 @@ estimate_treatment_effect_surrogate_index = function(data, VE_surr) {
   # Fit linear regression model adjusted for baseline covariates and weighted by
   # the case-cohort-sampling weights.
   lm_fit = lm(
-    formula = surrogate_index ~ treatment + treatment * risk_score,
+    formula = surrogate_index ~ treatment * risk_score + Sex,
     data = data,
     weights = sample_weight
   )
@@ -84,12 +84,39 @@ estimate_treatment_effect_clinical_km = function(data) {
   return(VE_est)
 }
 
+ipcw_estimator  = function(time_to_event, event) {
+  survfit_object = survfit(Surv(time_to_event, 1 - event) ~ 1)
+  
+  time =  unique(pmin(time_to_event, time_cumulative_incidence))
+  surv_probs_tbl = summary(survfit_object, times =  time)[c("surv", "time")] %>%
+    as_tibble()
+  
+  censoring_probs = tibble(time = pmin(time_to_event, time_cumulative_incidence))  %>%
+    left_join(surv_probs_tbl) %>%
+    pull(surv)
+  
+  return(1 / censoring_probs)
+}
+
+
+
 estimate_treatment_effect_clinical = function(data) {
-  # Fit logistic regression model adjusted for baseline covariates.
+  # Compute inverse probability of censoring weights where we truncate at 80 days.
+  data = data %>%
+    group_by(treatment) %>%
+    mutate(ipcw = ipcw_estimator(time_to_event, event),
+           ipcw = ifelse(time_to_event < time_cumulative_incidence & event == 0, 0, ipcw)) %>%
+    ungroup()
+  
+  # Fit regression model for infection endpoint. Note that we can use linear
+  # regression here because the validity of this approach does not rely on a
+  # correctly specified model. Furthermore, linear regression is much faster
+  # than logistic regression, which makes a difference when bootstrapping.
   glm_fit = glm(
-    formula = infection_120d ~ treatment + treatment*risk_score,
+    formula = infection_120d ~ treatment*risk_score + Sex,
     data = data,
-    family = binomial()
+    weights = data$ipcw,
+    family = quasi()
   )
   
   # Predict outcome probabilities given the observed baseline covariates
@@ -126,12 +153,18 @@ estimate_treatment_effects = function(data,
                                       B = 2e2,
                                       VE_surr = TRUE,
                                       log_RR_alpha = TRUE,
-                                      log_RR_beta = TRUE) {
+                                      log_RR_beta = TRUE,
+                                      glm_VE = FALSE) {
   # Estimate treatment effect on surrogate index.
   trt_effect_surrogate_index_est = estimate_treatment_effect_surrogate_index(data, VE_surr)
   
   # Estimate treatment effect on clinical endpoint.
-  VE_est = estimate_treatment_effect_clinical_km(data)
+  if (glm_VE) {
+    VE_est = estimate_treatment_effect_clinical(data)
+  } else {
+    VE_est = estimate_treatment_effect_clinical_km(data)
+  }
+
   
   if (log_RR_alpha) {
     trt_effect_surrogate_index_est = log(1 - trt_effect_surrogate_index_est)
@@ -211,14 +244,16 @@ ma_trt_effects_tbl =
   # the treatment effects are mean differences. 
   mutate(log_RR_alpha = ifelse(method == "none", FALSE, TRUE),
          log_RR_beta = TRUE,
-         VE_surr = ifelse(method == "none", FALSE, TRUE)) %>%
+         VE_surr = ifelse(method == "none", FALSE, TRUE),
+         glm_VE = TRUE) %>%
   mutate(
     est_list = future_pmap(
       .l = list(
         data = data,
         VE_surr = VE_surr,
         log_RR_alpha = log_RR_alpha,
-        log_RR_beta = log_RR_beta
+        log_RR_beta = log_RR_beta,
+        glm_VE = glm_VE
       ),
       .f = estimate_treatment_effects,
       B = B_within_trial,

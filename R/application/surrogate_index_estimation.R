@@ -8,6 +8,7 @@ library(mgcv)
 library(future)
 library(furrr)
 library(survival)
+library(riskRegression)
 
 
 # Specify options for saving the plots to files
@@ -81,26 +82,40 @@ cumulative_incidence_control_tbl = ipd_tbl %>%
   filter(treatment == 0) %>%
   select(-treatment)
 
-# Compute inverse probability of censoring weights where we truncate at 120 days.
-surv_fit_censoring = coxph(
-  Surv(time_to_event, event) ~ 1 + strata(treatment, trial),
-  data = ipd_tbl %>%
-    mutate(time_to_event = pmin(
-      time_to_event, time_cumulative_incidence
-    ))
-)
-ipd_tbl$ipcw = 1 / predict(surv_fit_censoring, type = "survival")
+ipcw_estimator  = function(time_to_event, event) {
+  survfit_object = survfit(Surv(time_to_event, 1 - event) ~ 1)
+  
+  time =  unique(pmin(time_to_event, time_cumulative_incidence))
+  surv_probs_tbl = summary(survfit_object, times =  time)[c("surv", "time")] %>%
+    as_tibble()
+  
+  censoring_probs = tibble(time = pmin(time_to_event, time_cumulative_incidence))  %>%
+    left_join(surv_probs_tbl) %>%
+    pull(surv)
+
+  return(1 / censoring_probs)
+}
+
+ipd_tbl = ipd_tbl %>%
+  group_by(trial, treatment) %>%
+  mutate(ipcw = ipcw_estimator(time_to_event, event),
+  ipcw = ifelse(time_to_event < time_cumulative_incidence & event == 0, 0, ipcw)) %>%
+  ungroup()
 
 
 ipd_tbl = ipd_tbl %>%
-  mutate(# If the patient has an infection or censoring event before 120 days, we set
+  mutate(# If the patient has an infection or censoring event before 80 days, we set
     # the infection event to NA if the patients was censored. If a patient is
-    # under observation for more than 120 days, the infection event is set to
+    # under observation for more than 80 days, the infection event is set to
     # zero.
     infection_120d = ifelse(
-      time_to_event <= time_cumulative_incidence,
-      ifelse(event == 0, NA, 1),
-      0
+      time_to_event > time_cumulative_incidence,
+      0,
+      ifelse(
+        time_to_event == time_cumulative_incidence,
+        event,
+        ifelse(event == 1, 1, NA)
+      )
     ))
 
 ipd_tbl = ipd_tbl %>%
@@ -355,7 +370,7 @@ cox_fitter = function(predictors_chr,
   predictors_chr = paste0("ns(", predictors_chr, ", knots = c(1.5, 2.5), Boundary.knots = c(0, 4))")
   # Define formula
   string_formula = paste0(
-    "Surv(time_to_event, event) ~ risk_score_centered + Sex + HighRiskInd + BMI_stratum + bs(Age) + strata(trial) +",
+    "Surv(time_to_event, event) ~ Sex + HighRiskInd + BMI_stratum + bs(Age) + strata(trial) +",
     paste(predictors_chr, collapse = " + ")
   )
   if (include_risk_score) {
@@ -385,10 +400,10 @@ cox_models_tbl = prediction_model_settings %>%
   ))
 
 
-x = seq(from = 0, to = 5, length.out = 100)
-ns_matrix = ns(x = x, knots = c(1.5, 2.5), Boundary.knots = c(0, 4)) 
-coefs = coef(cox_models_tbl$fitted_model[[8]])[10:12]
-plot(x, ns_matrix %*% coefs)
+# x = seq(from = 0, to = 5, length.out = 100)
+# ns_matrix = ns(x = x, knots = c(1.5, 2.5), Boundary.knots = c(0, 4)) 
+# coefs = coef(cox_models_tbl$fitted_model[[8]])[10:12]
+# plot(x, ns_matrix %*% coefs)
 
 surrogate_index_models_tbl = surrogate_index_models_tbl %>%
   bind_rows(cox_models_tbl %>%
@@ -478,7 +493,8 @@ ipd_surr_indices_tbl = ipd_surr_indices_tbl %>%
     event,
     time_to_event,
     risk_score,
-    ipcw
+    ipcw,
+    Sex
   )
 
 ## Prediction Model Performance -------------------------------------------

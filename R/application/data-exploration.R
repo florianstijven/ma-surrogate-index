@@ -241,7 +241,7 @@ figure = ggarrange(
           add_confidence_interval() +
           scale_ggsurvfit() +
           ggtitle(trial) +
-          coord_cartesian(xlim = c(0, time_cumulative_incidence)) +
+          coord_cartesian(xlim = c(0, time_cumulative_incidence + 40)) +
           scale_x_continuous(breaks = c(0, 40, 80, 120)) +
           ylab("") +
           xlab("") +
