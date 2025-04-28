@@ -197,6 +197,16 @@ studentized_CI = function(boot_replicates,
                           original_se,
                           alpha = 0.05) {
   
+  # Check whether estimate is valid. If it is not valid, we return NA is
+  # confidence intervals.
+  if (is.na(estimate) | is.nan(estimate)) {
+    warning("`estimate` is NA or NaN. BCa interval cannot be computed.")
+    return(list(
+      ci_lower = NA,
+      ci_upper = NA
+    ))
+  }
+  
   if (any(is.na(boot_replicates)) | any(is.nan(boot_replicates)) | any(is.na(se)) | any(is.nan(se))) {
     warning_message = paste(
       "Some bootstrap replicates have missing values. These are removed for computing studentized confidence intervals.",
@@ -206,6 +216,11 @@ studentized_CI = function(boot_replicates,
     good_indices = !is.na(boot_replicates) & !is.nan(boot_replicates) & !is.na(se) & !is.nan(se)
     boot_replicates = boot_replicates[good_indices] 
     se = se[good_indices] 
+  }
+  
+  # Check length of bootstrap replicates.
+  if (B <= 2) {
+    stop("BCa could not be computed because there are too few valid bootstrap replicates.")
   }
   
   # Compute studentized statistics.
