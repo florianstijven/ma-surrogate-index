@@ -30,7 +30,7 @@ train_clinical_prediction_model_logistic = function(simulated_data) {
   # Train a correctly specified logistic regression model for predicting the
   # clinical endpoint given the surrogate and baseline covariate
   clinical_model <- glm(
-    formula = clinical ~ surrogate*X1 + surrogate*X2 + surrogate*X3,
+    formula = clinical ~ X1 + X2 + surrogate*X3,
     data = simulated_data,
     x = FALSE,
     y = FALSE,
@@ -52,15 +52,15 @@ train_clinical_prediction_model_gam = function(simulated_data) {
       surrogate,
       by = X3,
       bs = "cr",
-      k = 4
+      k = 3
     ) +
       s(
         surrogate,
         by = 1 - X3,
         bs = "cr",
-        k = 4
+        k = 3
       ) +
-      s(X1, bs = "cr", k = 4) + s(X2, bs = "cr", k = 4) + X3,
+      s(X1, bs = "cr", k = 3) + s(X2, bs = "cr", k = 3) + X3,
     data = simulated_data,
     family = binomial()
   )
