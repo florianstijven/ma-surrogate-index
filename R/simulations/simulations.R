@@ -351,7 +351,7 @@ if (regime == "small") {
               statistic = statistic_function_factory(estimator_adjustment, nearest_PD),
               B = B,
               alpha = 0.05,
-              type = "studentized"
+              type = "BC percentile"
             )
           }
         ),
