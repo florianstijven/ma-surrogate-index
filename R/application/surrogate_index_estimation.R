@@ -8,7 +8,16 @@ library(mgcv)
 library(future)
 library(furrr)
 library(survival)
-library(riskRegression)
+library(sl3)
+library(origami)
+library(splines)
+
+# Set up parallel computing
+if (parallelly::supportsMulticore()) {
+  plan("multicore")
+} else {
+  plan(multisession)
+}
 
 
 # Specify options for saving the plots to files
@@ -278,6 +287,8 @@ prediction_model_settings = prediction_model_settings %>%
 # rm("glm_models_tbl")
 
 
+
+
 ## GAM --------------------------------------------------------------------
 
 # Estimate logistic GAM for the probability of infection given the
@@ -411,6 +422,148 @@ surrogate_index_models_tbl = surrogate_index_models_tbl %>%
 
 rm("cox_models_tbl")
 
+## Superlearner -----------------------------------------------------------
+
+# Predict the infection outcome using a Superlearner with a modified
+# leave-one-trial-out CV procedure.
+sl_fitter = function(predictors_chr,
+                     weights_chr,
+                     case_cohort_ind_chr,
+                     analysis_set,
+                     include_risk_score) {
+  # Define the covariates that will be included as predictors.
+  covariates = c("Sex", "HighRiskInd", "BMI_stratum", "Age", "logit_prob_infection", predictors_chr)
+  if (include_risk_score) {
+    covariates = c(covariates, "risk_score")
+  }
+  
+  # Select the subset of the data corresponding to `analysis_set`
+  data_temp = ipd_tbl %>%
+    filter(.data[[analysis_set]]) %>%
+    # Drop the missing observations.
+    filter(!is.na(infection_120d)) %>%
+    filter(if_all(all_of(covariates), ~ !is.na(.)))
+  # Compute the inverse probability weights as the predict of the inverse
+  # probability of censoring and case-cohort weights.
+  weights = data_temp %>%
+    pull(any_of(weights_chr))
+  data_temp$weights = weights
+  
+  # Instantiate a set of learners.
+  lrn_glm = Lrnr_glm$new()
+  lrn_glm_bs2 = Lrnr_glm$new(
+    formula = paste0(
+      "~ .",
+      " + ns(",
+      predictors_chr,
+      ", knots = c(1.5, 2.5), Boundary.knots = c(0, 4))"
+    )
+  )
+  lrn_glm_interactions = Lrnr_glm$new(formula = paste0("~.", " + ", predictors_chr, ":Sex"))
+  lrn_glm_interactions_bs2 = Lrnr_glm$new(
+    formula = paste0(
+      "~ .",
+      " + ",
+      predictors_chr,
+      ":Sex",
+      " + ns(",
+      predictors_chr,
+      ", knots = c(1.5, 2.5), Boundary.knots = c(0, 4))"
+    )
+  )
+  
+  stack = Stack$new(lrn_glm, lrn_glm_bs2, lrn_glm_interactions, lrn_glm_interactions_bs2)
+
+  task = make_sl3_Task(
+    data = data_temp,
+    outcome = "infection_120d",
+    covariates = covariates,
+    weights = "weights",
+    outcome_type = variable_type("binomial"),
+    id = "trial",
+    folds = make_folds(
+      n = nrow(data_temp),
+      cluster_ids = data_temp$trial,
+      fold_fun = folds_loo
+    ),
+  )
+
+  sl = Lrnr_sl$new(
+    learners = stack,
+    keep_extra = FALSE,
+    metalearner = Lrnr_solnp$new(eval_function = loss_loglik_binomial)
+  )
+
+  sl_fit = sl$train(task = task)
+
+  return(sl_fit)
+}
+
+sl_prediction_f = function(sl_fit, newdata, predictors_chr, include_risk_score) {
+  # Define the covariates that will be included as predictors.
+  covariates = c("Sex", "HighRiskInd", "BMI_stratum", "Age", "logit_prob_infection", predictors_chr)
+  if (include_risk_score) {
+    covariates = c(covariates, "risk_score")
+  }
+
+  # Add row number, which will be need later on.
+  newdata = newdata %>%
+    mutate(row_number = row_number())
+
+  # Split the data set into one with one with no missing value and one with missing values.
+  newdata_no_missing = newdata %>%
+    filter(if_all(all_of(covariates), ~ !is.na(.)))
+  newdata_missing = newdata %>%
+    filter(if_any(all_of(covariates), is.na))
+
+  # Do predictions for the rows with no missing values.
+  prediction_task = make_sl3_Task(
+    data = newdata_no_missing,
+    covariates = covariates,
+    outcome = "infection_120d"
+  )
+
+  newdata_no_missing$pred = sl_fit$predict(task = prediction_task)
+  newdata_missing$pred = NA
+  # Return the predictions in the original data's order.
+  return(
+    bind_rows(
+      newdata_missing,
+      newdata_no_missing
+    ) %>% arrange(row_number) %>%
+      pull(pred)
+  )
+}
+
+
+sl_models_tbl = prediction_model_settings %>%
+  mutate(
+    fitted_model = future_pmap(
+      .l = list(
+        predictors_chr = surrogate,
+        weights_chr = weights_chr,
+        case_cohort_ind_chr = case_cohort_ind_chr,
+        analysis_set = analysis_set,
+        include_risk_score = include_risk_score
+      ),
+      .f = sl_fitter, 
+      .options = furrr_options(
+        packages = "splines"
+      )
+    )
+  )
+
+sl_models_tbl = sl_models_tbl %>%
+  select(fitted_model, surrogate, weighting, analysis_set, include_risk_score)
+
+surrogate_index_models_tbl = surrogate_index_models_tbl %>%
+  bind_rows(sl_models_tbl %>%
+              mutate(method = "sl"))
+
+rm("sl_models_tbl")
+
+plan(sequential)
+
 ## Prediction Accuracies of all Prediction Models --------------------------
 
 # Add predictions to a new data set. We first add two artificial data sets where
@@ -460,9 +613,22 @@ ipd_surr_indices_tbl = bind_rows(
       surrogate_index = 1 - predict(
         fitted_model,
         newdata = ipd_tbl %>%
-          mutate(time_to_event = time_cumulative_incidence,
-                 trial = "Janssen"),
+          mutate(time_to_event = time_cumulative_incidence, trial = "Janssen"),
         type = "survival"
+      ),
+      ipd_tbl
+    )) %>%
+    ungroup(),
+  surrogate_index_models_tbl %>%
+    ungroup() %>%
+    filter(method %in% c("sl")) %>%
+    rowwise(method, surrogate, weighting, analysis_set, include_risk_score) %>%
+    reframe(tibble(
+      surrogate_index = sl_prediction_f(
+        sl_fit = fitted_model,
+        newdata = ipd_tbl,
+        include_risk_score = include_risk_score,
+        predictors_chr = surrogate
       ),
       ipd_tbl
     )) %>%
@@ -568,7 +734,7 @@ roc_ggplots = roc_tbl %>%
       data %>%
         mutate(
           weighting = ifelse(weighting == "normalized", "Normalized", "Unnormalized"),
-          method = ifelse(method == "gam", "GAM logistic regression", "Cox PH")
+          method = ifelse(method == "gam", "GAM logistic regression", ifelse(method == "cox", "Cox PH", "SuperLearner"))
         ) %>%
         ggplot(aes(color = method, linetype = include_risk_score)) +
         geom_path(aes(FPR, TPR)) +

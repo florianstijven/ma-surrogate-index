@@ -421,7 +421,7 @@ statistic_f_rho = function(data, weights) {
     vcov_list = data$covariance_matrix,
     estimator_adjustment = "N - 1",
     weights = weights,
-    nearest_PD = TRUE
+    nearest_PD = FALSE
   )
   rho = rho_delta_method(
     coefs = moment_estimate$coefs,
@@ -503,7 +503,8 @@ surrogate_results_tbl = ma_trt_effects_tbl %>%
           ),
         statistic = statistic_f_rho,
         B = B_multiplier,
-        type = "studentized"
+        type = "BCa",
+        alpha = 0.1
       )
     ),
     rho_sandwich_inference = list(
@@ -526,7 +527,7 @@ surrogate_results_tbl = ma_trt_effects_tbl %>%
           ),
         statistic = statistic_f_residual_var,
         B = B_multiplier,
-        type = "BC percentile"
+        type = "BCa"
       )
     )
   ) %>%
