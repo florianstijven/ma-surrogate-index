@@ -30,7 +30,7 @@ train_clinical_prediction_model_logistic = function(simulated_data) {
   # Train a correctly specified logistic regression model for predicting the
   # clinical endpoint given the surrogate and baseline covariate
   clinical_model <- glm(
-    formula = clinical ~ X1 + X2 + surrogate*X3,
+    formula = clinical ~ X1 + X2 + X3 + surrogate,
     data = simulated_data,
     x = FALSE,
     y = FALSE,
