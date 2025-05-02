@@ -360,7 +360,36 @@ if (regime == "small") {
         rho_ci_upper = purrr::map_dbl(rho_ci_bs, function(x)
           x[[2]])
       ) %>%
-      mutate(CI_type = "multiplier bootstrap") %>%
+      mutate(CI_type = "BCa") %>%
+      # Drop redundant variables.
+      select(-rho_ci_bs),
+    meta_analytic_data_simulated %>%
+      mutate(
+        # Compute CIs for rho based on the multiplier bootstrap.
+        rho_ci_bs = furrr::future_pmap(
+          .l = list(
+            treatment_effects = treatment_effects,
+            estimator_adjustment = estimator_adjustment,
+            nearest_PD = nearest_PD
+          ),
+          .f = function(treatment_effects,
+                        estimator_adjustment,
+                        nearest_PD) {
+            multiplier_bootstrap_ci(
+              data = treatment_effects,
+              statistic = statistic_function_factory(estimator_adjustment, nearest_PD),
+              B = B,
+              alpha = 0.05,
+              type = "BC percentile"
+            )
+          }
+        ),
+        rho_ci_lower = purrr::map_dbl(rho_ci_bs, function(x)
+          x[[1]]),
+        rho_ci_upper = purrr::map_dbl(rho_ci_bs, function(x)
+          x[[2]])
+      ) %>%
+      mutate(CI_type = "BC percentile") %>%
       # Drop redundant variables.
       select(-rho_ci_bs)
   )
