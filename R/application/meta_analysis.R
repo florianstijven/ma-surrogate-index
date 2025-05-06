@@ -159,7 +159,7 @@ ma_trt_effects_tbl %>%
   scale_shape_manual(values = my_shapes, limits = trials_mixed_fct) +
   coord_cartesian(ylim = c(-0.2, 0.95)) +
   facet_wrap(~surrogate_name, scales = "free_x", nrow = 2) +
-  xlab("Estimated Treatment Effect on Titer") +
+  xlab("Estimated Treatment Effect on Antibody Marker") +
   ylab("Estimated VE") +
   theme(legend.position = "bottom", legend.title = element_blank())
 
@@ -195,7 +195,7 @@ ma_trt_effects_tbl %>%
   scale_shape_manual(values = my_shapes, limits = trials_first_four_fct) +
   coord_cartesian(ylim = c(-0.2, 0.95)) +
   facet_wrap(~surrogate_name, scales = "free_x", nrow = 2) +
-  xlab("Estimated Treatment Effect on Titer") +
+  xlab("Estimated Treatment Effect on Antibody Marker") +
   ylab("Estimated VE") +
   theme(legend.position = "bottom", legend.title = element_blank())
 
@@ -442,13 +442,32 @@ statistic_f_residual_var = function(data, weights) {
     vcov_list = data$covariance_matrix,
     estimator_adjustment = "N - 1",
     weights = weights,
-    nearest_PD = TRUE
+    nearest_PD = FALSE
   )
   # Residual variance
   residual_var = moment_estimate$residual_var
   
   
   return(list(estimate = residual_var, se = NA))
+}
+
+statistic_f_residual_var_prop = function(data, weights) {
+  moment_estimate = moment_estimator(
+    alpha_hat = data$treatment_effect_surr,
+    beta_hat = data$treatment_effect_clin,
+    vcov_list = data$covariance_matrix,
+    estimator_adjustment = "N - 1",
+    weights = weights,
+    nearest_PD = FALSE
+  )
+  # Residual variance
+  residual_var = moment_estimate$residual_var
+  var_beta = moment_estimate$coefs[4]
+  
+  # Proportion of variance in beta explained by the identity line
+  prop_explained = 1 - (residual_var / var_beta)
+  
+  return(list(estimate = prop_explained, se = NA))
 }
 
 # Construct data set for the treatment effect estimates on the untransformed
@@ -504,7 +523,7 @@ surrogate_results_tbl = ma_trt_effects_tbl %>%
         statistic = statistic_f_rho,
         B = B_multiplier,
         type = "BCa",
-        alpha = 0.1
+        alpha = 0.05
       )
     ),
     rho_sandwich_inference = list(
@@ -529,6 +548,19 @@ surrogate_results_tbl = ma_trt_effects_tbl %>%
         B = B_multiplier,
         type = "BCa"
       )
+    ),
+    bootstrap_ci_residual_var_prop = list(
+      multiplier_bootstrap_ci(
+        data = pick(everything()) %>%
+          rename(
+            treatment_effect_surr = "trt_effect_surrogate_index_est",
+            treatment_effect_clin = 'log_RR_est',
+            covariance_matrix = "vcov"
+          ),
+        statistic = statistic_f_residual_var_prop,
+        B = B_multiplier,
+        type = "BCa"
+      )
     )
   ) %>%
   ungroup() 
@@ -548,6 +580,8 @@ surrogate_results_tbl = surrogate_results_tbl %>%
     CI_upper_bs = purrr::map_dbl(bootstrap_ci, "ci_upper"),
     CI_lower_bs_residual_var = purrr::map_dbl(bootstrap_ci_residual_var, "ci_lower"),
     CI_upper_bs_residual_var = purrr::map_dbl(bootstrap_ci_residual_var, "ci_upper"),
+    CI_lower_bs_residual_var_prop = purrr::map_dbl(bootstrap_ci_residual_var_prop, "ci_lower"),
+    CI_upper_bs_residual_var_prop = purrr::map_dbl(bootstrap_ci_residual_var_prop, "ci_upper"),
     CI_lower_sandwich = map_dbl(rho_sandwich_inference, function(x)
       x$ci[[1]]),
     CI_upper_sandwich = map_dbl(rho_sandwich_inference, function(x)
