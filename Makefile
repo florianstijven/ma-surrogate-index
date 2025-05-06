@@ -2,12 +2,20 @@ analysishelpers = R/helper-functions/delta-method-rho-trial.R R/helper-functions
 simulationhelpers = R/helper-functions/simulation-functions.R
 data = data/processed_data.csv
 
-.PHONY: all
+.PHONY: all application
 all: results/raw-results/simple-simulation/ma-sim-results-proof-of-concept-small.rds \
 	results/raw-results/simple-simulation/ma-sim-results-vaccine-small.rds \
 	results/raw-results/simple-simulation/ma-sim-results-proof-of-concept-large.rds \
+	R/simulations/processing-results.Rout \
 	R/application/data-exploration.Rout \
 	R/application/meta_analysis.Rout
+	
+application: R/application/data-exploration.Rout \
+	R/application/ipd_surr_indices_tbl.rds \
+	R/application/ma_trt_effects_tbl.rds \
+	R/application/meta_analysis.Rout \
+	R/application/bayesian_ma_results.rds \
+	R/application/processing-results.Rout
 	
 
 results/raw-results/simple-simulation/ma-sim-results-proof-of-concept-small.rds: R/simulations/simulations.R $(analysishelpers) $(simulationhelpers)
@@ -31,5 +39,11 @@ R/application/ipd_surr_indices_tbl.rds: R/application/surrogate_index_estimation
 R/application/ma_trt_effects_tbl.rds: R/application/trial-level-effects.R R/application/ipd_surr_indices_tbl.rds
 	Rscript --verbose R/application/trial-level-effects.R  > R/application/trial-level-effects.Rout 2> R/application/trial-level-effects.Rout
 	
-R/application/meta_analysis.Rout: R/application/ma_trt_effects_tbl.rds $(analysishelpers)
+R/application/meta_analysis.Rout: R/application/meta_analysis.R R/application/ma_trt_effects_tbl.rds $(analysishelpers)
 	Rscript --verbose R/application/meta_analysis.R  > $@ 2> $@
+	
+R/application/bayesian_ma_results.rds: R/application/bayesian-meta-analysis.R R/application/ma_trt_effects_tbl.rds
+	Rscript --verbose R/application/meta_analysis.R  > R/application/bayesian-meta-analysis.Rout 2> R/application/bayesian-meta-analysis.Rout
+	
+R/application/processing-results.Rout: R/application/processing-results.R R/application/bayesian_ma_results.rds 
+	Rscript --verbose R/application/processing-results.R  > $@ 2> $@
