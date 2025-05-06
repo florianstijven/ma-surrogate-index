@@ -7,7 +7,7 @@
 ml fhR/4.4.0-foss-2023b
 export OMP_NUM_THREADS=1
 
-Rscript -e "install.packages('tlverse-sl3-v1.4.4-243-g0e8f236.tar.gz', type = 'source', repo = NULL)"
+Rscript -e "install.packages('tlverse-sl3-v1.4.4-243-g0e8f236.tar.gz', type = 'source', repos = NULL)"
 Rscript -e "renv::restore()"
 
 make R/application/meta_analysis.Rout
