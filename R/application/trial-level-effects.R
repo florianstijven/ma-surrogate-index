@@ -206,7 +206,12 @@ estimate_treatment_effects = function(data,
         
         # Estimate treatment effects on surrogate index and clinical endpoint.
         trt_effect_surrogate_index_est = estimate_treatment_effect_surrogate_index(data_bs, VE_surr)
-        VE_est = estimate_treatment_effect_clinical_km(data_bs)
+        # Estimate treatment effect on clinical endpoint.
+        if (glm_VE) {
+          VE_est = estimate_treatment_effect_clinical(data)
+        } else {
+          VE_est = estimate_treatment_effect_clinical_km(data)
+        }
         
         if (log_RR_alpha) {
           trt_effect_surrogate_index_est = log(1 - trt_effect_surrogate_index_est)
@@ -245,7 +250,7 @@ ma_trt_effects_tbl =
   mutate(log_RR_alpha = ifelse(method == "none", FALSE, TRUE),
          log_RR_beta = TRUE,
          VE_surr = ifelse(method == "none", FALSE, TRUE),
-         glm_VE = TRUE) %>%
+         glm_VE = FALSE) %>%
   mutate(
     est_list = future_pmap(
       .l = list(
