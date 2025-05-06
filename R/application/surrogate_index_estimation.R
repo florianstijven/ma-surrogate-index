@@ -551,9 +551,9 @@ sl_models_tbl = prediction_model_settings %>%
       ),
       .f = sl_fitter, 
       .options = furrr_options(
-        packages = "splines"
-      ), 
-      seed = TRUE
+        packages = "splines",
+        seed = TRUE
+      )
     )
   )
 
