@@ -107,3 +107,23 @@ posterior_plots_f = function(assume_proportional_line) {
 # Make plots for specified scenarios
 posterior_plots_f(TRUE)
 posterior_plots_f(FALSE)
+
+# Compute posterior mean, median, and quantiles.
+rho_long_tbl %>%
+  group_by(
+    surrogate,
+    method,
+    weighting,
+    analysis_set,
+    include_risk_score,
+    assume_proportional_line
+  ) %>%
+  summarise(
+    mean = mean(rho),
+    median = median(rho),
+    quantile_2.5 = quantile(rho, 0.025),
+    quantile_5 = quantile(rho, 0.05),
+    quantile_95 = quantile(rho, 0.95),
+    quantile_97.5 = quantile(rho, 0.975)
+  ) %>%
+  write.csv(paste0(tables_dir, "/posterior-summaries.csv"))
