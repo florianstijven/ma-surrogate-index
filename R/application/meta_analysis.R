@@ -458,7 +458,7 @@ statistic_f_residual_var_prop = function(data, weights) {
     vcov_list = data$covariance_matrix,
     estimator_adjustment = "N - 1",
     weights = weights,
-    nearest_PD = FALSE
+    nearest_PD = TRUE
   )
   # Residual variance
   residual_var = moment_estimate$residual_var
@@ -592,7 +592,7 @@ surrogate_results_tbl = surrogate_results_tbl %>%
 
 # Summarize inferences in a table.
 surrogate_results_tbl = surrogate_results_tbl %>%
-  select(-moment_estimate, -bootstrap_ci, -bootstrap_ci_residual_var, -rho_sandwich_inference) 
+  select(-moment_estimate, -bootstrap_ci, -bootstrap_ci_residual_var, -bootstrap_ci_residual_var_prop, -rho_sandwich_inference) 
 
 surrogate_results_tbl %>%
   write.csv(file = paste0(tables_dir, "/surrogacy-inferences.csv"))
@@ -697,4 +697,20 @@ ggsave(
   device = "pdf",
   units = "cm"
 )
+
+
+surrogate_results_tbl %>%
+  filter(include_risk_score == FALSE & method != "untransformed surrogate") %>%
+  # Multiply the correlations for the untransformed surrogate with -1 to get
+  # positive correlations which are comparable with those for the surrogate
+  # indices.
+  mutate(rho_trial = ifelse(method == "untransformed surrogate", -1 * rho_trial, rho_trial),
+         CI_lower_bs = ifelse(method == "untransformed surrogate", -1 * CI_lower_bs, CI_lower_bs),
+         CI_upper_bs = ifelse(method == "untransformed surrogate", -1 * CI_upper_bs, CI_upper_bs)) %>%
+  ggplot(aes(x = analysis_set, color = method)) +
+  geom_point(aes(y = rho_trial), position = position_dodge(width = 0.5)) +
+  geom_errorbar(aes(ymin = CI_lower_bs_residual_var_prop, ymax = CI_upper_bs_residual_var_prop), position = position_dodge(width = 0.5), width = 0.2) +
+  coord_cartesian(ylim = c(-1, 1)) +
+  facet_grid(surrogate~.) +
+  theme(legend.position = "bottom", legend.box = "vertical", legend.margin = margin())
 
