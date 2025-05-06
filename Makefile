@@ -43,7 +43,7 @@ R/application/meta_analysis.Rout: R/application/meta_analysis.R R/application/ma
 	Rscript --verbose R/application/meta_analysis.R  > $@ 2> $@
 	
 R/application/bayesian_ma_results.rds: R/application/bayesian-meta-analysis.R R/application/ma_trt_effects_tbl.rds
-	Rscript --verbose R/application/meta_analysis.R  > R/application/bayesian-meta-analysis.Rout 2> R/application/bayesian-meta-analysis.Rout
+	Rscript --verbose R/application/bayesian-meta-analysis.R  > R/application/bayesian-meta-analysis.Rout 2> R/application/bayesian-meta-analysis.Rout
 	
 R/application/processing-results.Rout: R/application/processing-results.R R/application/bayesian_ma_results.rds 
 	Rscript --verbose R/application/processing-results.R  > $@ 2> $@
