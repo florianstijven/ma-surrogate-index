@@ -2,6 +2,7 @@ library(rstan)
 library(bayesplot)
 library(tidyverse)
 library(tidybayes)
+library(posterior)
 
 # Specify options for saving the plots to files
 figures_dir = "results/figures/application/meta-analysis"
@@ -195,7 +196,7 @@ surrogate_results_tbl = ma_trt_effects_tbl %>%
 rho_posterior_tbl <- surrogate_results_tbl %>%
   mutate(draws = purrr::map(stan_fit, ~ as_draws_df(.x))) %>%
   mutate(rho_draws = purrr::map(draws, ~ .x$rho)) %>%
-  select(surrogate, method, analysis_set, rho_draws) %>%
+  select(surrogate, method, analysis_set, rho_draws, weighting) %>%
   unnest(cols = c(rho_draws)) %>%
   rename(rho = rho_draws)
 
@@ -207,9 +208,6 @@ ggplot(rho_posterior_tbl, aes(x = rho, fill = method, color = method)) +
     slab_alpha = 0.7
   ) +
   facet_grid(surrogate ~ .) +
-  theme_minimal(base_size = 14) +
-  scale_fill_brewer(palette = "Set1") +
-  scale_color_brewer(palette = "Set1") +
   labs(
     title = "Posterior Distributions of ρ (rho)",
     x = expression(rho),
@@ -217,6 +215,66 @@ ggplot(rho_posterior_tbl, aes(x = rho, fill = method, color = method)) +
     fill = "Method",
     color = "Method"
   )
+
+library(tidyverse)
+library(bayesplot)
+
+# Extract and summarize posterior for rho from each model
+rho_summary_tbl <- surrogate_results_tbl %>%
+  mutate(rho_samples = map(stan_fit, ~ as.data.frame(.x)$rho)) %>%
+  unnest(rho_samples) %>%
+  group_by(surrogate, method, analysis_set) %>%
+  summarise(
+    median = median(rho_samples),
+    ci_90_low = quantile(rho_samples, 0.05),
+    ci_90_high = quantile(rho_samples, 0.95),
+    ci_95_low = quantile(rho_samples, 0.025),
+    ci_95_high = quantile(rho_samples, 0.975),
+    .groups = "drop"
+  )
+
+# Plot using ggplot2
+ggplot(rho_summary_tbl, aes(x = median, y = method, color = method)) +
+  geom_point(size = 2) +
+  geom_errorbar(aes(xmin = ci_95_low, xmax = ci_95_high), width = 0.2, size = 0.8) +
+  geom_errorbar(aes(xmin = ci_90_low, xmax = ci_90_high), width = 0.5, size = 1.2) +
+  facet_grid(surrogate ~ analysis_set) +
+  labs(
+    title = "Posterior Estimates of Trial-Level Correlation (rho)",
+    x = "Posterior Median and Credible Intervals for rho",
+    y = NULL,
+    color = "Method"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    strip.text = element_text(size = 10, face = "bold"),
+    axis.text.y = element_text(size = 10)
+  )
+
+library(tidyverse)
+library(ggridges)
+
+# Extract and reshape posterior samples
+rho_long_tbl <- surrogate_results_tbl %>%
+  mutate(rho_samples = map(stan_fit, ~ as.data.frame(.x)$rho)) %>%
+  unnest(rho_samples) %>%
+  rename(rho = rho_samples)
+
+# Plot full posterior distributions
+rho_long_tbl %>% filter(method != "untransformed surrogate") %>%
+  ggplot(aes(x = rho, y = method, fill = method)) +
+  geom_density_ridges(
+    quantile_lines = TRUE,
+    quantiles = c(0.025, 0.5, 0.975)
+  ) +
+  facet_grid(surrogate ~ analysis_set) +
+  labs(title = "Posterior Distributions of Trial-Level Correlation (rho)",
+       x = "rho",
+       y = NULL,
+       fill = "Method") +
+  theme(legend.position = "bottom")
+
 
 
 
