@@ -434,7 +434,7 @@ sl_fitter = function(predictors_chr,
   # Define the covariates that will be included as predictors.
   covariates = c("Sex", "HighRiskInd", "BMI_stratum", "Age", "logit_prob_infection", predictors_chr)
   if (include_risk_score) {
-    covariates = c(covariates, "risk_score")
+    covariates = c(covariates, "risk_score_centered")
   }
   
   # Select the subset of the data corresponding to `analysis_set`
@@ -451,6 +451,7 @@ sl_fitter = function(predictors_chr,
   
   # Instantiate a set of learners.
   lrn_glm = Lrnr_glm$new()
+  lrn_glm_surr_only = Lrnr_glm$new(formula = paste0("~ logit_prob_infection + ", predictors_chr))
   lrn_glm_bs2 = Lrnr_glm$new(
     formula = paste0(
       "~ .",
@@ -471,8 +472,10 @@ sl_fitter = function(predictors_chr,
       ", knots = c(1.5, 2.5), Boundary.knots = c(0, 4))"
     )
   )
+  lrn_gam = Lrnr_gam$new()
+
   
-  stack = Stack$new(lrn_glm, lrn_glm_bs2, lrn_glm_interactions, lrn_glm_interactions_bs2)
+  stack = Stack$new(lrn_glm, lrn_glm_surr_only, lrn_glm_bs2, lrn_glm_interactions, lrn_glm_interactions_bs2, lrn_gam)
 
   task = make_sl3_Task(
     data = data_temp,
@@ -503,7 +506,7 @@ sl_prediction_f = function(sl_fit, newdata, predictors_chr, include_risk_score) 
   # Define the covariates that will be included as predictors.
   covariates = c("Sex", "HighRiskInd", "BMI_stratum", "Age", "logit_prob_infection", predictors_chr)
   if (include_risk_score) {
-    covariates = c(covariates, "risk_score")
+    covariates = c(covariates, "risk_score_centered")
   }
 
   # Add row number, which will be need later on.
@@ -549,7 +552,8 @@ sl_models_tbl = prediction_model_settings %>%
       .f = sl_fitter, 
       .options = furrr_options(
         packages = "splines"
-      )
+      ), 
+      seed = TRUE
     )
   )
 
