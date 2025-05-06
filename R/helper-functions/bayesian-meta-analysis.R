@@ -1,9 +1,46 @@
 library(rstan)
 library(bayesplot)
+library(tidyverse)
+library(tidybayes)
 
 # Specify options for saving the plots to files
 figures_dir = "results/figures/application/meta-analysis"
 tables_dir = "results/tables/application/meta-analysis"
+
+trials_first_four = c("Moderna", "AstraZeneca", "Janssen", "Novavax")
+trials_first_four_fct = trials_first_four
+trials_naive_only = c("Moderna",
+                      "AstraZeneca",
+                      "Janssen",
+                      "Novavax",
+                      "Sanofi-1 naive",
+                      "Sanofi-2 naive")
+trials_naive_only_fct = c("Moderna",
+                          "AstraZeneca",
+                          "Janssen",
+                          "Novavax",
+                          "Sanofi 1 (naive)",
+                          "Sanofi 2 (naive)")
+trials_mixed = c(
+  "Moderna",
+  "AstraZeneca",
+  "Janssen",
+  "Novavax",
+  "Sanofi-1 naive",
+  "Sanofi-1 non-naive",
+  "Sanofi-2 naive",
+  "Sanofi-2 non-naive"
+)
+trials_mixed_fct = c(
+  "Moderna",
+  "AstraZeneca",
+  "Janssen",
+  "Novavax",
+  "Sanofi 1 (naive)",
+  "Sanofi 1 (non-naive)",
+  "Sanofi 2 (naive)",
+  "Sanofi 2 (non-naive)"
+)
 
 # Load data with trial-level treatment effects. 
 ma_trt_effects_tbl = readRDS("R/application/ma_trt_effects_tbl.rds")
@@ -151,6 +188,35 @@ surrogate_results_tbl = ma_trt_effects_tbl %>%
     ifelse(analysis_set == "naive_only", trial %in% trials_naive_only, TRUE)
   )) %>%
   group_by(surrogate, method, weighting, analysis_set, include_risk_score) %>%
-  summarise(stan_fit = list(fit_surrogacy_model(data = pick(everything()))))
+  summarise(stan_fit = list(fit_surrogacy_model(data = pick(everything()), chains = 1, iter = 2e3, warmup = 1e3)))
+
+
+# Extract rho samples and prepare for plotting
+rho_posterior_tbl <- surrogate_results_tbl %>%
+  mutate(draws = purrr::map(stan_fit, ~ as_draws_df(.x))) %>%
+  mutate(rho_draws = purrr::map(draws, ~ .x$rho)) %>%
+  select(surrogate, method, analysis_set, rho_draws) %>%
+  unnest(cols = c(rho_draws)) %>%
+  rename(rho = rho_draws)
+
+# Plotting posterior distributions with 90% and 95% intervals
+ggplot(rho_posterior_tbl, aes(x = rho, fill = method, color = method)) +
+  stat_halfeye(
+    .width = c(0.95, 0.90),
+    point_interval = mean_qi,
+    slab_alpha = 0.7
+  ) +
+  facet_grid(surrogate ~ .) +
+  theme_minimal(base_size = 14) +
+  scale_fill_brewer(palette = "Set1") +
+  scale_color_brewer(palette = "Set1") +
+  labs(
+    title = "Posterior Distributions of ρ (rho)",
+    x = expression(rho),
+    y = NULL,
+    fill = "Method",
+    color = "Method"
+  )
+
 
 
