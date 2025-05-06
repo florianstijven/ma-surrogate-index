@@ -26,10 +26,10 @@ R/application/data-exploration.Rout: R/application/data-exploration.R $(data)
 	Rscript --verbose R/application/data-exploration.R  > $@ 2> $@
 	
 R/application/ipd_surr_indices_tbl.rds: R/application/surrogate_index_estimation.R $(data)
-	Rscript --verbose R/application/surrogate_index_estimation.R  > $@ 2> $@
+	Rscript --verbose R/application/surrogate_index_estimation.R  > R/application/surrogate_index_estimation.Rout 2> R/application/surrogate_index_estimation.Rout
 	
 R/application/ma_trt_effects_tbl.rds: R/application/trial-level-effects.R R/application/ipd_surr_indices_tbl.rds
-	Rscript --verbose R/application/trial-level-effects.R  > $@ 2> $@
+	Rscript --verbose R/application/trial-level-effects.R  > R/application/trial-level-effects.Rout 2> R/application/trial-level-effects.Rout
 	
 R/application/meta_analysis.Rout: R/application/ma_trt_effects_tbl.rds $(analysishelpers)
 	Rscript --verbose R/application/meta_analysis.R  > $@ 2> $@
