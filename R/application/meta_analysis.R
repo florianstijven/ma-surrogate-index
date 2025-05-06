@@ -502,6 +502,7 @@ surrogate_results_tbl = ma_trt_effects_tbl %>%
   )) %>%
   group_by(surrogate, method, weighting, analysis_set, include_risk_score) %>%
   summarise(data_tbl = list(pick(everything())), N = nrow(data_tbl[[1]])) %>%
+  ungroup() %>%
   mutate(
     moment_estimate = purrr::map(
       .x = data_tbl,
@@ -513,8 +514,7 @@ surrogate_results_tbl = ma_trt_effects_tbl %>%
           estimator_adjustment = "N - 1",
           sandwich_adjustment = "N - 1",
           nearest_PD = TRUE
-        ) %>%
-          list()
+        )
       }
     ),
     bootstrap_ci = future_map(
@@ -573,19 +573,16 @@ surrogate_results_tbl = ma_trt_effects_tbl %>%
     .x = moment_estimate,
     .y = N,
     .f = function(moment_estimate, N) {
-      list(
-        rho_delta_method(
-          coefs = moment_estimate[[1]]$coefs,
-          vcov = moment_estimate[[1]]$vcov,
-          method = "t-adjustment",
-          # N is only used for the t-adjustment, it doesn't matter for the estimate
-          # or SE.
-          N = N
-        )
+      rho_delta_method(
+        coefs = moment_estimate$coefs,
+        vcov = moment_estimate$vcov,
+        method = "t-adjustment",
+        # N is only used for the t-adjustment, it doesn't matter for the estimate
+        # or SE.
+        N = N
       )
     }
-  )) %>%
-  ungroup()
+  ))
 
 
 surrogate_results_tbl = surrogate_results_tbl %>%
@@ -615,7 +612,7 @@ surrogate_results_tbl = surrogate_results_tbl %>%
 
 # Summarize inferences in a table.
 surrogate_results_tbl = surrogate_results_tbl %>%
-  select(-moment_estimate, -bootstrap_ci, -bootstrap_ci_residual_var, -bootstrap_ci_residual_var_prop, -rho_sandwich_inference) 
+  select(-moment_estimate, -bootstrap_ci, -bootstrap_ci_residual_var, -bootstrap_ci_residual_var_prop, -rho_sandwich_inference, -data_tbl) 
 
 surrogate_results_tbl %>%
   write.csv(file = paste0(tables_dir, "/surrogacy-inferences.csv"))
