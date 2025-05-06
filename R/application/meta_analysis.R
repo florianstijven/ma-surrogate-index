@@ -11,12 +11,12 @@ library(furrr)
 library(survival)
 library(RColorBrewer)
 
-# # Set up parallel computing
-# if (parallelly::supportsMulticore()) {
-#   plan("multicore")
-# } else {
-#   plan(multisession)
-# }
+# Set up parallel computing
+if (parallelly::supportsMulticore()) {
+  plan("multicore")
+} else {
+  plan(multisession)
+}
 
 # Specify options for saving the plots to files
 figures_dir = "results/figures/application/meta-analysis"
@@ -501,69 +501,92 @@ surrogate_results_tbl = ma_trt_effects_tbl %>%
     ifelse(analysis_set == "naive_only", trial %in% trials_naive_only, TRUE)
   )) %>%
   group_by(surrogate, method, weighting, analysis_set, include_risk_score) %>%
-  summarise(
-    moment_estimate = list(
-      moment_estimator(
-        alpha_hat = trt_effect_surrogate_index_est,
-        beta_hat = log_RR_est,
-        vcov_list = vcov,
-        estimator_adjustment = "N - 1",
-        sandwich_adjustment = "N - 1",
-        nearest_PD = TRUE
-      )
+  summarise(data_tbl = list(pick(everything())), N = nrow(data_tbl[[1]])) %>%
+  mutate(
+    moment_estimate = purrr::map(
+      .x = data_tbl,
+      .f = function(data_tbl) {
+        moment_estimator(
+          alpha_hat = data_tbl$trt_effect_surrogate_index_est,
+          beta_hat = data_tbl$log_RR_est,
+          vcov_list = data_tbl$vcov,
+          estimator_adjustment = "N - 1",
+          sandwich_adjustment = "N - 1",
+          nearest_PD = TRUE
+        ) %>%
+          list()
+      }
     ),
-    bootstrap_ci = list(
-      multiplier_bootstrap_ci(
-        data = pick(everything()) %>%
-          rename(
-            treatment_effect_surr = "trt_effect_surrogate_index_est",
-            treatment_effect_clin = 'log_RR_est',
-            covariance_matrix = "vcov"
-          ),
-        statistic = statistic_f_rho,
-        B = B_multiplier,
-        type = "BCa",
-        alpha = 0.05
-      )
+    bootstrap_ci = future_map(
+      .x = data_tbl,
+      .f = function(data_tbl) {
+        multiplier_bootstrap_ci(
+          data = data_tbl %>%
+            rename(
+              treatment_effect_surr = "trt_effect_surrogate_index_est",
+              treatment_effect_clin = 'log_RR_est',
+              covariance_matrix = "vcov"
+            ),
+          statistic = statistic_f_rho,
+          B = B_multiplier,
+          type = "BCa",
+          alpha = 0.05
+        )
+      }
     ),
-    rho_sandwich_inference = list(
-      rho_delta_method(
-        coefs = moment_estimate[[1]]$coefs,
-        vcov = moment_estimate[[1]]$vcov,
-        method = "t-adjustment",
-        # N is only used for the t-adjustment, it doesn't matter for the estimate
-        # or SE.
-        N = n()
-      )
+    bootstrap_ci_residual_var = future_map(
+      .x = data_tbl,
+      .f = function(data_tbl) {
+        multiplier_bootstrap_ci(
+          data = data_tbl %>%
+            rename(
+              treatment_effect_surr = "trt_effect_surrogate_index_est",
+              treatment_effect_clin = 'log_RR_est',
+              covariance_matrix = "vcov"
+            ),
+          statistic = statistic_f_residual_var,
+          B = B_multiplier,
+          type = "BCa",
+          alpha = 0.05
+        )
+      }
     ),
-    bootstrap_ci_residual_var = list(
-      multiplier_bootstrap_ci(
-        data = pick(everything()) %>%
-          rename(
-            treatment_effect_surr = "trt_effect_surrogate_index_est",
-            treatment_effect_clin = 'log_RR_est',
-            covariance_matrix = "vcov"
-          ),
-        statistic = statistic_f_residual_var,
-        B = B_multiplier,
-        type = "BCa"
-      )
-    ),
-    bootstrap_ci_residual_var_prop = list(
-      multiplier_bootstrap_ci(
-        data = pick(everything()) %>%
-          rename(
-            treatment_effect_surr = "trt_effect_surrogate_index_est",
-            treatment_effect_clin = 'log_RR_est',
-            covariance_matrix = "vcov"
-          ),
-        statistic = statistic_f_residual_var_prop,
-        B = B_multiplier,
-        type = "BCa"
-      )
+    bootstrap_ci_residual_var_prop = future_map(
+      .x = data_tbl,
+      .f = function(data_tbl) {
+        multiplier_bootstrap_ci(
+          data = data_tbl %>%
+            rename(
+              treatment_effect_surr = "trt_effect_surrogate_index_est",
+              treatment_effect_clin = 'log_RR_est',
+              covariance_matrix = "vcov"
+            ),
+          statistic = statistic_f_residual_var_prop,
+          B = B_multiplier,
+          type = "BCa",
+          alpha = 0.05
+        )
+      }
     )
   ) %>%
-  ungroup() 
+  mutate(rho_sandwich_inference = purrr::map2(
+    .x = moment_estimate,
+    .y = N,
+    .f = function(moment_estimate, N) {
+      list(
+        rho_delta_method(
+          coefs = moment_estimate[[1]]$coefs,
+          vcov = moment_estimate[[1]]$vcov,
+          method = "t-adjustment",
+          # N is only used for the t-adjustment, it doesn't matter for the estimate
+          # or SE.
+          N = N
+        )
+      )
+    }
+  )) %>%
+  ungroup()
+
 
 surrogate_results_tbl = surrogate_results_tbl %>%
   mutate(
