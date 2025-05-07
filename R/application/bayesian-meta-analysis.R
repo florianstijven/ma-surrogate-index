@@ -96,10 +96,8 @@ ma_trt_effects_tbl = ma_trt_effects_tbl %>%
     )
   )
 
-fit_surrogacy_model <- function(data, assume_proportional_line, iter = 10000, warmup = 5000, chains = 4, seed = 123) {
-  # Define Stan code dynamically based on the assumption of an identity regression line
-  stan_code <- if (assume_proportional_line) {
-    "
+stan_code_prop_line = 
+  "
     data {
       int<lower=1> N;              // number of studies
       vector[2] y[N];              // observed effects: [S, T]
@@ -136,8 +134,8 @@ fit_surrogacy_model <- function(data, assume_proportional_line, iter = 10000, wa
         y[i] ~ multi_normal(theta[i], Sigma[i]);
     }
     "
-  } else {
-    "
+stan_code_default = 
+  "
     data {
       int<lower=1> N;              // number of studies
       vector[2] y[N];              // observed effects: [S, T]
@@ -167,6 +165,16 @@ fit_surrogacy_model <- function(data, assume_proportional_line, iter = 10000, wa
         y[i] ~ multi_normal(theta[i], Sigma[i]);
     }
     "
+
+stan_model_prop_line = stan_model(model_code = stan_code_prop_line)
+stan_model_default = stan_model(model_code = stan_code_default)
+
+fit_surrogacy_model <- function(data, assume_proportional_line, iter = 10000, warmup = 5000, chains = 4, seed = 123) {
+  # Define Stan code dynamically based on the assumption of an identity regression line
+  stan_model <- if (assume_proportional_line) {
+    stan_model_prop_line
+  } else {
+    stan_model_default
   }
   
   # Prepare input data for Stan
@@ -185,14 +193,13 @@ fit_surrogacy_model <- function(data, assume_proportional_line, iter = 10000, wa
   )
   
   # Fit model
-  fit <- stan(
-    model_code = stan_code,
+  fit <- sampling(
+    object = stan_model,
     data = stan_data,
     iter = iter,
     warmup = warmup,
     chains = chains,
-    seed = seed,
-    control = list(adapt_delta = 0.95)
+    seed = seed
   )
   
   return(fit)
