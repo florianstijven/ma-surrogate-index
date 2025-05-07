@@ -208,9 +208,9 @@ estimate_treatment_effects = function(data,
         trt_effect_surrogate_index_est = estimate_treatment_effect_surrogate_index(data_bs, VE_surr)
         # Estimate treatment effect on clinical endpoint.
         if (glm_VE) {
-          VE_est = estimate_treatment_effect_clinical(data)
+          VE_est = estimate_treatment_effect_clinical(data_bs)
         } else {
-          VE_est = estimate_treatment_effect_clinical_km(data)
+          VE_est = estimate_treatment_effect_clinical_km(data_bs)
         }
         
         if (log_RR_alpha) {
