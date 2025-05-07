@@ -73,13 +73,15 @@ rho_long_tbl <- surrogate_results_bayesian_tbl %>%
   rename(rho = rho_samples)
 
 # Define helper function to make and save plots.
-posterior_plots_f = function(assume_proportional_line) {
-  posterior_plot = rho_long_tbl %>% filter(method != "untransformed surrogate", assume_proportional_line == .env$assume_proportional_line) %>%
+posterior_plots_f = function(assume_proportional_line, include_risk_score) {
+  posterior_plot = rho_long_tbl %>% filter(
+    method != "untransformed surrogate",
+    assume_proportional_line == .env$assume_proportional_line,
+    include_risk_score == .env$include_risk_score
+  ) %>%
     ggplot(aes(x = rho, y = method, fill = method)) +
-    geom_density_ridges(
-      quantile_lines = TRUE,
-      quantiles = c(0.025, 0.5, 0.975)
-    ) +
+    geom_density_ridges(quantile_lines = TRUE,
+                        quantiles = c(0.025, 0.5, 0.975)) +
     facet_grid(surrogate ~ analysis_set) +
     labs(title = "Posterior Distributions of Trial-Level Correlation (rho)",
          x = "rho",
@@ -87,12 +89,10 @@ posterior_plots_f = function(assume_proportional_line) {
          fill = "Method") +
     theme(legend.position = "bottom")
   
-  if (assume_proportional_line) {
-    outfile = "/posterior-distributions-prop-line.pdf"
-  } else {
-    outfile = "/posterior-distributions.pdf"
-  }
-  
+  assume_proportional_line_chr = ifelse(assume_proportional_line, "prop-line", "default")
+  risk_score_chr = ifelse(include_risk_score, "w-riskscore", "wo-riskscore")
+  outfile = paste0("/posterior-distributions-", assume_proportional_line_chr, "-", risk_score_chr, ".pdf")
+
   ggsave(
     outfile,
     path = figures_dir,
@@ -105,8 +105,10 @@ posterior_plots_f = function(assume_proportional_line) {
 }
 
 # Make plots for specified scenarios
-posterior_plots_f(TRUE)
-posterior_plots_f(FALSE)
+posterior_plots_f(TRUE, TRUE)
+posterior_plots_f(TRUE, FALSE)
+posterior_plots_f(FALSE, TRUE)
+posterior_plots_f(FALSE, FALSE)
 
 # Compute posterior mean, median, and quantiles.
 rho_long_tbl %>%
