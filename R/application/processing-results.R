@@ -16,27 +16,32 @@ surrogate_results_bayesian_tbl = readRDS("R/application/bayesian_ma_results.rds"
 ## Non-Parametric MA ----------------------------------------------------
 
 # Helper function to make plots.
-conf_int_plot_f = function(include_risk_score, type) {
+conf_int_plot_f = function(include_risk_score, type, res_var_prop) {
   plotting_data = surrogate_results_tbl %>%
     filter(include_risk_score == .env$include_risk_score |
-             method == "untransformed surrogate") 
-  if (type == "bs") {
+             method == "untransformed surrogate")
+  if (res_var_prop) {
     plotting_data = plotting_data %>%
-      rename(CI_lower = CI_lower_bs, 
-             CI_upper = CI_upper_bs)
+      rename(CI_lower = CI_lower_bs_residual_var_prop, CI_upper = CI_upper_bs_residual_var_prop) %>%
+      filter(method != "untransformed surrogate")
   } else {
+    if (type == "bs") {
+      plotting_data = plotting_data %>%
+        rename(CI_lower = CI_lower_bs, CI_upper = CI_upper_bs)
+    } else {
+      plotting_data = plotting_data %>%
+        rename(CI_lower = CI_lower_sandwich, CI_upper = CI_upper_sandwich)
+    }
     plotting_data = plotting_data %>%
-      rename(CI_lower = CI_lower_sandwich, 
-             CI_upper = CI_upper_sandwich)
+      mutate(
+        rho_trial = ifelse(method == "untransformed surrogate", -1 * rho_trial, rho_trial),
+        CI_lower = ifelse(method == "untransformed surrogate", -1 * CI_lower, CI_lower),
+        CI_upper = ifelse(method == "untransformed surrogate", -1 * CI_upper, CI_upper)
+      )
   }
 
-  plotting_data = plotting_data %>%
-    mutate(rho_trial = ifelse(method == "untransformed surrogate", -1 * rho_trial, rho_trial),
-           CI_lower = ifelse(method == "untransformed surrogate", -1 * CI_lower, CI_lower),
-           CI_upper = ifelse(method == "untransformed surrogate", -1 * CI_upper, CI_upper))
-  
-  
-  conf_int_plot  = plotting_data %>%
+
+  conf_int_plot = plotting_data %>%
     ggplot(aes(x = analysis_set, color = method)) +
     geom_point(aes(y = rho_trial), position = position_dodge(width = 0.5)) +
     geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper), position = position_dodge(width = 0.5), width = 0.2) +
@@ -46,7 +51,8 @@ conf_int_plot_f = function(include_risk_score, type) {
   
   risk_score_chr = ifelse(include_risk_score, "w-riskscore", "wo-riskscore")
   type_chr = ifelse(type == "bs", "bs", "sandwich")
-  outfile = paste0("/surrogacy-measures-summary-", risk_score_chr, "-", type_chr, ".pdf")
+  res_var_prop_chr = ifelse(res_var_prop, "res_var_prop", "cor")
+  outfile = paste0("/surrogacy-measures-summary-", risk_score_chr, "-", type_chr, "-", res_var_prop_chr, ".pdf")
   
   ggsave(
     outfile,
@@ -59,10 +65,13 @@ conf_int_plot_f = function(include_risk_score, type) {
   )
 }
 
-conf_int_plot_f(TRUE, "bs")
-conf_int_plot_f(TRUE, "sandwich")
-conf_int_plot_f(FALSE, "bs")
-conf_int_plot_f(FALSE, "sandwich")
+conf_int_plot_f(TRUE, "bs", FALSE)
+conf_int_plot_f(TRUE, "sandwich", FALSE)
+conf_int_plot_f(FALSE, "bs", FALSE)
+conf_int_plot_f(FALSE, "sandwich", FALSE)
+
+conf_int_plot_f(TRUE, "bs", TRUE)
+conf_int_plot_f(FALSE, "bs", TRUE)
 
 ## Bayesian MA -------------------------------------------------------------
 

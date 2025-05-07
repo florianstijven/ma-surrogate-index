@@ -461,8 +461,8 @@ statistic_f_residual_var_prop = function(data, weights) {
     nearest_PD = TRUE
   )
   # Residual variance
-  residual_var = moment_estimate$residual_var
-  var_beta = moment_estimate$coefs[4]
+  residual_var = max(moment_estimate$residual_var, 1e-5)
+  var_beta = max(moment_estimate$coefs[4], 1e-5)
   
   # Proportion of variance in beta explained by the identity line
   prop_explained = 1 - (residual_var / var_beta)
