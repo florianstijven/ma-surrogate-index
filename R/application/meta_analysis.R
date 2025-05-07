@@ -26,7 +26,7 @@ tables_dir = "results/tables/application/meta-analysis"
 
 # Number of bootstrap replications for the multiplier bootstrap for the
 # meta-analytic parameters.
-B_multiplier = 1e3
+B_multiplier = 5e3
 
 time_cumulative_incidence = 80
 
