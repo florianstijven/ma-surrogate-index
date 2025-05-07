@@ -175,7 +175,7 @@ fit_surrogacy_model <- function(data, assume_proportional_line, iter = 10000, wa
   
   Sigma_array <- array(NA, dim = c(N, 2, 2))
   for (i in 1:N) {
-    Sigma_array[i,,] <- Matrix::nearPD(data$vcov[[i]])$mat
+    Sigma_array[i,,] <- as.matrix(Matrix::nearPD(data$vcov[[i]])$mat)
   }
   
   stan_data <- list(
