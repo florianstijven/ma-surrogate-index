@@ -235,8 +235,8 @@ prediction_model_settings = tibble(
 #   )
 
 prediction_model_settings = prediction_model_settings %>%
-  cross_join(tibble(analysis_set = c("first_four", "naive_only", "mixed"))) %>%
-  cross_join(tibble(include_risk_score = c(TRUE, FALSE)))
+  cross_join(tibble(analysis_set = c("naive_only", "mixed"))) %>%
+  cross_join(tibble(include_risk_score = c(FALSE)))
 
 ## Parametric Prediction Model --------------------------------------------
 
@@ -289,63 +289,63 @@ prediction_model_settings = prediction_model_settings %>%
 
 
 
-## GAM --------------------------------------------------------------------
-
-# Estimate logistic GAM for the probability of infection given the
-# baseline covariates and the surrogate. Note that we missing predictors: the
-# antibody titers are missing according to the case-cohort sampling mechanism.
-
-# Function that fits a logistic regression model with the given predictors.
-gam_fitter = function(predictors_chr,
-                      weights_chr,
-                      case_cohort_ind_chr,
-                      analysis_set, 
-                      include_risk_score) {
-  # Select the subset of the data corresponding to `analysis_set`
-  data_temp = ipd_tbl %>%
-    filter(.data[[analysis_set]])
-  # Compute the inverse probability weights as the predict of the inverse
-  # probability of censoring and case-cohort weights.
-  weights = data_temp %>%
-    pull(any_of(weights_chr))
-  
-  # Redefine the predictors as smooth functions.
-  predictors_chr = paste0("s(", predictors_chr, ", k = 4)")
-  # Define formula
-  string_formula = paste0(
-    "infection_120d ~ Sex + HighRiskInd + BMI_stratum + s(Age) + logit_prob_infection +",
-    paste(predictors_chr, collapse = " + ")
-  )
-  if (include_risk_score) {
-    string_formula = paste0(
-      string_formula,
-      ' + risk_score_centered'
-    )
-  }
-  formula_final = as.formula(string_formula)
-  
-  # Fit logistic regression model.
-  gam_fit = gam(
-    formula = formula_final,
-    data = data_temp %>%
-      as.data.frame(),
-    weights = data_temp %>%
-      pull(any_of(weights_chr)),
-    family = quasibinomial()
-  )
-  return(gam_fit)
-}
-
-gam_models_tbl = prediction_model_settings %>%
-  rowwise(surrogate, weighting, analysis_set, include_risk_score) %>%
-  summarise(fitted_model = list(
-    gam_fitter(surrogate, weights_chr, case_cohort_ind_chr, analysis_set, include_risk_score)
-  ))
-
-surrogate_index_models_tbl = gam_models_tbl %>%
-  mutate(method = "gam")
-
-rm("gam_models_tbl")
+# ## GAM --------------------------------------------------------------------
+# 
+# # Estimate logistic GAM for the probability of infection given the
+# # baseline covariates and the surrogate. Note that we missing predictors: the
+# # antibody titers are missing according to the case-cohort sampling mechanism.
+# 
+# # Function that fits a logistic regression model with the given predictors.
+# gam_fitter = function(predictors_chr,
+#                       weights_chr,
+#                       case_cohort_ind_chr,
+#                       analysis_set, 
+#                       include_risk_score) {
+#   # Select the subset of the data corresponding to `analysis_set`
+#   data_temp = ipd_tbl %>%
+#     filter(.data[[analysis_set]])
+#   # Compute the inverse probability weights as the predict of the inverse
+#   # probability of censoring and case-cohort weights.
+#   weights = data_temp %>%
+#     pull(any_of(weights_chr))
+#   
+#   # Redefine the predictors as smooth functions.
+#   predictors_chr = paste0("s(", predictors_chr, ", k = 4)")
+#   # Define formula
+#   string_formula = paste0(
+#     "infection_120d ~ Sex + HighRiskInd + BMI_stratum + s(Age) + logit_prob_infection +",
+#     paste(predictors_chr, collapse = " + ")
+#   )
+#   if (include_risk_score) {
+#     string_formula = paste0(
+#       string_formula,
+#       ' + risk_score_centered'
+#     )
+#   }
+#   formula_final = as.formula(string_formula)
+#   
+#   # Fit logistic regression model.
+#   gam_fit = gam(
+#     formula = formula_final,
+#     data = data_temp %>%
+#       as.data.frame(),
+#     weights = data_temp %>%
+#       pull(any_of(weights_chr)),
+#     family = quasibinomial()
+#   )
+#   return(gam_fit)
+# }
+# 
+# gam_models_tbl = prediction_model_settings %>%
+#   rowwise(surrogate, weighting, analysis_set, include_risk_score) %>%
+#   summarise(fitted_model = list(
+#     gam_fitter(surrogate, weights_chr, case_cohort_ind_chr, analysis_set, include_risk_score)
+#   ))
+# 
+# surrogate_index_models_tbl = gam_models_tbl %>%
+#   mutate(method = "gam")
+# 
+# rm("gam_models_tbl")
 
 ## Cox PH model  ---------------------------------------------------------
 
@@ -600,15 +600,15 @@ ipd_surr_indices_tbl = bind_rows(
 )
 ipd_surr_indices_tbl = bind_rows(
   ipd_surr_indices_tbl,
-  surrogate_index_models_tbl %>%
-    ungroup() %>%
-    filter(method %in% c("gam", "glm")) %>%
-    rowwise(method, surrogate, weighting, analysis_set, include_risk_score) %>%
-    reframe(tibble(
-      surrogate_index = predict(fitted_model, newdata = ipd_tbl, type = "response"),
-      ipd_tbl
-    )) %>%
-    ungroup(),
+  # surrogate_index_models_tbl %>%
+  #   ungroup() %>%
+  #   filter(method %in% c("gam", "glm")) %>%
+  #   rowwise(method, surrogate, weighting, analysis_set, include_risk_score) %>%
+  #   reframe(tibble(
+  #     surrogate_index = predict(fitted_model, newdata = ipd_tbl, type = "response"),
+  #     ipd_tbl
+  #   )) %>%
+  #   ungroup(),
   surrogate_index_models_tbl %>%
     ungroup() %>%
     filter(method %in% c("cox")) %>%

@@ -175,7 +175,7 @@ ggsave(
 
 # Summarize the estimated trial-level treatment effects in meta-analytic plots.
 ma_trt_effects_tbl %>% 
-  filter(method == "untransformed surrogate", trial %in% trials_first_four) %>%
+  filter(method == "untransformed surrogate", trial %in% trials_naive_only) %>%
   ggplot(aes(x = trt_effect_surrogate_index_est, y = 1 - exp(log_RR_est), color = trial_fct, shape = trial_fct)) +
   geom_point() +
   geom_errorbar(aes(
@@ -191,8 +191,8 @@ ma_trt_effects_tbl %>%
     height = 0.01
   ) +
   scale_y_continuous(transform = transform_VE, breaks = c(0, 0.5, 0.75, 0.90, 0.95)) +
-  scale_color_manual(values = my_palette, limits = trials_first_four_fct) +
-  scale_shape_manual(values = my_shapes, limits = trials_first_four_fct) +
+  scale_color_manual(values = my_palette, limits = trials_naive_only_fct) +
+  scale_shape_manual(values = my_shapes, limits = trials_naive_only_fct) +
   coord_cartesian(ylim = c(-0.2, 0.95)) +
   facet_wrap(~surrogate_name, scales = "free_x", nrow = 2) +
   xlab("Estimated Treatment Effect on Antibody Marker") +
@@ -200,7 +200,7 @@ ma_trt_effects_tbl %>%
   theme(legend.position = "bottom", legend.title = element_blank())
 
 ggsave(
-  filename = "ma-standard-first-four.pdf",
+  filename = "ma-standard-naive-only.pdf",
   path = figures_dir,
   height = double_height,
   width = double_width,
@@ -298,7 +298,7 @@ ma_plot_helper = function(weighting, analysis_set, VE_scale, include_risk_score)
 
 expand_grid(
   weighting = c("unnormalized"),
-  analysis_set = c("first_four", "naive_only", "mixed"),
+  analysis_set = c("naive_only", "mixed"),
   VE_scale = c(FALSE),
   include_risk_score = c(TRUE, FALSE)
 ) %>%
@@ -309,8 +309,8 @@ expand_grid(
 # for the excluded trials are shown.
 ma_trt_effects_tbl %>% filter(
   method != "untransformed surrogate",
-  analysis_set == "first_four",
-  !(trial %in% trials_first_four),
+  analysis_set == "naive_only",
+  !(trial %in% trials_naive_only),
   weighting == "unnormalized",
   include_risk_score == FALSE
 ) %>%
@@ -354,57 +354,6 @@ ggsave(
   device = "pdf",
   units = "cm"
 )
-
-ma_trt_effects_tbl %>% filter(
-  method != "untransformed surrogate",
-  analysis_set == "first_four",
-  !(trial %in% trials_first_four),
-  weighting == "unnormalized",
-  include_risk_score == TRUE
-) %>%
-  ggplot(aes(
-    x = 1 - exp(trt_effect_surrogate_index_est),
-    y = 1 - exp(log_RR_est),
-    color = trial_fct,
-    shape = trial_fct
-  )) +
-  geom_point(show.legend = TRUE) +
-  geom_errorbar(aes(
-    ymin = 1 - exp(log_RR_est - 1.96 * log_RR_est_se),
-    ymax = 1 - exp(log_RR_est + 1.96 * log_RR_est_se)
-  ), width = 0.01) +
-  geom_errorbarh(aes(
-    xmin = 1 - exp(
-      trt_effect_surrogate_index_est - 1.96 * trt_effect_surrogate_index_est_se
-    ),
-    xmax = 1 - exp(
-      trt_effect_surrogate_index_est + 1.96 * trt_effect_surrogate_index_est_se
-    )
-  ), height = 0.01) +
-  geom_abline(intercept = 0, slope = 1) +
-  scale_color_manual(values = my_palette, limits = trials_mixed_fct[!(trials_mixed_fct %in% trials_first_four_fct)]) +
-  scale_shape_manual(values = my_shapes, limits = trials_mixed_fct[!(trials_mixed_fct %in% trials_first_four_fct)]) +
-  scale_y_continuous(transform = transform_VE, breaks = c(0, 0.5, 0.75, 0.90, 0.95)) +
-  scale_x_continuous(transform = transform_VE, breaks = c(0, 0.5, 0.75, 0.90, 0.95)) +
-  coord_cartesian(ylim = c(-0.2, 0.95), xlim = c(-0.2, 0.95)) +
-  facet_grid(method ~ surrogate_name) +
-  xlab("Predicted VE/Estimated VE on Surr. Index") +
-  ylab("Estimated VE") +
-  theme(legend.position = "bottom", legend.title = element_blank()) +
-  guides(color = guide_legend(nrow = 2))
-
-ggsave(
-  filename = "ma-predictions-unnormalized-w-riskscore.pdf",
-  path = figures_dir,
-  height = double_height,
-  width = double_width,
-  dpi = res,
-  device = "pdf",
-  units = "cm"
-)
-
-
-
 
 # Formal Meta-Analysis -----------------------------------------------------
 
@@ -476,10 +425,6 @@ statistic_f_residual_var_prop = function(data, weights) {
 ma_trt_effects_tbl_untransformed = bind_rows(
   ma_trt_effects_tbl %>%
     filter(method == "untransformed surrogate") %>%
-    filter(trial %in% trials_first_four) %>%
-    mutate(analysis_set = "first_four"),
-  ma_trt_effects_tbl %>%
-    filter(method == "untransformed surrogate") %>%
     filter(trial %in% trials_naive_only) %>%
     mutate(analysis_set = "naive_only"),
   ma_trt_effects_tbl %>%
@@ -488,10 +433,46 @@ ma_trt_effects_tbl_untransformed = bind_rows(
     mutate(analysis_set = "mixed")
 )
 
+# Construct data set with a set of rows corresponding to each analysis set.
+ma_trt_effects_tbl_modified = ma_trt_effects_tbl %>%
+  filter(method != "untransformed surrogate") %>%
+  bind_rows(ma_trt_effects_tbl_untransformed) %>%
+  # Make sure that only the correct trials are included for each analysis set.
+  filter(ifelse(
+    analysis_set == "first_four",
+    trial %in% trials_first_four,
+    ifelse(analysis_set == "naive_only", trial %in% trials_naive_only, TRUE)
+  ))
+
+# Add pseudo-real data by (i) cloning each trial four times and (ii) dividing
+# the within-trial variance matrices by four.
+ma_trt_effects_tbl_modified = bind_rows(
+  ma_trt_effects_tbl_modified %>%
+    mutate(scenario = "real data"),
+  bind_rows(
+    ma_trt_effects_tbl_modified,
+    ma_trt_effects_tbl_modified,
+    ma_trt_effects_tbl_modified,
+    ma_trt_effects_tbl_modified
+  ) %>%
+    mutate(scenario = "four clones"),
+  ma_trt_effects_tbl_modified %>%
+    mutate(
+      vcov = purrr::map(
+        .x = vcov,
+        .f = function(x) {
+          x / 4
+        }
+      ),
+      scenario = "precise trials"
+    )
+  
+)
+
 
 # Estimate the surrogacy parameters on each data set of trial-level treatment
 # effect estimates.
-surrogate_results_tbl = ma_trt_effects_tbl %>%
+surrogate_results_tbl = ma_trt_effects_tbl_modified %>%
   filter(method != "untransformed surrogate") %>%
   bind_rows(ma_trt_effects_tbl_untransformed) %>%
   # Make sure that only the correct trials are included for each analysis set.
@@ -500,7 +481,7 @@ surrogate_results_tbl = ma_trt_effects_tbl %>%
     trial %in% trials_first_four,
     ifelse(analysis_set == "naive_only", trial %in% trials_naive_only, TRUE)
   )) %>%
-  group_by(surrogate, method, weighting, analysis_set, include_risk_score) %>%
+  group_by(surrogate, method, weighting, analysis_set, include_risk_score, scenario) %>%
   summarise(data_tbl = list(pick(everything())), N = nrow(data_tbl[[1]])) %>%
   ungroup() %>%
   mutate(
