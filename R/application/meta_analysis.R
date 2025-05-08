@@ -300,7 +300,7 @@ expand_grid(
   weighting = c("unnormalized"),
   analysis_set = c("naive_only", "mixed"),
   VE_scale = c(FALSE),
-  include_risk_score = c(TRUE, FALSE)
+  include_risk_score = c(FALSE)
 ) %>%
   rowwise(everything()) %>%
   summarise(ma_plot_helper(weighting, analysis_set, VE_scale, include_risk_score))

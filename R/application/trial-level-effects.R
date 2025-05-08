@@ -250,7 +250,7 @@ ma_trt_effects_tbl =
   mutate(log_RR_alpha = ifelse(method == "none", FALSE, TRUE),
          log_RR_beta = TRUE,
          VE_surr = ifelse(method == "none", FALSE, TRUE),
-         glm_VE = TRUE) %>%
+         glm_VE = FALSE) %>%
   mutate(
     est_list = future_pmap(
       .l = list(
