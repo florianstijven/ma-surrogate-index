@@ -455,8 +455,9 @@ ma_trt_effects_tbl_modified = bind_rows(
     ma_trt_effects_tbl_modified,
     ma_trt_effects_tbl_modified
   ) %>%
-    mutate(scenario = "four clones"),
+    mutate(scenario = "four clones", analysis_set == "naive_only"),
   ma_trt_effects_tbl_modified %>%
+    filter(analysis_set == "naive_only") %>%
     mutate(
       vcov = purrr::map(
         .x = vcov,
@@ -466,21 +467,12 @@ ma_trt_effects_tbl_modified = bind_rows(
       ),
       scenario = "precise trials"
     )
-  
 )
 
 
 # Estimate the surrogacy parameters on each data set of trial-level treatment
 # effect estimates.
 surrogate_results_tbl = ma_trt_effects_tbl_modified %>%
-  filter(method != "untransformed surrogate") %>%
-  bind_rows(ma_trt_effects_tbl_untransformed) %>%
-  # Make sure that only the correct trials are included for each analysis set.
-  filter(ifelse(
-    analysis_set == "first_four",
-    trial %in% trials_first_four,
-    ifelse(analysis_set == "naive_only", trial %in% trials_naive_only, TRUE)
-  )) %>%
   group_by(surrogate, method, weighting, analysis_set, include_risk_score, scenario) %>%
   summarise(data_tbl = list(pick(everything())), N = nrow(data_tbl[[1]])) %>%
   ungroup() %>%
