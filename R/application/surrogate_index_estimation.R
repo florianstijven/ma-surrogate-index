@@ -416,9 +416,8 @@ cox_models_tbl = prediction_model_settings %>%
 # coefs = coef(cox_models_tbl$fitted_model[[8]])[10:12]
 # plot(x, ns_matrix %*% coefs)
 
-surrogate_index_models_tbl = surrogate_index_models_tbl %>%
-  bind_rows(cox_models_tbl %>%
-              mutate(method = "cox"))
+surrogate_index_models_tbl = cox_models_tbl %>%
+  mutate(method = "cox")
 
 rm("cox_models_tbl")
 
