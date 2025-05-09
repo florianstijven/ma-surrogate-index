@@ -114,9 +114,9 @@ posterior_plots_f = function(assume_proportional_line, include_risk_score) {
 }
 
 # Make plots for specified scenarios
-posterior_plots_f(TRUE, TRUE)
+# posterior_plots_f(TRUE, TRUE)
 posterior_plots_f(TRUE, FALSE)
-posterior_plots_f(FALSE, TRUE)
+# posterior_plots_f(FALSE, TRUE)
 posterior_plots_f(FALSE, FALSE)
 
 # Compute posterior mean, median, and quantiles.
