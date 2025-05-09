@@ -290,6 +290,21 @@ ggsave(
   units = "cm"
 )
 
+# Put the median bias and MSE plots into a single figure.
+ggarrange(
+  median_bias, mse_plot, common.legend = TRUE, legend = "bottom", labels = "auto", nrow = 2
+)
+
+ggsave(
+  filename = "mse-median-bias.pdf",
+  path = figures_dir,
+  height = double_height,
+  width = double_width,
+  dpi = res,
+  device = "pdf",
+  units = "cm"
+)
+
 
 ## Performance of Inferences ----------------------------------------------
 
@@ -352,7 +367,7 @@ ggsave(
 )
 
 ggarrange(
-  coverage_sandwich, coverage_bs, common.legend = TRUE, legend = "bottom", labels = "auto", nrow = 2
+  coverage_sandwich, coverage_bs_bca, common.legend = TRUE, legend = "bottom", labels = "auto", nrow = 2
 )
 
 ggsave(
@@ -412,7 +427,7 @@ ma_sim_results %>%
   theme(legend.position = "bottom")
 
 ggsave(
-  filename = "lower-limit-proof-of-concept-nearest-PD-bootstrap-BCa.pdf",
+  filename = "lower-limit-proof-of-concept-no-nearest-PD-bootstrap-BCa.pdf",
   path = figures_dir,
   height = double_height,
   width = double_width,
@@ -451,7 +466,7 @@ ma_sim_results %>%
   theme(legend.position = "bottom")
 
 ggsave(
-  filename = "lower-limit-vaccine-nearest-PD-bootstrap.pdf",
+  filename = "lower-limit-vaccine-no-nearest-PD-bootstrap.pdf",
   path = figures_dir,
   height = double_height,
   width = double_width,
@@ -510,3 +525,4 @@ ggsave(
   device = "pdf",
   units = "cm"
 )
+

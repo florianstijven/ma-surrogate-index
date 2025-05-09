@@ -65,12 +65,12 @@ conf_int_plot_f = function(include_risk_score, type, res_var_prop) {
   )
 }
 
-conf_int_plot_f(TRUE, "bs", FALSE)
-conf_int_plot_f(TRUE, "sandwich", FALSE)
+# conf_int_plot_f(TRUE, "bs", FALSE)
+# conf_int_plot_f(TRUE, "sandwich", FALSE)
 conf_int_plot_f(FALSE, "bs", FALSE)
 conf_int_plot_f(FALSE, "sandwich", FALSE)
 
-conf_int_plot_f(TRUE, "bs", TRUE)
+# conf_int_plot_f(TRUE, "bs", TRUE)
 conf_int_plot_f(FALSE, "bs", TRUE)
 
 ## Bayesian MA -------------------------------------------------------------
