@@ -16,10 +16,11 @@ surrogate_results_bayesian_tbl = readRDS("R/application/bayesian_ma_results.rds"
 ## Non-Parametric MA ----------------------------------------------------
 
 # Helper function to make plots.
-conf_int_plot_f = function(include_risk_score, type, res_var_prop) {
+conf_int_plot_f = function(include_risk_score, type, res_var_prop, scenario) {
   plotting_data = surrogate_results_tbl %>%
     filter(include_risk_score == .env$include_risk_score |
-             method == "untransformed surrogate")
+             method == "untransformed surrogate") %>%
+    filter(scenario == .env$scenario)
   if (res_var_prop) {
     plotting_data = plotting_data %>%
       rename(CI_lower = CI_lower_bs_residual_var_prop, CI_upper = CI_upper_bs_residual_var_prop) %>%
@@ -67,11 +68,11 @@ conf_int_plot_f = function(include_risk_score, type, res_var_prop) {
 
 # conf_int_plot_f(TRUE, "bs", FALSE)
 # conf_int_plot_f(TRUE, "sandwich", FALSE)
-conf_int_plot_f(FALSE, "bs", FALSE)
-conf_int_plot_f(FALSE, "sandwich", FALSE)
+conf_int_plot_f(FALSE, "bs", FALSE, "real data")
+conf_int_plot_f(FALSE, "sandwich", FALSE, "real data")
 
 # conf_int_plot_f(TRUE, "bs", TRUE)
-conf_int_plot_f(FALSE, "bs", TRUE)
+conf_int_plot_f(FALSE, "bs", TRUE, "real data")
 
 ## Bayesian MA -------------------------------------------------------------
 
@@ -138,3 +139,4 @@ rho_long_tbl %>%
     quantile_97.5 = quantile(rho, 0.975)
   ) %>%
   write.csv(paste0(tables_dir, "/posterior-summaries.csv"))
+
