@@ -391,7 +391,8 @@ statistic_f_residual_var = function(data, weights) {
     vcov_list = data$covariance_matrix,
     estimator_adjustment = "N - 1",
     weights = weights,
-    nearest_PD = FALSE
+    nearest_PD = FALSE,
+    SE = FALSE
   )
   # Residual variance
   residual_var = moment_estimate$residual_var
@@ -407,7 +408,8 @@ statistic_f_residual_var_prop = function(data, weights) {
     vcov_list = data$covariance_matrix,
     estimator_adjustment = "N - 1",
     weights = weights,
-    nearest_PD = TRUE
+    nearest_PD = TRUE,
+    SE = FALSE
   )
   # Residual variance
   residual_var = max(moment_estimate$residual_var, 1e-5)
@@ -550,8 +552,6 @@ surrogate_results_tbl = ma_trt_effects_tbl_modified %>%
         coefs = moment_estimate$coefs,
         vcov = moment_estimate$vcov,
         method = "t-adjustment",
-        # N is only used for the t-adjustment, it doesn't matter for the estimate
-        # or SE.
         N = N
       )
     }
