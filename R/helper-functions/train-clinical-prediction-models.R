@@ -134,12 +134,67 @@ train_clinical_prediction_model_rf = function(simulated_data) {
   })
 }
 
+# Function to train a clinical prediction model using sl3 SuperLearner
+train_clinical_prediction_model_superlearner <- function(simulated_data) {
+  # Define the outcome and predictors
+  outcome <- "clinical"
+  predictors <- c("surrogate", "X1", "X2", "X3")
+  
+  # Specify GLM learners with different formulas
+  lrn_glm <- Lrnr_glm$new()
+  lrn_glm_simple = Lrnr_glm$new(formula = "~ surrogate")
+  lrn_glm_interaction <- Lrnr_glm$new(formula = "~ . + surrogate:X3")
+  lrn_glm_ns <- Lrnr_glm$new(formula = "~ . + ns(surrogate)")
+  
+  # Add GAM learners
+  lrn_gam <- Lrnr_gam$new()
+  
+  # Combine learners into a stack
+  stack <- Stack$new(lrn_glm, lrn_glm_simple, lrn_glm_interaction, lrn_glm_ns, lrn_gam)
+  
+  # Create the task for sl3
+  task <- make_sl3_Task(
+    data = simulated_data,
+    outcome = outcome,
+    covariates = predictors,
+    outcome_type = variable_type("binomial") ,
+    folds = make_folds(
+      n = nrow(simulated_data),
+      cluster_ids = simulated_data$trial,
+      fold_fun = folds_loo
+    )
+  )
+  
+  # Instantiate the SuperLearner
+  sl <- Lrnr_sl$new(
+    learners = stack,
+    keep_extra = FALSE,
+    metalearner = Lrnr_solnp$new(eval_function = loss_loglik_binomial)
+  )
+  
+  # Train the SuperLearner
+  sl_fit <- sl$train(task)
+  
+  # Return a prediction function
+  return(function(newdata) {
+    # Create a task for the new data
+    prediction_task <- make_sl3_Task(
+      data = newdata,
+      covariates = predictors,
+      outcome = outcome
+    )
+    
+    sl_fit$predict(prediction_task)
+  })
+}
+
 
 # Function that is just a wrapper to select one of the above functions.
 train_clinical_prediction_model = function(simulated_data, method) {
   # Select the correct method-specific function.
   switch(
     method,
+    "superlearner" = train_clinical_prediction_model_superlearner(simulated_data),
     "surrogate" = train_clinical_prediction_model_surrogate(simulated_data),
     "lm" = train_clinical_prediction_model_lm(simulated_data),
     "logistic" = train_clinical_prediction_model_logistic(simulated_data),

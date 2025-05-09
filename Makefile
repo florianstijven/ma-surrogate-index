@@ -19,13 +19,13 @@ application: R/application/data-exploration.Rout \
 	
 
 results/raw-results/simple-simulation/ma-sim-results-proof-of-concept-small.rds: R/simulations/simulations.R $(analysishelpers) $(simulationhelpers)
-	Rscript R/simulations/simulations.R proof-of-concept small 500
+	Rscript R/simulations/simulations.R proof-of-concept small 10
 	
 results/raw-results/simple-simulation/ma-sim-results-proof-of-concept-large.rds: R/simulations/simulations.R $(analysishelpers) $(simulationhelpers)
-	Rscript R/simulations/simulations.R proof-of-concept large 100
+	Rscript R/simulations/simulations.R proof-of-concept large 10
 	
 results/raw-results/simple-simulation/ma-sim-results-vaccine-small.rds: R/simulations/simulations.R $(analysishelpers) $(simulationhelpers)
-	Rscript R/simulations/simulations.R vaccine small 500
+	Rscript R/simulations/simulations.R vaccine small 10
 	
 R/simulations/processing-results.Rout: results/raw-results/simple-simulation/ma-sim-results-proof-of-concept-small.rds results/raw-results/simple-simulation/ma-sim-results-proof-of-concept-large.rds results/raw-results/simple-simulation/ma-sim-results-vaccine-small.rds
 	Rscript --verbose R/simulations/processing-results.R  > $@ 2> $@

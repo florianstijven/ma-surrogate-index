@@ -10,6 +10,8 @@ library(furrr)
 library(mgcv)
 library(ranger)
 library(splines)
+library(sl3)
+library(origami)
 
 # Set up parallel computing
 if (parallelly::supportsMulticore()) {
@@ -126,7 +128,7 @@ if (scenario == "proof-of-concept") {
   # The clinical endpoint for the vaccine scenario is binary. So, we use
   # logistic regression or a GAM logistic regression model to estimate the
   # surrogate index here.
-  surrogate_index_estimator = c("surrogate", "logistic", "gam")
+  surrogate_index_estimator = c("surrogate", "logistic", "superlearner")
 }
 
 
@@ -145,7 +147,7 @@ dgm_param_tbl = expand_grid(tibble(sd_beta, SI_violation), N, n) %>%
 # endpoint.
 data_set_indicator = 1:N_MC
 
-meta_analytic_data = expand_grid(data_set_indicator, dgm_param_tbl) %>%
+meta_analytic_data <- expand_grid(data_set_indicator, dgm_param_tbl) %>%
   mutate(
     list_of_ma_data_objects = future_pmap(
       .l = list(
@@ -154,11 +156,25 @@ meta_analytic_data = expand_grid(data_set_indicator, dgm_param_tbl) %>%
         N = N,
         surrogate_index_estimators = surrogate_index_estimators
       ),
-      .f = generate_meta_analytic_data,
+      .f = function(sd_beta, n, N, surrogate_index_estimators, scenario, regime) {
+        # Temporarily disable parallelization
+        old_plan <- future::plan("sequential")
+        on.exit(future::plan(old_plan), add = TRUE) # Restore original plan after execution
+        
+        # Call the generate_meta_analytic_data function
+        generate_meta_analytic_data(
+          sd_beta = sd_beta,
+          n = n,
+          N = N,
+          surrogate_index_estimators = surrogate_index_estimators,
+          scenario = scenario,
+          regime = regime
+        )
+      },
       scenario = scenario,
       regime = regime,
       .options = furrr_options(seed = TRUE)
-    ),
+    )
   ) %>%
   rowwise(everything()) %>%
   reframe(
@@ -214,7 +230,7 @@ meta_analytic_data$rho_true = future_pmap_dbl(
   n_approximation_MC = n_approximation_MC,
   scenario = scenario,
   regime = regime,
-  .options = furrr_options(seed = TRUE, packages = c("ranger", "mgcv"))
+  .options = furrr_options(seed = TRUE, packages = c("mgcv"))
 )
 
 # Drop surrogate index function as this function is no longer needed.
@@ -353,7 +369,8 @@ if (regime == "small") {
               alpha = 0.05,
               type = "BCa"
             )
-          }
+          },
+          .options = furrr_options(seed = TRUE)
         ),
         rho_ci_lower = purrr::map_dbl(rho_ci_bs, function(x)
           x[[1]]),
@@ -382,7 +399,8 @@ if (regime == "small") {
               alpha = 0.05,
               type = "BC percentile"
             )
-          }
+          },
+          .options = furrr_options(seed = TRUE)
         ),
         rho_ci_lower = purrr::map_dbl(rho_ci_bs, function(x)
           x[[1]]),
