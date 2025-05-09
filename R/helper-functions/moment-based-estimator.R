@@ -8,17 +8,17 @@ residual_variance_identity_line = function(alpha_hat, # Vector of treatment effe
   # Total number of independent units.
   N = length(alpha_hat)
   
-  # Make sure that the weights sum to N.
-  weights = weights / mean(weights)
+  # Make sure that the weights sum to 1.
+  weights = weights / sum(weights)
   
   # Compute the variance of the estimated treatment effect differences. 
-  total_variance = mean(weights * (beta_hat - alpha_hat) ^ 2)
+  total_variance = sum(weights * (beta_hat - alpha_hat) ^ 2)
   
   # Compute mean of the estimated variances due to sampling variability.
   var_alpha = purrr::map_dbl(vcov_list, ~.x[1, 1])
   var_beta = purrr::map_dbl(vcov_list, ~.x[2, 2])
   var_alpha_beta = purrr::map_dbl(vcov_list,~.x[1, 2])
-  mean_est_var = mean(weights * (var_alpha + var_beta - 2 * var_alpha_beta))
+  mean_est_var = sum(weights * (var_alpha + var_beta - 2 * var_alpha_beta))
   
   # Compute corrected residual variance.
   residual_variance = total_variance - mean_est_var
@@ -43,22 +43,22 @@ moment_estimator = function(
   # Total number of independent units.
   N = length(alpha_hat)
   
-  # Make sure that the weights sum to N.
-  weights = weights / mean(weights)
+  # Make sure that the weights sum to 1.
+  weights = weights / sum(weights)
   
   # Estimate the overall means.
-  mu_alpha_hat = mean(weights * alpha_hat)
-  mu_beta_hat = mean(weights * beta_hat)
+  mu_alpha_hat = sum(weights * alpha_hat)
+  mu_beta_hat = sum(weights * beta_hat)
   
   # Estimate the unadjusted covariance matrix.
-  total_residual = cbind(weights * (alpha_hat - mu_alpha_hat),
-                         weights * (beta_hat - mu_beta_hat)) %>%
+  total_residual = cbind(alpha_hat - mu_alpha_hat, beta_hat - mu_beta_hat) %>%
     as.matrix()
-  S = (1 / N) * t(total_residual) %*% total_residual
+  S =  t(weights * total_residual) %*% total_residual
   
   # If required, do finite-sample adjustment to the estimated covariance matrix.
   if (estimator_adjustment == "N - 1") {
-    S = (N / (N - 1)) * S
+    # S = (N / (N - 1)) * S
+    S = (1 / (1 - sum(weights ** 2))) * S
   }
 
   # Estimate the mean of the within-trial covariance matrices.
@@ -68,7 +68,7 @@ moment_estimator = function(
     .y = weights,
     .f = function(vcov_matrix, weight) weight * vcov_matrix
   )
-  mean_est_error_vcov = Reduce("+", weighted_vcov_list) / N
+  mean_est_error_vcov = Reduce("+", weighted_vcov_list)
   
   # Estimate the adjusted covariance matrix.
   S_adj = S - mean_est_error_vcov
@@ -91,26 +91,25 @@ moment_estimator = function(
                      weights = weights)
     
     # Compute the outer product of estimating equations.
-    ham = (t(U) %*% U) * (1 / N)
+    ham = t(weights * U) %*% U
     
     # Compute the sandwich estimator.
     sandwich = bread %*% ham %*% bread
     
     # Correct the sandwich estimate if required.
     if (sandwich_adjustment == "N - 1") {
-      sandwich = (N / (N - 1)) * sandwich
+      sandwich = (1 / (1 - sum(weights ** 2))) * sandwich
     }
-    
-    residual_var = residual_variance_identity_line(
-      alpha_hat = alpha_hat,
-      beta_hat = beta_hat,
-      vcov_list = vcov_list,
-      weights = weights
-    )
   } else {
     sandwich = NA
-    residual_var = NA
   }
+  
+  residual_var = residual_variance_identity_line(
+    alpha_hat = alpha_hat,
+    beta_hat = beta_hat,
+    vcov_list = vcov_list,
+    weights = weights
+  )
   
   # Find the nearest positive definite matrix, if this is asked by the user.
   if (nearest_PD) {
@@ -138,6 +137,9 @@ est_function = function(alpha_hat, beta_hat, vcov_list, params, estimator_adjust
   # Total number of independent units.
   N = length(alpha_hat)
   
+  # Make sure that the weights sum to 1.
+  weights = weights / sum(weights)
+  
   # Extract the parameters from params.
   mu_alpha = params[1]
   mu_beta = params[2]
@@ -158,9 +160,12 @@ est_function = function(alpha_hat, beta_hat, vcov_list, params, estimator_adjust
   # Estimating function evaluated in the data and parameters for the covariance
   # parameters.
   if (estimator_adjustment == "N - 1") {
-    ee_d_alpha = (N / (N - 1)) * (alpha_hat - mu_alpha) ^ 2 - sigma_alpha - d_alpha
-    ee_d_beta = (N / (N - 1)) * (beta_hat - mu_beta) ^ 2 - sigma_beta - d_beta
-    ee_d_alpha_beta = (N / (N - 1)) * (alpha_hat - mu_alpha) * (beta_hat - mu_beta) - sigma_alpha_beta - d_alpha_beta
+    # Finite sample adjustment taking weights into account.
+    finite_sample_adj = (1 / (1 - sum(weights ** 2))) 
+    
+    ee_d_alpha = finite_sample_adj * (alpha_hat - mu_alpha) ^ 2 - sigma_alpha - d_alpha
+    ee_d_beta = finite_sample_adj * (beta_hat - mu_beta) ^ 2 - sigma_beta - d_beta
+    ee_d_alpha_beta = finite_sample_adj * (alpha_hat - mu_alpha) * (beta_hat - mu_beta) - sigma_alpha_beta - d_alpha_beta
   } else if (estimator_adjustment == "none") {
     ee_d_alpha = (alpha_hat - mu_alpha) ^ 2 - sigma_alpha - d_alpha
     ee_d_beta = (beta_hat - mu_beta) ^ 2 - sigma_beta - d_beta
@@ -168,7 +173,7 @@ est_function = function(alpha_hat, beta_hat, vcov_list, params, estimator_adjust
   }
 
   
-  # Return the evaluated estimating functions as a matric with each unit's
+  # Return the evaluated estimating functions as a matrix with each unit's
   # values as a single row.
   U_unweighted = matrix(
     c(ee_mu_alpha, ee_mu_beta, ee_d_alpha, ee_d_beta, ee_d_alpha_beta),
@@ -176,6 +181,6 @@ est_function = function(alpha_hat, beta_hat, vcov_list, params, estimator_adjust
     ncol = 5,
     byrow = FALSE
   )
-  U = diag(weights) %*% U_unweighted
+  U = U_unweighted
   return(U)
 }

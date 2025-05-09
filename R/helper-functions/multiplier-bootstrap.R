@@ -160,7 +160,7 @@ BCa_CI <- function(boot_replicates,
       median_bias = (B - 1) / B
     }
   }
-  z0 <- qnorm(sum(boot_replicates < estimate) / B)
+  z0 <- qnorm(median_bias)
   
   # Calculate the acceleration term (a)
   jackknife_est <- sapply(1:N, function(i) {
