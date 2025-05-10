@@ -128,7 +128,7 @@ if (scenario == "proof-of-concept") {
   # The clinical endpoint for the vaccine scenario is binary. So, we use
   # logistic regression or a GAM logistic regression model to estimate the
   # surrogate index here.
-  surrogate_index_estimator = c("surrogate", "logistic", "superlearner")
+  surrogate_index_estimator = c("surrogate", "superlearner")
 }
 
 
@@ -397,7 +397,7 @@ if (regime == "small") {
               statistic = statistic_function_factory(estimator_adjustment, nearest_PD),
               B = B,
               alpha = 0.05,
-              type = "BC percentile"
+              type = "double"
             )
           },
           .options = furrr_options(seed = TRUE)
@@ -407,7 +407,7 @@ if (regime == "small") {
         rho_ci_upper = purrr::map_dbl(rho_ci_bs, function(x)
           x[[2]])
       ) %>%
-      mutate(CI_type = "BC percentile") %>%
+      mutate(CI_type = "double bootstrap") %>%
       # Drop redundant variables.
       select(-rho_ci_bs)
   )

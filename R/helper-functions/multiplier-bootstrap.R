@@ -33,7 +33,9 @@ multiplier_bootstrap_sampling <- function(data, statistic, B) {
 
 
 multiplier_bootstrap_ci = function(data, statistic, B, alpha = 0.05, type = "BCa") {
-  bootstrap_replications_list = multiplier_bootstrap_sampling(data, statistic, B)
+  if (type != "double") {
+    bootstrap_replications_list = multiplier_bootstrap_sampling(data, statistic, B)
+  }
   # Compute the required type of bootstrap CI.
   if (type == "BCa") {
     # Compute BCa interval
@@ -65,6 +67,8 @@ multiplier_bootstrap_ci = function(data, statistic, B, alpha = 0.05, type = "BCa
         alpha
       )
     )
+  } else if (type == "double") {
+    double_bootstrap_CI(data = data, statistic = statistic, alpha = alpha, B = B)
   } else {
     stop("Invalid type. Must be 'BCa' or 'percentile'.")
   }
@@ -239,6 +243,69 @@ studentized_CI = function(boot_replicates,
     ci_lower = ci_lower,
     ci_upper = ci_upper
   ))
+}
+
+
+double_bootstrap_CI <- function(data, statistic, alpha = 0.05, B = 1000, M = 500) {
+  n <- nrow(data)
+  theta_hat <- statistic(data, weights = rep(1, n))$estimate
+  
+  # Step 1: Outer bootstrap
+  theta_star_star = matrix(0, nrow = B, ncol = M)
+  theta_star = rep(0, B)
+  for (b in 1:B) {  
+    # First-level bootstrap sample
+    weights_star <- rexp(n = n, rate = 1)
+    theta_star[b] <- statistic(data, weights_star)$estimate
+    
+    # Step 2: Inner bootstrap
+    theta_star_star[b, ] <- replicate(M, {
+      weights_star_star <- weights_star * rexp(n = n, rate = 1)
+      statistic(data, weights_star_star)$estimate
+    })
+    
+  }
+  
+  # Step 4: Adjust alpha by searching for alpha' such that coverage ≈ 1 - alpha
+  adjust_alpha <- function(alpha_try, alpha_goal) {
+    # Compute the confidence intervals based on the level 2 bootstrap.
+    ci_limit = apply(
+      X = theta_star_star,
+      FUN = quantile,
+      probs = alpha_try,
+      MARGIN = 1, 
+      na.rm = TRUE
+    )
+    
+    coverage =  as.numeric(theta_hat <= ci_limit)
+    return(mean(coverage - alpha_goal, na.rm = TRUE))
+  }
+  
+  
+  # Use bisection method to find alpha' where adjusted coverage matches alpha /2
+  # to obtain the adjusted upper limit alpha.
+  alpha_upper_adjusted <- uniroot(
+    adjust_alpha,
+    lower = 0.5,
+    upper = 1,
+    alpha_goal = 1 - alpha / 2,
+    tol = 1 / B,
+    extendInt = "yes"
+  )$root
+  # Repeat the above for the lower limit with alpha / 2.
+  alpha_lower_adjusted <- uniroot(
+    adjust_alpha,
+    lower = 0,
+    upper = 0.5,
+    alpha_goal = alpha / 2,
+    tol = 1 / B,
+    extendInt = "yes"
+  )$root
+  
+  ci_lower <- quantile(theta_star, alpha_lower_adjusted, na.rm = TRUE)
+  ci_upper <- quantile(theta_star, alpha_upper_adjusted, na.rm = TRUE)
+  
+  c(lower = ci_lower, upper = ci_upper)
 }
 
 
