@@ -57,8 +57,8 @@ moment_estimator = function(
   
   # If required, do finite-sample adjustment to the estimated covariance matrix.
   if (estimator_adjustment == "N - 1") {
-    # S = (N / (N - 1)) * S
-    S = (1 / (1 - sum(weights ** 2))) * S
+    S = (N / (N - 1)) * S
+    # S = (1 / (1 - sum(weights ** 2))) * S
   }
 
   # Estimate the mean of the within-trial covariance matrices.
@@ -98,7 +98,7 @@ moment_estimator = function(
     
     # Correct the sandwich estimate if required.
     if (sandwich_adjustment == "N - 1") {
-      sandwich = (1 / (1 - sum(weights ** 2))) * sandwich
+      sandwich = (N / (N - 1))  * sandwich
     }
   } else {
     sandwich = NA
@@ -161,7 +161,7 @@ est_function = function(alpha_hat, beta_hat, vcov_list, params, estimator_adjust
   # parameters.
   if (estimator_adjustment == "N - 1") {
     # Finite sample adjustment taking weights into account.
-    finite_sample_adj = (1 / (1 - sum(weights ** 2))) 
+    finite_sample_adj = (N / (N - 1))  
     
     ee_d_alpha = finite_sample_adj * (alpha_hat - mu_alpha) ^ 2 - sigma_alpha - d_alpha
     ee_d_beta = finite_sample_adj * (beta_hat - mu_beta) ^ 2 - sigma_beta - d_beta
