@@ -284,23 +284,30 @@ double_bootstrap_CI <- function(data, statistic, alpha = 0.05, B = 1000, M = 500
   
   # Use bisection method to find alpha' where adjusted coverage matches alpha /2
   # to obtain the adjusted upper limit alpha.
-  alpha_upper_adjusted <- uniroot(
-    adjust_alpha,
-    lower = 0.5,
-    upper = 1,
-    alpha_goal = 1 - alpha / 2,
-    tol = 1 / B,
-    extendInt = "yes"
-  )$root
+  if (adjust_alpha(0.35, 1 - alpha / 2) * adjust_alpha(1, 1 - alpha / 2) > 0) {
+    alpha_upper_adjusted = 1 - alpha / 2
+  } else {
+    alpha_upper_adjusted <- uniroot(
+      adjust_alpha,
+      lower = 0.35,
+      upper = 1,
+      alpha_goal = 1 - alpha / 2,
+      tol = 1 / B
+    )$root
+  }
+
   # Repeat the above for the lower limit with alpha / 2.
-  alpha_lower_adjusted <- uniroot(
-    adjust_alpha,
-    lower = 0,
-    upper = 0.5,
-    alpha_goal = alpha / 2,
-    tol = 1 / B,
-    extendInt = "yes"
-  )$root
+  if (adjust_alpha(0, alpha / 2) * adjust_alpha(0.65, alpha / 2) > 0) {
+    alpha_lower_adjusted = alpha / 2
+  } else {
+    alpha_lower_adjusted <- uniroot(
+      adjust_alpha,
+      lower = 0,
+      upper = 0.65,
+      alpha_goal = alpha / 2,
+      tol = 1 / B
+    )$root
+  }
   
   ci_lower <- quantile(theta_star, alpha_lower_adjusted, na.rm = TRUE)
   ci_upper <- quantile(theta_star, alpha_upper_adjusted, na.rm = TRUE)
