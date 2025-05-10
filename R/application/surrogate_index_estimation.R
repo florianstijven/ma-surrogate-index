@@ -487,7 +487,7 @@ sl_fitter = function(predictors_chr,
       n = nrow(data_temp),
       cluster_ids = data_temp$trial,
       fold_fun = folds_loo
-    ),
+    )
   )
 
   sl = Lrnr_sl$new(

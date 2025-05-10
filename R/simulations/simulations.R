@@ -76,7 +76,7 @@ if (regime == "small") {
   # control the surrogacy and comparability assumptions. A non-zero variance
   # implies some violation of these assumptions.
   if (scenario == "vaccine") {
-    sd_beta = list(c(0.125, 0.125), c(0.25, 0.25))
+    sd_beta = list(c(0.125, 0.125), c(0.30, 0.30))
   } else if (scenario == "proof-of-concept") {
     sd_beta = list(c(0.05, 0.05), c(0.1, 0.1))
   }
