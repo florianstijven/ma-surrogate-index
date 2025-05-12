@@ -110,9 +110,9 @@ stan_code_prop_line =
       vector[2] theta[N];          // latent true effects per trial
     }
     model {
-      mu ~ normal(-2, 3);           
+      mu ~ normal(log(0.5), 1);           
       tau ~ normal(0, 2);        
-      rho ~ uniform(0, 1);        
+      rho ~ uniform(-1, 1);        
 
       matrix[2,2] Omega;
       Omega[1,1] = 1;
@@ -148,9 +148,9 @@ stan_code_default =
       vector[2] theta[N];          // latent true effects per trial
     }
     model {
-      mu ~ normal(-2, 3);           
+      mu ~ normal(log(0.5), 1);           
       tau ~ normal(0, 2);        
-      rho ~ uniform(0, 1);        
+      rho ~ uniform(-1, 1);        
 
       matrix[2,2] Omega;
       Omega[1,1] = 1;
