@@ -397,7 +397,7 @@ if (regime == "small") {
               statistic = statistic_function_factory(estimator_adjustment, nearest_PD),
               B = B,
               alpha = 0.05,
-              type = "double"
+              type = "percentile"
             )
           },
           .options = furrr_options(seed = TRUE)
@@ -407,7 +407,7 @@ if (regime == "small") {
         rho_ci_upper = purrr::map_dbl(rho_ci_bs, function(x)
           x[[2]])
       ) %>%
-      mutate(CI_type = "double bootstrap") %>%
+      mutate(CI_type = "percentile") %>%
       # Drop redundant variables.
       select(-rho_ci_bs)
   )

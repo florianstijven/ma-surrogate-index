@@ -53,7 +53,7 @@ moment_estimator = function(
   # Estimate the unadjusted covariance matrix.
   total_residual = cbind(alpha_hat - mu_alpha_hat, beta_hat - mu_beta_hat) %>%
     as.matrix()
-  S =  t(weights * total_residual) %*% total_residual
+  S =  t(total_residual) %*% diag(weights) %*% total_residual
   
   # If required, do finite-sample adjustment to the estimated covariance matrix.
   if (estimator_adjustment == "N - 1") {
@@ -91,7 +91,7 @@ moment_estimator = function(
                      weights = weights)
     
     # Compute the outer product of estimating equations.
-    ham = t(weights * U) %*% U
+    ham = t(U) %*% diag(weights) %*% U
     
     # Compute the sandwich estimator.
     sandwich = bread %*% ham %*% bread
