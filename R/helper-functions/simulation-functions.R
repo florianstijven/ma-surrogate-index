@@ -74,7 +74,7 @@ simulate_trial_proof_of_concept <- function(n, coefficients) {
   
   # Simulate clinical endpoint. The corrsponding regression coefficients depend
   # on the random trial-level coefficients in `coefficients`.
-  clinical <- -0.5 * surrogate * X1 + surrogate * (1 - X1) + 
+  clinical <- -0.25 * surrogate * X1 + surrogate * (1 - X1) + 
     coefficients$beta_clin_treatment * treatment +
     coefficients$beta_clin_surrogate * surrogate ^ 2 +
     rnorm(n)

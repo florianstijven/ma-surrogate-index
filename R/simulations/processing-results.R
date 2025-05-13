@@ -380,8 +380,8 @@ ggsave(
   units = "cm"
 )
 
-coverage_bs_bc_percentile = ma_sim_summary %>%
-  filter(setting == "small N, large n", CI_type == "BC percentile") %>%
+coverage_percentile = ma_sim_summary %>%
+  filter(setting == "small N, large n", CI_type == "percentile") %>%
   ggplot(aes(
     x = N,
     y = coverage,
@@ -398,8 +398,8 @@ coverage_bs_bc_percentile = ma_sim_summary %>%
   theme(legend.position = "bottom", legend.box = "vertical", legend.spacing.y = unit(0, "cm"))
 
 ggsave(
-  plot = coverage_bs_bc_percentile,
-  filename = "coverage-bootstrap-bc-percentile.pdf",
+  plot = coverage_percentile,
+  filename = "coverage-bootstrap-percentile.pdf",
   path = figures_dir,
   height = double_height,
   width = double_width,
