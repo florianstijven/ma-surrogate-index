@@ -40,6 +40,7 @@ moment_estimator = function(
     SE = TRUE,
     nearest_PD = FALSE) 
   {
+  browser()
   # Total number of independent units.
   N = length(alpha_hat)
   

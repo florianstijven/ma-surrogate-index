@@ -37,7 +37,7 @@ estimate_treatment_effect_surrogate_index = function(data, VE_surr) {
   # Fit linear regression model adjusted for baseline covariates and weighted by
   # the case-cohort-sampling weights.
   lm_fit = lm(
-    formula = surrogate_index ~ treatment * risk_score + Sex,
+    formula = surrogate_index ~ treatment + Sex + HighRiskInd + BMI_stratum + Age,
     data = data,
     weights = sample_weight
   )
