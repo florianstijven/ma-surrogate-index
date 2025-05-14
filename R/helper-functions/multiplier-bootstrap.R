@@ -84,6 +84,7 @@ percentile_CI = function(boot_replicates, alpha = 0.05) {
       "Some bootstrap replicates have missing values. These are removed for computing percentile confidence intervals.",
       "\nNumber of missing values in bootstrap replicates: ",
       sum(is.na(boot_replicates) | is.nan(boot_replicates)))
+    warning(warning_message)
     # Remove missing values from the bootstrap replicates and standard errors.
     boot_replicates = boot_replicates[!is.na(boot_replicates) & !is.nan(boot_replicates)] 
   }
@@ -98,10 +99,21 @@ percentile_CI = function(boot_replicates, alpha = 0.05) {
 
 # Compute the Bias-Corrected percentile confidence interval
 BC_percentile_CI = function(estimate, boot_replicates, alpha = 0.05) {
+  # Check for missing values or NaN in the bootstrap replicates. A warning is
+  # raised if there are any missing values. The warning also details the number
+  # of problematic values such that the user can decide whether to ignore this.
+  if (any(is.na(boot_replicates)) | any(is.nan(boot_replicates))) {
+    warning_message = paste(
+      "Some bootstrap replicates have missing values. These are removed for computing percentile confidence intervals.",
+      "\nNumber of missing values in bootstrap replicates: ",
+      sum(is.na(boot_replicates) | is.nan(boot_replicates)))
+    warning(warning_message)
+    # Remove missing values from the bootstrap replicates and standard errors.
+    boot_replicates = boot_replicates[!is.na(boot_replicates) & !is.nan(boot_replicates)] 
+  }
   # Compute bias-correction value.
   p0 = mean(boot_replicates < estimate) + 0.5 * mean(boot_replicates == estimate)
   z0 = qnorm(p0)
-  
   
   alpha_lower = pnorm(2 * z0 + qnorm(alpha / 2))
   alpha_upper = pnorm(2 * z0 + qnorm(1 - alpha / 2))
@@ -138,6 +150,7 @@ BCa_CI <- function(boot_replicates,
       "Some bootstrap replicates have missing values. These are removed for computing BCa confidence intervals.",
       "\nNumber of missing values in bootstrap replicates: ",
       sum(is.na(boot_replicates) | is.nan(boot_replicates)))
+    warning(warning_message)
     # Remove missing values from the bootstrap replicates and standard errors.
     boot_replicates = boot_replicates[!is.na(boot_replicates) & !is.nan(boot_replicates)] 
   }
@@ -154,17 +167,17 @@ BCa_CI <- function(boot_replicates,
   
   
   # Calculate the z0 (bias correction) term
-  median_bias = sum(boot_replicates < estimate) / B
+  p0 = mean(boot_replicates < estimate) + 0.5 * mean(boot_replicates == estimate)
   
-  if (median_bias == 0 | median_bias == 1) {
+  if (p0 == 0 | p0 == 1) {
     warning("Extreme median bias. Interpret results with care and increase number of bootstrap replications.")
-    if (median_bias == 0) {
-      median_bias = 1 / B
+    if (p0 == 0) {
+      p0 = 1 / B
     } else {
-      median_bias = (B - 1) / B
+      p0 = (B - 1) / B
     }
   }
-  z0 <- qnorm(median_bias)
+  z0 <- qnorm(p0)
   
   # Calculate the acceleration term (a)
   jackknife_est <- sapply(1:N, function(i) {
@@ -216,6 +229,7 @@ studentized_CI = function(boot_replicates,
       "Some bootstrap replicates have missing values. These are removed for computing studentized confidence intervals.",
       "\nNumber of missing values in bootstrap replicates: ",
       sum(is.na(boot_replicates) | is.nan(boot_replicates) | is.na(se) | is.nan(se)))
+    warning(warning_message)
     # Remove missing values from the bootstrap replicates and standard errors.
     good_indices = !is.na(boot_replicates) & !is.nan(boot_replicates) & !is.na(se) & !is.nan(se)
     boot_replicates = boot_replicates[good_indices] 

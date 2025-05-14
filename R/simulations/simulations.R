@@ -35,7 +35,7 @@ N_MC = as.numeric(args[3])
 set.seed(123)
 
 # Number of bootstrap replications for the multiplier bootstrap
-B = 5e3
+B = 1e5
 
 
 # Set different kinds of sample-size parameters depending on the scenario.
