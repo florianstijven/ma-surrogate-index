@@ -408,6 +408,91 @@ ggsave(
   units = "cm"
 )
 
+coverage_bc_percentile = ma_sim_summary %>%
+  filter(setting == "small N, large n", CI_type == "BC percentile") %>%
+  ggplot(aes(
+    x = N,
+    y = coverage,
+    color = surrogate_index_estimator,
+    linetype = `PD correction`
+  )) +
+  geom_point(position = position_dodge(width = 0.1)) +
+  geom_line() +
+  geom_abline(intercept = 0.95, slope = 0) +
+  scale_x_continuous(breaks = c(6, 12, 24)) +
+  scale_y_continuous(name = "Coverage") +
+  scale_color_discrete(name = "Surr. Index Estimator") +
+  facet_grid(SI_violation ~ scenario) + 
+  theme(legend.position = "bottom", legend.box = "vertical", legend.spacing.y = unit(0, "cm"))
+
+ggsave(
+  plot = coverage_bc_percentile,
+  filename = "coverage-bootstrap-bc-percentile.pdf",
+  path = figures_dir,
+  height = double_height,
+  width = double_width,
+  dpi = res,
+  device = "pdf",
+  units = "cm"
+)
+
+coverage_basic = ma_sim_summary %>%
+  filter(setting == "small N, large n", CI_type == "basic") %>%
+  ggplot(aes(
+    x = N,
+    y = coverage,
+    color = surrogate_index_estimator,
+    linetype = `PD correction`
+  )) +
+  geom_point(position = position_dodge(width = 0.1)) +
+  geom_line() +
+  geom_abline(intercept = 0.95, slope = 0) +
+  scale_x_continuous(breaks = c(6, 12, 24)) +
+  scale_y_continuous(name = "Coverage") +
+  scale_color_discrete(name = "Surr. Index Estimator") +
+  facet_grid(SI_violation ~ scenario) + 
+  theme(legend.position = "bottom", legend.box = "vertical", legend.spacing.y = unit(0, "cm"))
+
+ggsave(
+  plot = coverage_basic,
+  filename = "coverage-bootstrap-basic.pdf",
+  path = figures_dir,
+  height = double_height,
+  width = double_width,
+  dpi = res,
+  device = "pdf",
+  units = "cm"
+)
+
+coverage_studentized = ma_sim_summary %>%
+  filter(setting == "small N, large n", CI_type == "studentized") %>%
+  ggplot(aes(
+    x = N,
+    y = coverage,
+    color = surrogate_index_estimator,
+    linetype = `PD correction`
+  )) +
+  geom_point(position = position_dodge(width = 0.1)) +
+  geom_line() +
+  geom_abline(intercept = 0.95, slope = 0) +
+  scale_x_continuous(breaks = c(6, 12, 24)) +
+  scale_y_continuous(name = "Coverage") +
+  scale_color_discrete(name = "Surr. Index Estimator") +
+  facet_grid(SI_violation ~ scenario) + 
+  theme(legend.position = "bottom", legend.box = "vertical", legend.spacing.y = unit(0, "cm"))
+
+ggsave(
+  plot = coverage_basic,
+  filename = "coverage-bootstrap-studentized.pdf",
+  path = figures_dir,
+  height = double_height,
+  width = double_width,
+  dpi = res,
+  device = "pdf",
+  units = "cm"
+)
+
+
 ### Distribution of lower limits ------------------------------------------
 
 ma_sim_results %>%
