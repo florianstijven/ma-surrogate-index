@@ -69,6 +69,9 @@ multiplier_bootstrap_ci = function(data, statistic, B, alpha = 0.05, type = "BCa
     )
   } else if (type == "double") {
     double_bootstrap_CI(data = data, statistic = statistic, alpha = alpha, B = B)
+  } else if (type == "basic") {
+    estimate = statistic(data, weights = rep(1, nrow(data)))$estimate
+    basic_CI(estimate = estimate, boot_replicates = bootstrap_replications_list$bootstrap_estimates, alpha = alpha)
   } else {
     stop("Invalid type. Must be 'BCa' or 'percentile'.")
   }
@@ -94,6 +97,28 @@ percentile_CI = function(boot_replicates, alpha = 0.05) {
   return(list(
     ci_lower = ci_lower,
     ci_upper = ci_upper
+  ))
+}
+
+basic_CI = function(estimate, boot_replicates, alpha = 0.05) {
+  # Check for missing values or NaN in the bootstrap replicates. A warning is
+  # raised if there are any missing values. The warning also details the number
+  # of problematic values such that the user can decide whether to ignore this.
+  if (any(is.na(boot_replicates)) | any(is.nan(boot_replicates))) {
+    warning_message = paste(
+      "Some bootstrap replicates have missing values. These are removed for computing percentile confidence intervals.",
+      "\nNumber of missing values in bootstrap replicates: ",
+      sum(is.na(boot_replicates) | is.nan(boot_replicates)))
+    warning(warning_message)
+    # Remove missing values from the bootstrap replicates and standard errors.
+    boot_replicates = boot_replicates[!is.na(boot_replicates) & !is.nan(boot_replicates)] 
+  }
+  ci_lower = quantile(x = boot_replicates - estimate, probs = alpha / 2, na.rm = TRUE)
+  ci_upper = quantile(x = boot_replicates - estimate, probs = 1 - (alpha / 2), na.rm = TRUE)
+  
+  return(list(
+    ci_lower = estimate - ci_upper,
+    ci_upper = estimate - ci_lower
   ))
 }
 

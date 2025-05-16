@@ -26,7 +26,7 @@ tables_dir = "results/tables/application/meta-analysis"
 
 # Number of bootstrap replications for the multiplier bootstrap for the
 # meta-analytic parameters.
-B_multiplier = 5e3
+B_multiplier = 1e5
 
 time_cumulative_incidence = 80
 
@@ -138,40 +138,40 @@ transform_VE = new_transform(
 )
 
 # Summarize the estimated trial-level treatment effects in meta-analytic plots.
-ma_trt_effects_tbl %>% 
-  filter(method == "untransformed surrogate") %>%
-  ggplot(aes(x = trt_effect_surrogate_index_est, y = 1 - exp(log_RR_est), color = trial_fct, shape = trial_fct)) +
-  geom_point() +
-  geom_errorbar(aes(
-    ymin = 1 - exp(log_RR_est - 1.96 * log_RR_est_se),
-    ymax = 1 - exp(log_RR_est + 1.96 * log_RR_est_se)
-  ),
-  width = 0.01) +
-  geom_errorbarh(
-    aes(
-      xmin = trt_effect_surrogate_index_est - 1.96 * trt_effect_surrogate_index_est_se,
-      xmax = trt_effect_surrogate_index_est + 1.96 * trt_effect_surrogate_index_est_se
-    ),
-    height = 0.01
-  ) +
-  scale_y_continuous(transform = transform_VE, breaks = c(0, 0.5, 0.75, 0.90, 0.95)) +
-  scale_color_manual(values = my_palette, limits = trials_mixed_fct) +
-  scale_shape_manual(values = my_shapes, limits = trials_mixed_fct) +
-  coord_cartesian(ylim = c(-0.2, 0.95)) +
-  facet_wrap(~surrogate_name, scales = "free_x", nrow = 2) +
-  xlab("Estimated Treatment Effect on Antibody Marker") +
-  ylab("Estimated VE") +
-  theme(legend.position = "bottom", legend.title = element_blank())
-
-ggsave(
-  filename = "ma-standard-all.pdf",
-  path = figures_dir,
-  height = double_height,
-  width = double_width,
-  dpi = res,
-  device = "pdf",
-  units = "cm"
-)
+# ma_trt_effects_tbl %>% 
+#   filter(method == "untransformed surrogate") %>%
+#   ggplot(aes(x = trt_effect_surrogate_index_est, y = 1 - exp(log_RR_est), color = trial_fct, shape = trial_fct)) +
+#   geom_point() +
+#   geom_errorbar(aes(
+#     ymin = 1 - exp(log_RR_est - 1.96 * log_RR_est_se),
+#     ymax = 1 - exp(log_RR_est + 1.96 * log_RR_est_se)
+#   ),
+#   width = 0.01) +
+#   geom_errorbarh(
+#     aes(
+#       xmin = trt_effect_surrogate_index_est - 1.96 * trt_effect_surrogate_index_est_se,
+#       xmax = trt_effect_surrogate_index_est + 1.96 * trt_effect_surrogate_index_est_se
+#     ),
+#     height = 0.01
+#   ) +
+#   scale_y_continuous(transform = transform_VE, breaks = c(0, 0.5, 0.75, 0.90, 0.95)) +
+#   scale_color_manual(values = my_palette, limits = trials_mixed_fct) +
+#   scale_shape_manual(values = my_shapes, limits = trials_mixed_fct) +
+#   coord_cartesian(ylim = c(-0.2, 0.95)) +
+#   facet_wrap(~surrogate_name, scales = "free_x", nrow = 2) +
+#   xlab("Estimated Treatment Effect on Antibody Marker") +
+#   ylab("Estimated VE") +
+#   theme(legend.position = "bottom", legend.title = element_blank())
+# 
+# ggsave(
+#   filename = "ma-standard-all.pdf",
+#   path = figures_dir,
+#   height = double_height,
+#   width = double_width,
+#   dpi = res,
+#   device = "pdf",
+#   units = "cm"
+# )
 
 # Summarize the estimated trial-level treatment effects in meta-analytic plots.
 ma_trt_effects_tbl %>% 
@@ -298,7 +298,7 @@ ma_plot_helper = function(weighting, analysis_set, VE_scale, include_risk_score)
 
 expand_grid(
   weighting = c("unnormalized"),
-  analysis_set = c("naive_only", "mixed"),
+  analysis_set = c("naive_only"),
   VE_scale = c(FALSE),
   include_risk_score = c(FALSE)
 ) %>%
@@ -428,11 +428,11 @@ ma_trt_effects_tbl_untransformed = bind_rows(
   ma_trt_effects_tbl %>%
     filter(method == "untransformed surrogate") %>%
     filter(trial %in% trials_naive_only) %>%
-    mutate(analysis_set = "naive_only"),
-  ma_trt_effects_tbl %>%
-    filter(method == "untransformed surrogate") %>%
-    filter(trial %in% trials_mixed) %>%
-    mutate(analysis_set = "mixed")
+    mutate(analysis_set = "naive_only")
+  # ma_trt_effects_tbl %>%
+  #   filter(method == "untransformed surrogate") %>%
+  #   filter(trial %in% trials_mixed) %>%
+  #   mutate(analysis_set = "mixed")
 )
 
 # Construct data set with a set of rows corresponding to each analysis set.
@@ -526,23 +526,23 @@ surrogate_results_tbl = ma_trt_effects_tbl_modified %>%
         )
       }
     ),
-    bootstrap_ci_residual_var_prop = future_map(
-      .x = data_tbl,
-      .f = function(data_tbl) {
-        multiplier_bootstrap_ci(
-          data = data_tbl %>%
-            rename(
-              treatment_effect_surr = "trt_effect_surrogate_index_est",
-              treatment_effect_clin = 'log_RR_est',
-              covariance_matrix = "vcov"
-            ),
-          statistic = statistic_f_residual_var_prop,
-          B = B_multiplier,
-          type = "BCa",
-          alpha = 0.05
-        )
-      }
-    )
+    # bootstrap_ci_residual_var_prop = future_map(
+    #   .x = data_tbl,
+    #   .f = function(data_tbl) {
+    #     multiplier_bootstrap_ci(
+    #       data = data_tbl %>%
+    #         rename(
+    #           treatment_effect_surr = "trt_effect_surrogate_index_est",
+    #           treatment_effect_clin = 'log_RR_est',
+    #           covariance_matrix = "vcov"
+    #         ),
+    #       statistic = statistic_f_residual_var_prop,
+    #       B = B_multiplier,
+    #       type = "BCa",
+    #       alpha = 0.05
+    #     )
+    #   }
+    # )
   ) %>%
   mutate(rho_sandwich_inference = purrr::map2(
     .x = moment_estimate,
@@ -573,8 +573,8 @@ surrogate_results_tbl = surrogate_results_tbl %>%
     CI_upper_bs = purrr::map_dbl(bootstrap_ci, "ci_upper"),
     CI_lower_bs_residual_var = purrr::map_dbl(bootstrap_ci_residual_var, "ci_lower"),
     CI_upper_bs_residual_var = purrr::map_dbl(bootstrap_ci_residual_var, "ci_upper"),
-    CI_lower_bs_residual_var_prop = purrr::map_dbl(bootstrap_ci_residual_var_prop, "ci_lower"),
-    CI_upper_bs_residual_var_prop = purrr::map_dbl(bootstrap_ci_residual_var_prop, "ci_upper"),
+    # CI_lower_bs_residual_var_prop = purrr::map_dbl(bootstrap_ci_residual_var_prop, "ci_lower"),
+    # CI_upper_bs_residual_var_prop = purrr::map_dbl(bootstrap_ci_residual_var_prop, "ci_upper"),
     CI_lower_sandwich = map_dbl(rho_sandwich_inference, function(x)
       x$ci[[1]]),
     CI_upper_sandwich = map_dbl(rho_sandwich_inference, function(x)
@@ -585,7 +585,7 @@ surrogate_results_tbl = surrogate_results_tbl %>%
 
 # Summarize inferences in a table.
 surrogate_results_tbl = surrogate_results_tbl %>%
-  select(-moment_estimate, -bootstrap_ci, -bootstrap_ci_residual_var, -bootstrap_ci_residual_var_prop, -rho_sandwich_inference, -data_tbl) 
+  select(-moment_estimate, -bootstrap_ci, -bootstrap_ci_residual_var, -rho_sandwich_inference, -data_tbl) 
 
 surrogate_results_tbl %>%
   write.csv(file = paste0(tables_dir, "/surrogacy-inferences.csv"))

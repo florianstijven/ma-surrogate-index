@@ -72,7 +72,7 @@ conf_int_plot_f(FALSE, "bs", FALSE, "real data")
 conf_int_plot_f(FALSE, "sandwich", FALSE, "real data")
 
 # conf_int_plot_f(TRUE, "bs", TRUE)
-conf_int_plot_f(FALSE, "bs", TRUE, "real data")
+# conf_int_plot_f(FALSE, "bs", TRUE, "real data")
 
 ## Bayesian MA -------------------------------------------------------------
 
@@ -84,8 +84,7 @@ rho_long_tbl <- surrogate_results_bayesian_tbl %>%
 
 # Define helper function to make and save plots.
 posterior_plots_f = function(assume_proportional_line, include_risk_score) {
-  posterior_plot = rho_long_tbl %>% filter(
-    method != "untransformed surrogate",
+  posterior_plot = rho_long_tbl_temp %>% filter(
     assume_proportional_line == .env$assume_proportional_line,
     include_risk_score == .env$include_risk_score
   ) %>%

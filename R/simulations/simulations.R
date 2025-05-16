@@ -35,7 +35,7 @@ N_MC = as.numeric(args[3])
 set.seed(123)
 
 # Number of bootstrap replications for the multiplier bootstrap
-B = 1e5
+B = 1e4
 
 
 # Set different kinds of sample-size parameters depending on the scenario.
@@ -43,7 +43,7 @@ if (scenario == "proof-of-concept") {
   # Within-trial sample size
   n = 2e3
   # Number of independent trials
-  N = c(6, 12, 24, 100)
+  N = c(6, 12, 24)
   
   # Number of Monte Carlo trial replications for the approximation of the true
   # trial-level correlation.
@@ -378,6 +378,36 @@ if (regime == "small") {
           x[[2]])
       ) %>%
       mutate(CI_type = "BCa") %>%
+      # Drop redundant variables.
+      select(-rho_ci_bs),
+    meta_analytic_data_simulated %>%
+      mutate(
+        # Compute CIs for rho based on the multiplier bootstrap.
+        rho_ci_bs = furrr::future_pmap(
+          .l = list(
+            treatment_effects = treatment_effects,
+            estimator_adjustment = estimator_adjustment,
+            nearest_PD = nearest_PD
+          ),
+          .f = function(treatment_effects,
+                        estimator_adjustment,
+                        nearest_PD) {
+            multiplier_bootstrap_ci(
+              data = treatment_effects,
+              statistic = statistic_function_factory(estimator_adjustment, nearest_PD),
+              B = B,
+              alpha = 0.05,
+              type = "basic"
+            )
+          },
+          .options = furrr_options(seed = TRUE)
+        ),
+        rho_ci_lower = purrr::map_dbl(rho_ci_bs, function(x)
+          x[[1]]),
+        rho_ci_upper = purrr::map_dbl(rho_ci_bs, function(x)
+          x[[2]])
+      ) %>%
+      mutate(CI_type = "basic") %>%
       # Drop redundant variables.
       select(-rho_ci_bs),
     meta_analytic_data_simulated %>%

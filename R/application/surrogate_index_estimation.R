@@ -235,7 +235,7 @@ prediction_model_settings = tibble(
 #   )
 
 prediction_model_settings = prediction_model_settings %>%
-  cross_join(tibble(analysis_set = c("naive_only", "mixed"))) %>%
+  cross_join(tibble(analysis_set = c("naive_only"))) %>%
   cross_join(tibble(include_risk_score = c(FALSE)))
 
 ## Parametric Prediction Model --------------------------------------------
