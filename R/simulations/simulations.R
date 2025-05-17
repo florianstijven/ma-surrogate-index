@@ -8,7 +8,6 @@ library(lmtest)
 library(future)
 library(furrr)
 library(mgcv)
-library(ranger)
 library(splines)
 library(sl3)
 library(origami)
@@ -35,7 +34,7 @@ N_MC = as.numeric(args[3])
 set.seed(123)
 
 # Number of bootstrap replications for the multiplier bootstrap
-B = 2e4
+B = 5e4
 
 
 # Set different kinds of sample-size parameters depending on the scenario.
@@ -43,7 +42,7 @@ if (scenario == "proof-of-concept") {
   # Within-trial sample size
   n = 2e3
   # Number of independent trials
-  N = c(6, 12, 24)
+  N = c(6, 12, 24, 50)
   
   # Number of Monte Carlo trial replications for the approximation of the true
   # trial-level correlation.
@@ -55,7 +54,7 @@ if (scenario == "proof-of-concept") {
   n_approximation_MC = 2e2
 } else if (scenario == "vaccine") {
   # Within-trial sample size
-  n = 5e3
+  n = 4e3
   # Number of independent trials
   N = c(6, 12, 24)
   
@@ -67,7 +66,7 @@ if (scenario == "proof-of-concept") {
   # trial-level correlation. This should be large in the vaccine scenario
   # because the standard covariance estimator (based on the delta method) for
   # log RR estimators is consistent but biased.
-  n_approximation_MC = 5e3
+  n_approximation_MC = 3e3
 }
 
 
@@ -76,7 +75,7 @@ if (regime == "small") {
   # control the surrogacy and comparability assumptions. A non-zero variance
   # implies some violation of these assumptions.
   if (scenario == "vaccine") {
-    sd_beta = list(c(0.125, 0.125), c(0.30, 0.30))
+    sd_beta = list(c(0.15, 0.15), c(0.30, 0.30))
   } else if (scenario == "proof-of-concept") {
     sd_beta = list(c(0.05, 0.05), c(0.1, 0.1))
   }
@@ -96,6 +95,9 @@ if (regime == "small") {
   # the MC error in the true rho is relatively more important.
   N_approximation_MC = 2e5
   n_approximation_MC = 5e2
+  
+  # Set the number of bootstrap replications to something lower.
+  B = 2e3
   
   sd_beta = list(c(0.125, 0.125))
   SI_violation = c("moderate")
@@ -344,13 +346,13 @@ statistic_function_factory = function(estimator_adjustment, nearest_PD) {
 
 
 
-# Compute multiplier bootstrap percentile confidence intervals. We don't compute
-# bootstrap intervals for the large N regime.
+# Compute multiplier bootstrap CIs.
 if (regime == "small") {
   meta_analytic_data_simulated =  bind_rows(
     meta_analytic_data_simulated %>%
       mutate(CI_type = "sandwich"),
     meta_analytic_data_simulated %>%
+      filter(nearest_PD == FALSE) %>%
       mutate(
         # Compute CIs for rho based on the multiplier bootstrap.
         rho_ci_bs = furrr::future_pmap(
@@ -378,66 +380,6 @@ if (regime == "small") {
           x[[2]])
       ) %>%
       mutate(CI_type = "BCa") %>%
-      # Drop redundant variables.
-      select(-rho_ci_bs),
-    meta_analytic_data_simulated %>%
-      mutate(
-        # Compute CIs for rho based on the multiplier bootstrap.
-        rho_ci_bs = furrr::future_pmap(
-          .l = list(
-            treatment_effects = treatment_effects,
-            estimator_adjustment = estimator_adjustment,
-            nearest_PD = nearest_PD
-          ),
-          .f = function(treatment_effects,
-                        estimator_adjustment,
-                        nearest_PD) {
-            multiplier_bootstrap_ci(
-              data = treatment_effects,
-              statistic = statistic_function_factory(estimator_adjustment, nearest_PD),
-              B = B,
-              alpha = 0.05,
-              type = "basic"
-            )
-          },
-          .options = furrr_options(seed = TRUE)
-        ),
-        rho_ci_lower = purrr::map_dbl(rho_ci_bs, function(x)
-          x[[1]]),
-        rho_ci_upper = purrr::map_dbl(rho_ci_bs, function(x)
-          x[[2]])
-      ) %>%
-      mutate(CI_type = "basic") %>%
-      # Drop redundant variables.
-      select(-rho_ci_bs),
-    meta_analytic_data_simulated %>%
-      mutate(
-        # Compute CIs for rho based on the multiplier bootstrap.
-        rho_ci_bs = furrr::future_pmap(
-          .l = list(
-            treatment_effects = treatment_effects,
-            estimator_adjustment = estimator_adjustment,
-            nearest_PD = nearest_PD
-          ),
-          .f = function(treatment_effects,
-                        estimator_adjustment,
-                        nearest_PD) {
-            multiplier_bootstrap_ci(
-              data = treatment_effects,
-              statistic = statistic_function_factory(estimator_adjustment, nearest_PD),
-              B = B,
-              alpha = 0.05,
-              type = "percentile"
-            )
-          },
-          .options = furrr_options(seed = TRUE)
-        ),
-        rho_ci_lower = purrr::map_dbl(rho_ci_bs, function(x)
-          x[[1]]),
-        rho_ci_upper = purrr::map_dbl(rho_ci_bs, function(x)
-          x[[2]])
-      ) %>%
-      mutate(CI_type = "percentile") %>%
       # Drop redundant variables.
       select(-rho_ci_bs),
     meta_analytic_data_simulated %>%
@@ -498,6 +440,43 @@ if (regime == "small") {
           x[[2]])
       ) %>%
       mutate(CI_type = "BC percentile") %>%
+      # Drop redundant variables.
+      select(-rho_ci_bs)
+  )
+} else {
+  # For the large N regime, we consider only the BCa. 
+  meta_analytic_data_simulated =  bind_rows(
+    meta_analytic_data_simulated %>%
+      mutate(CI_type = "sandwich"),
+    meta_analytic_data_simulated %>%
+      filter(nearest_PD == FALSE) %>%
+      mutate(
+        # Compute CIs for rho based on the multiplier bootstrap.
+        rho_ci_bs = furrr::future_pmap(
+          .l = list(
+            treatment_effects = treatment_effects,
+            estimator_adjustment = estimator_adjustment,
+            nearest_PD = nearest_PD
+          ),
+          .f = function(treatment_effects,
+                        estimator_adjustment,
+                        nearest_PD) {
+            multiplier_bootstrap_ci(
+              data = treatment_effects,
+              statistic = statistic_function_factory(estimator_adjustment, nearest_PD),
+              B = B,
+              alpha = 0.05,
+              type = "BCa"
+            )
+          },
+          .options = furrr_options(seed = TRUE)
+        ),
+        rho_ci_lower = purrr::map_dbl(rho_ci_bs, function(x)
+          x[[1]]),
+        rho_ci_upper = purrr::map_dbl(rho_ci_bs, function(x)
+          x[[2]])
+      ) %>%
+      mutate(CI_type = "BCa") %>%
       # Drop redundant variables.
       select(-rho_ci_bs)
   )

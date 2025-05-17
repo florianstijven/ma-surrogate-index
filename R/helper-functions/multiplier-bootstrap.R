@@ -34,11 +34,16 @@ multiplier_bootstrap_sampling <- function(data, statistic, B) {
 
 multiplier_bootstrap_ci = function(data, statistic, B, alpha = 0.05, type = "BCa") {
   if (type != "double") {
+    estimate = statistic(data, weights = rep(1, nrow(data)))
+    original_se = estimate$se
+    estimate = estimate$estimate
+    
     bootstrap_replications_list = multiplier_bootstrap_sampling(data, statistic, B)
     bootstrap_estimates = bootstrap_replications_list$bootstrap_estimates
     # If there are any NA or NaNs in the boostrap estimates, we assume that they
-    # are +Inf. 
-    bootstrap_estimates[is.na(bootstrap_estimates) | is.nan(bootstrap_estimates)] = +Inf
+    # are +Inf or -Inf. 
+    bootstrap_estimates[is.na(bootstrap_estimates) |
+                          is.nan(bootstrap_estimates)] = ifelse(estimate > 0, +Inf, -Inf)
   }
   # Compute the required type of bootstrap CI.
   if (type == "BCa") {
@@ -59,9 +64,6 @@ multiplier_bootstrap_ci = function(data, statistic, B, alpha = 0.05, type = "BCa
     estimate = statistic(data, weights = rep(1, nrow(data)))$estimate
     return(BC_percentile_CI(estimate, bootstrap_estimates, alpha))
   } else if (type == "studentized") {
-    estimate = statistic(data, weights = rep(1, nrow(data)))
-    original_se = estimate$se
-    estimate = estimate$estimate
     bootstrap_ses = bootstrap_replications_list$bootstrap_ses
     bootstrap_ses[is.infinite(bootstrap_estimates)] = 1
     return(

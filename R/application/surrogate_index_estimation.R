@@ -663,7 +663,8 @@ ipd_surr_indices_tbl = ipd_surr_indices_tbl %>%
     time_to_event,
     risk_score,
     ipcw,
-    Sex
+    Sex,
+    HighRiskInd
   )
 
 ## Prediction Model Performance -------------------------------------------
