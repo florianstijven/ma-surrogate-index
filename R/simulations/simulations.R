@@ -34,7 +34,7 @@ N_MC = as.numeric(args[3])
 set.seed(123)
 
 # Number of bootstrap replications for the multiplier bootstrap
-B = 5e4
+B = 2e4
 
 
 # Set different kinds of sample-size parameters depending on the scenario.
@@ -42,7 +42,7 @@ if (scenario == "proof-of-concept") {
   # Within-trial sample size
   n = 2e3
   # Number of independent trials
-  N = c(6, 12, 24, 50)
+  N = c(6, 12, 24)
   
   # Number of Monte Carlo trial replications for the approximation of the true
   # trial-level correlation.
