@@ -664,7 +664,9 @@ ipd_surr_indices_tbl = ipd_surr_indices_tbl %>%
     risk_score,
     ipcw,
     Sex,
-    HighRiskInd
+    HighRiskInd,
+    BMI_stratum,
+    Age
   )
 
 ## Prediction Model Performance -------------------------------------------
