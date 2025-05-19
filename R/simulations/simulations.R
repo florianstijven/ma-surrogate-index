@@ -80,6 +80,10 @@ if (regime == "small") {
     sd_beta = list(c(0.05, 0.05), c(0.1, 0.1))
   }
   SI_violation = c("slight", "moderate")
+  
+  # Define the number of bootstrap replications depending on the number of
+  # independent trials.
+  B_N_lookup = tibble(N = c(6, 12, 24), B = c(1e5, 5e4, 2e4))
 } else if (regime == "large") {
   if (scenario == "vaccine") {
     stop("The large sample regime is not suitable for the vaccine scenario.")
@@ -97,7 +101,9 @@ if (regime == "small") {
   n_approximation_MC = 5e2
   
   # Set the number of bootstrap replications to something lower.
-  B = 2e3
+  # Define the number of bootstrap replications depending on the number of
+  # independent trials.
+  B_N_lookup = tibble(N = N, B = 2e3)
   
   sd_beta = list(c(0.125, 0.125))
   SI_violation = c("moderate")
@@ -139,7 +145,8 @@ if (scenario == "proof-of-concept") {
 # Tibble with simulation parameters. Each row corresponds to a data-generating
 # mechanism.
 dgm_param_tbl = expand_grid(tibble(sd_beta, SI_violation), N, n) %>%
-  mutate(surrogate_index_estimators = list(surrogate_index_estimator))
+  mutate(surrogate_index_estimators = list(surrogate_index_estimator)) %>%
+  left_join(B_N_lookup)
 
 ## Simulate IPD data and compute trial-level estimates  --------------------
 
@@ -359,11 +366,13 @@ if (regime == "small") {
           .l = list(
             treatment_effects = treatment_effects,
             estimator_adjustment = estimator_adjustment,
-            nearest_PD = nearest_PD
+            nearest_PD = nearest_PD,
+            B = B
           ),
           .f = function(treatment_effects,
                         estimator_adjustment,
-                        nearest_PD) {
+                        nearest_PD,
+                        B) {
             multiplier_bootstrap_ci(
               data = treatment_effects,
               statistic = statistic_function_factory(estimator_adjustment, nearest_PD),
@@ -383,17 +392,20 @@ if (regime == "small") {
       # Drop redundant variables.
       select(-rho_ci_bs),
     meta_analytic_data_simulated %>%
+      filter(nearest_PD == FALSE) %>%
       mutate(
         # Compute CIs for rho based on the multiplier bootstrap.
         rho_ci_bs = furrr::future_pmap(
           .l = list(
             treatment_effects = treatment_effects,
             estimator_adjustment = estimator_adjustment,
-            nearest_PD = nearest_PD
+            nearest_PD = nearest_PD,
+            B = B
           ),
           .f = function(treatment_effects,
                         estimator_adjustment,
-                        nearest_PD) {
+                        nearest_PD,
+                        B) {
             multiplier_bootstrap_ci(
               data = treatment_effects,
               statistic = statistic_function_factory(estimator_adjustment, nearest_PD),
@@ -413,17 +425,20 @@ if (regime == "small") {
       # Drop redundant variables.
       select(-rho_ci_bs),
     meta_analytic_data_simulated %>%
+      filter(nearest_PD == FALSE) %>%
       mutate(
         # Compute CIs for rho based on the multiplier bootstrap.
         rho_ci_bs = furrr::future_pmap(
           .l = list(
             treatment_effects = treatment_effects,
             estimator_adjustment = estimator_adjustment,
-            nearest_PD = nearest_PD
+            nearest_PD = nearest_PD,
+            B = B
           ),
           .f = function(treatment_effects,
                         estimator_adjustment,
-                        nearest_PD) {
+                        nearest_PD,
+                        B) {
             multiplier_bootstrap_ci(
               data = treatment_effects,
               statistic = statistic_function_factory(estimator_adjustment, nearest_PD),
@@ -456,11 +471,13 @@ if (regime == "small") {
           .l = list(
             treatment_effects = treatment_effects,
             estimator_adjustment = estimator_adjustment,
-            nearest_PD = nearest_PD
+            nearest_PD = nearest_PD,
+            B = B
           ),
           .f = function(treatment_effects,
                         estimator_adjustment,
-                        nearest_PD) {
+                        nearest_PD,
+                        B) {
             multiplier_bootstrap_ci(
               data = treatment_effects,
               statistic = statistic_function_factory(estimator_adjustment, nearest_PD),
