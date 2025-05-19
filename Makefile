@@ -15,7 +15,7 @@ application: R/application/data-exploration.Rout \
 	R/application/ipd_surr_indices_tbl.rds \
 	R/application/ma_trt_effects_tbl.rds \
 	R/application/meta_analysis.Rout \
-	R/application/bayesian_ma_results.rds \
+	R/results/raw-results/application/bayesian_ma_results.rds \
 	R/application/processing-results.Rout
 	
 
@@ -43,7 +43,7 @@ R/application/ma_trt_effects_tbl.rds: R/application/trial-level-effects.R R/appl
 R/application/meta_analysis.Rout: R/application/meta_analysis.R R/application/ma_trt_effects_tbl.rds $(analysishelpers)
 	Rscript --verbose R/application/meta_analysis.R  > $@ 2> $@
 	
-R/application/bayesian_ma_results.rds: R/application/bayesian-meta-analysis.R R/application/ma_trt_effects_tbl.rds
+R/results/raw-results/application/bayesian_ma_results.rds: R/application/bayesian-meta-analysis.R R/application/ma_trt_effects_tbl.rds
 	Rscript --verbose R/application/bayesian-meta-analysis.R  > R/application/bayesian-meta-analysis.Rout 2> R/application/bayesian-meta-analysis.Rout
 	
 R/application/processing-results.Rout: R/application/processing-results.R R/application/bayesian_ma_results.rds R/application/meta_analysis.Rout
