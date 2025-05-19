@@ -252,8 +252,17 @@ surrogate_results_tbl = ma_trt_effects_tbl %>%
 
 # Saving Results ----------------------------------------------------------
 
-# Save data with trial-level treatment effects to file.
-saveRDS(surrogate_results_tbl, file = "R/application/bayesian_ma_results.rds")
+# Save fitted Bayesian models. 
+saveRDS(surrogate_results_tbl, file = "results/raw-results/application/bayesian_ma_results.rds")
+
+# The fitted Bayesian models are very large objects. So, we also save a subset
+# of this information next, which is more convenient to work with.
+rho_long_tbl <- surrogate_results_bayesian_tbl %>%
+  mutate(rho_samples = map(stan_fit, ~ as.data.frame(.x)$rho)) %>%
+  unnest(rho_samples) %>%
+  rename(rho = rho_samples)
+
+saveRDS(rho_long_tbl, file = "results/raw-results/application/rho_long_tbl.rds")
 
 
 

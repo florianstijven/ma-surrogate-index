@@ -9,7 +9,7 @@ tables_dir = "results/tables/application/meta-analysis"
 # Read in nonparametric results
 surrogate_results_tbl = read.csv(file = "results/tables/application/meta-analysis/surrogacy-inferences.csv")
 # Read in Bayesian results
-surrogate_results_bayesian_tbl = readRDS("R/application/bayesian_ma_results.rds")
+rho_long_tbl = readRDS("results/raw-results/application/rho_long_tbl.rds")
 
 # Plots -----------------------------------------------------------------
 
@@ -75,12 +75,6 @@ conf_int_plot_f(FALSE, "sandwich", FALSE, "real data")
 # conf_int_plot_f(FALSE, "bs", TRUE, "real data")
 
 ## Bayesian MA -------------------------------------------------------------
-
-# Extract and reshape posterior samples
-rho_long_tbl <- surrogate_results_bayesian_tbl %>%
-  mutate(rho_samples = map(stan_fit, ~ as.data.frame(.x)$rho)) %>%
-  unnest(rho_samples) %>%
-  rename(rho = rho_samples)
 
 # Define helper function to make and save plots.
 posterior_plots_f = function(assume_proportional_line, include_risk_score) {
