@@ -33,10 +33,6 @@ N_MC = as.numeric(args[3])
 # This script simulates data. We set a seed to ensure reproducibility.
 set.seed(123)
 
-# Number of bootstrap replications for the multiplier bootstrap
-B = 2e4
-
-
 # Set different kinds of sample-size parameters depending on the scenario.
 if (scenario == "proof-of-concept") {
   # Within-trial sample size
@@ -83,7 +79,7 @@ if (regime == "small") {
   
   # Define the number of bootstrap replications depending on the number of
   # independent trials.
-  B_N_lookup = tibble(N = c(6, 12, 24), B = c(1e5, 5e4, 2e4))
+  B_N_lookup = tibble(N = c(6, 12, 24), B = c(5e4, 2e4, 1e4))
 } else if (regime == "large") {
   if (scenario == "vaccine") {
     stop("The large sample regime is not suitable for the vaccine scenario.")
@@ -105,7 +101,7 @@ if (regime == "small") {
   # independent trials.
   B_N_lookup = tibble(N = N, B = 2e3)
   
-  sd_beta = list(c(0.125, 0.125))
+  sd_beta = list(c(0.10, 0.10))
   SI_violation = c("moderate")
 }
 
@@ -351,7 +347,7 @@ statistic_function_factory = function(estimator_adjustment, nearest_PD) {
   return(statistic_f)
 }
 
-
+print(plan())
 
 # Compute multiplier bootstrap CIs.
 if (regime == "small") {
