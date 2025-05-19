@@ -24,6 +24,7 @@ tables_dir = "results/tables/application/meta-analysis"
 
 ## Analysis Parameters -------------------------------------------------- 
 
+set.seed(1)
 # Number of bootstrap replications for the multiplier bootstrap for the
 # meta-analytic parameters.
 B_multiplier = 1e5
