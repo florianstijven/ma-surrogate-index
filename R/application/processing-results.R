@@ -91,7 +91,7 @@ posterior_plots_f = function(assume_proportional_line, include_risk_score) {
     ggplot(aes(x = rho, y = method, fill = method)) +
     geom_density_ridges(quantile_lines = TRUE,
                         quantiles = c(0.025, 0.5, 0.975)) +
-    facet_grid(surrogate ~ analysis_set) +
+    facet_grid(surrogate ~ .) +
     labs(title = "Posterior Distributions of Trial-Level Correlation (rho)",
          x = "rho",
          y = NULL,

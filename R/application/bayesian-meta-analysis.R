@@ -228,7 +228,6 @@ ma_trt_effects_tbl_untransformed = bind_rows(
 # Estimate the surrogacy parameters on each data set of trial-level treatment
 # effect estimates.
 surrogate_results_tbl = ma_trt_effects_tbl %>%
-  filter(method != "untransformed surrogate") %>%
   bind_rows(ma_trt_effects_tbl_untransformed) %>%
   # Make sure that only the correct trials are included for each analysis set.
   filter(ifelse(
