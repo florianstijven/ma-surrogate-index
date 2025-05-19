@@ -2,12 +2,14 @@ analysishelpers = R/helper-functions/delta-method-rho-trial.R R/helper-functions
 simulationhelpers = R/helper-functions/simulation-functions.R
 data = data/processed_data.csv
 
-.PHONY: all application
-all: results/raw-results/simple-simulation/ma-sim-results-proof-of-concept-small.rds \
+.PHONY: all application simulation
+all: simulation \
+	application
+	
+simulation: results/raw-results/simple-simulation/ma-sim-results-proof-of-concept-small.rds \
 	results/raw-results/simple-simulation/ma-sim-results-vaccine-small.rds \
 	results/raw-results/simple-simulation/ma-sim-results-proof-of-concept-large.rds \
-	R/simulations/processing-results.Rout \
-	application
+	R/simulations/processing-results.Rout 
 	
 application: R/application/data-exploration.Rout \
 	R/application/ipd_surr_indices_tbl.rds \
