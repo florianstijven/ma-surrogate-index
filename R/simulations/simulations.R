@@ -347,153 +347,92 @@ statistic_function_factory = function(estimator_adjustment, nearest_PD) {
   return(statistic_f)
 }
 
-print(plan())
-
-# Compute multiplier bootstrap CIs.
-if (regime == "small") {
-  meta_analytic_data_simulated =  bind_rows(
-    meta_analytic_data_simulated %>%
-      mutate(CI_type = "sandwich"),
-    meta_analytic_data_simulated %>%
-      filter(nearest_PD == FALSE) %>%
-      mutate(
-        # Compute CIs for rho based on the multiplier bootstrap.
-        rho_ci_bs = furrr::future_pmap(
-          .l = list(
-            treatment_effects = treatment_effects,
-            estimator_adjustment = estimator_adjustment,
-            nearest_PD = nearest_PD,
-            B = B
-          ),
-          .f = function(treatment_effects,
-                        estimator_adjustment,
-                        nearest_PD,
-                        B) {
-            multiplier_bootstrap_ci(
-              data = treatment_effects,
-              statistic = statistic_function_factory(estimator_adjustment, nearest_PD),
-              B = B,
-              alpha = 0.05,
-              type = "BCa"
-            )
-          },
-          .options = furrr_options(seed = TRUE)
-        ),
-        rho_ci_lower = purrr::map_dbl(rho_ci_bs, function(x)
-          x[[1]]),
-        rho_ci_upper = purrr::map_dbl(rho_ci_bs, function(x)
-          x[[2]])
-      ) %>%
-      mutate(CI_type = "BCa") %>%
-      # Drop redundant variables.
-      select(-rho_ci_bs),
-    meta_analytic_data_simulated %>%
-      filter(nearest_PD == FALSE) %>%
-      mutate(
-        # Compute CIs for rho based on the multiplier bootstrap.
-        rho_ci_bs = furrr::future_pmap(
-          .l = list(
-            treatment_effects = treatment_effects,
-            estimator_adjustment = estimator_adjustment,
-            nearest_PD = nearest_PD,
-            B = B
-          ),
-          .f = function(treatment_effects,
-                        estimator_adjustment,
-                        nearest_PD,
-                        B) {
-            multiplier_bootstrap_ci(
-              data = treatment_effects,
-              statistic = statistic_function_factory(estimator_adjustment, nearest_PD),
-              B = B,
-              alpha = 0.05,
-              type = "studentized"
-            )
-          },
-          .options = furrr_options(seed = TRUE)
-        ),
-        rho_ci_lower = purrr::map_dbl(rho_ci_bs, function(x)
-          x[[1]]),
-        rho_ci_upper = purrr::map_dbl(rho_ci_bs, function(x)
-          x[[2]])
-      ) %>%
-      mutate(CI_type = "studentized") %>%
-      # Drop redundant variables.
-      select(-rho_ci_bs),
-    meta_analytic_data_simulated %>%
-      filter(nearest_PD == FALSE) %>%
-      mutate(
-        # Compute CIs for rho based on the multiplier bootstrap.
-        rho_ci_bs = furrr::future_pmap(
-          .l = list(
-            treatment_effects = treatment_effects,
-            estimator_adjustment = estimator_adjustment,
-            nearest_PD = nearest_PD,
-            B = B
-          ),
-          .f = function(treatment_effects,
-                        estimator_adjustment,
-                        nearest_PD,
-                        B) {
-            multiplier_bootstrap_ci(
-              data = treatment_effects,
-              statistic = statistic_function_factory(estimator_adjustment, nearest_PD),
-              B = B,
-              alpha = 0.05,
-              type = "BC percentile"
-            )
-          },
-          .options = furrr_options(seed = TRUE)
-        ),
-        rho_ci_lower = purrr::map_dbl(rho_ci_bs, function(x)
-          x[[1]]),
-        rho_ci_upper = purrr::map_dbl(rho_ci_bs, function(x)
-          x[[2]])
-      ) %>%
-      mutate(CI_type = "BC percentile") %>%
-      # Drop redundant variables.
-      select(-rho_ci_bs)
-  )
-} else {
-  # For the large N regime, we consider only the BCa. 
-  meta_analytic_data_simulated =  bind_rows(
-    meta_analytic_data_simulated %>%
-      mutate(CI_type = "sandwich"),
-    meta_analytic_data_simulated %>%
-      filter(nearest_PD == FALSE) %>%
-      mutate(
-        # Compute CIs for rho based on the multiplier bootstrap.
-        rho_ci_bs = furrr::future_pmap(
-          .l = list(
-            treatment_effects = treatment_effects,
-            estimator_adjustment = estimator_adjustment,
-            nearest_PD = nearest_PD,
-            B = B
-          ),
-          .f = function(treatment_effects,
-                        estimator_adjustment,
-                        nearest_PD,
-                        B) {
-            multiplier_bootstrap_ci(
-              data = treatment_effects,
-              statistic = statistic_function_factory(estimator_adjustment, nearest_PD),
-              B = B,
-              alpha = 0.05,
-              type = "BCa"
-            )
-          },
-          .options = furrr_options(seed = TRUE)
-        ),
-        rho_ci_lower = purrr::map_dbl(rho_ci_bs, function(x)
-          x[[1]]),
-        rho_ci_upper = purrr::map_dbl(rho_ci_bs, function(x)
-          x[[2]])
-      ) %>%
-      mutate(CI_type = "BCa") %>%
-      # Drop redundant variables.
-      select(-rho_ci_bs)
+# Helper: Compute bootstrap CIs of specified type for a batch of rows
+compute_bootstrap_cis <- function(data, type) {
+  furrr::future_pmap(
+    .l = list(
+      treatment_effects = data$treatment_effects,
+      estimator_adjustment = data$estimator_adjustment,
+      nearest_PD = data$nearest_PD,
+      B = data$B
+    ),
+    .f = function(treatment_effects, estimator_adjustment, nearest_PD, B) {
+      multiplier_bootstrap_ci(
+        data = treatment_effects,
+        statistic = statistic_function_factory(estimator_adjustment, nearest_PD),
+        B = B,
+        alpha = 0.05,
+        type = type
+      )
+    },
+    .options = furrr_options(seed = TRUE)
   )
 }
+
+if (regime == "small") {
+  # 1. "Sandwich" CIs (no bootstrap, just copy as-is)
+  sandwich_tbl <- meta_analytic_data_simulated %>%
+    mutate(CI_type = "sandwich")
+  
+  # 2. For nearest_PD == FALSE, compute BCa, studentized, and BC percentile CIs
+  pd_false <- meta_analytic_data_simulated %>% filter(nearest_PD == FALSE)
+  
+  # Compute all bootstrap CIs OUTSIDE mutate!
+  bca_cis <- compute_bootstrap_cis(pd_false, "BCa")
+  studentized_cis <- compute_bootstrap_cis(pd_false, "studentized")
+  bcperc_cis <- compute_bootstrap_cis(pd_false, "BC percentile")
+  
+  # Add CIs as columns (using map_dbl to extract bounds)
+  pd_false_bca <- pd_false %>%
+    mutate(
+      rho_ci_lower = purrr::map_dbl(bca_cis, 1),
+      rho_ci_upper = purrr::map_dbl(bca_cis, 2),
+      CI_type = "BCa"
+    )
+  
+  pd_false_studentized <- pd_false %>%
+    mutate(
+      rho_ci_lower = purrr::map_dbl(studentized_cis, 1),
+      rho_ci_upper = purrr::map_dbl(studentized_cis, 2),
+      CI_type = "studentized"
+    )
+  
+  pd_false_bcperc <- pd_false %>%
+    mutate(
+      rho_ci_lower = purrr::map_dbl(bcperc_cis, 1),
+      rho_ci_upper = purrr::map_dbl(bcperc_cis, 2),
+      CI_type = "BC percentile"
+    )
+  
+  # Combine all results
+  meta_analytic_data_simulated <- bind_rows(
+    sandwich_tbl,
+    pd_false_bca,
+    pd_false_studentized,
+    pd_false_bcperc
+  )
+  
+} else {
+  # For the large N regime, only BCa CIs for nearest_PD == FALSE
+  sandwich_tbl <- meta_analytic_data_simulated %>%
+    mutate(CI_type = "sandwich")
+  
+  pd_false <- meta_analytic_data_simulated %>% filter(nearest_PD == FALSE)
+  bca_cis <- compute_bootstrap_cis(pd_false, "BCa")
+  
+  pd_false_bca <- pd_false %>%
+    mutate(
+      rho_ci_lower = purrr::map_dbl(bca_cis, 1),
+      rho_ci_upper = purrr::map_dbl(bca_cis, 2),
+      CI_type = "BCa"
+    )
+  
+  meta_analytic_data_simulated <- bind_rows(
+    sandwich_tbl,
+    pd_false_bca
+  )
+}
+
 
 
 
