@@ -84,7 +84,7 @@ rho_long_tbl <- surrogate_results_bayesian_tbl %>%
 
 # Define helper function to make and save plots.
 posterior_plots_f = function(assume_proportional_line, include_risk_score) {
-  posterior_plot = rho_long_tbl_temp %>% filter(
+  posterior_plot = rho_long_tbl %>% filter(
     assume_proportional_line == .env$assume_proportional_line,
     include_risk_score == .env$include_risk_score
   ) %>%
