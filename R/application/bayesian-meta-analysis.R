@@ -257,7 +257,7 @@ saveRDS(surrogate_results_tbl, file = "results/raw-results/application/bayesian_
 
 # The fitted Bayesian models are very large objects. So, we also save a subset
 # of this information next, which is more convenient to work with.
-rho_long_tbl <- surrogate_results_bayesian_tbl %>%
+rho_long_tbl <- surrogate_results_tbl %>%
   mutate(rho_samples = map(stan_fit, ~ as.data.frame(.x)$rho)) %>%
   unnest(rho_samples) %>%
   rename(rho = rho_samples)

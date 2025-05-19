@@ -8,6 +8,18 @@ tables_dir = "results/tables/application/meta-analysis"
 
 # Read in nonparametric results
 surrogate_results_tbl = read.csv(file = "results/tables/application/meta-analysis/surrogacy-inferences.csv")
+# Change some variables to facilite plotting.
+surrogate_results_tbl = surrogate_results_tbl %>%
+  mutate(`Estimated Surrogate Index` = case_when(
+    method == "cox" ~ "Cox Model",
+    method == "sl" ~ "SuperLearner",
+    method == "untransformed surrogate" ~ "Ab Marker"
+  ),
+  Surrogate = case_when(
+    surrogate == "bindSpike" ~ "IgG Spike",
+    surrogate == "pseudoneutid50" ~ "nAb ID50",
+    surrogate == "pseudoneutid50_adjusted" ~ "Adjusted nAb ID50"
+  ))
 # Read in Bayesian results
 rho_long_tbl = readRDS("results/raw-results/application/rho_long_tbl.rds")
 
@@ -43,12 +55,23 @@ conf_int_plot_f = function(include_risk_score, type, res_var_prop, scenario) {
 
 
   conf_int_plot = plotting_data %>%
-    ggplot(aes(x = analysis_set, color = method)) +
+    ggplot(aes(x = Surrogate, color = `Estimated Surrogate Index`)) +
     geom_point(aes(y = rho_trial), position = position_dodge(width = 0.5)) +
-    geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper), position = position_dodge(width = 0.5), width = 0.2) +
+    geom_errorbar(
+      aes(ymin = CI_lower, ymax = CI_upper),
+      position = position_dodge(width = 0.5),
+      width = 0.2
+    ) +
     coord_cartesian(ylim = c(-1, 1)) +
-    facet_grid(surrogate~.) +
-    theme(legend.position = "bottom", legend.box = "vertical", legend.margin = margin())
+    scale_y_continuous(name = expr(rho[trial])) +
+    scale_x_discrete(name = NULL) +
+    theme(
+      legend.position = "bottom",
+      legend.box = "vertical",
+      legend.margin = margin(),
+      legend.text = element_text(margin = margin(l = 0))
+    ) +
+    guides(color = guide_legend(direction = "vertical", nrow = 1))
   
   risk_score_chr = ifelse(include_risk_score, "w-riskscore", "wo-riskscore")
   type_chr = ifelse(type == "bs", "bs", "sandwich")
@@ -58,8 +81,8 @@ conf_int_plot_f = function(include_risk_score, type, res_var_prop, scenario) {
   ggsave(
     outfile,
     path = figures_dir,
-    height = double_height,
-    width = double_width,
+    height = single_height,
+    width = single_width,
     dpi = res,
     device = "pdf",
     units = "cm"
