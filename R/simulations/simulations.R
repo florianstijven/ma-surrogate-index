@@ -79,7 +79,7 @@ if (regime == "small") {
   
   # Define the number of bootstrap replications depending on the number of
   # independent trials.
-  B_N_lookup = tibble(N = c(6, 12, 24), B = c(5e4, 2e4, 1e4))
+  B_N_lookup = tibble(N = c(6, 12, 24), B = c(1e5, 5e4, 2.5e4))
 } else if (regime == "large") {
   if (scenario == "vaccine") {
     stop("The large sample regime is not suitable for the vaccine scenario.")
