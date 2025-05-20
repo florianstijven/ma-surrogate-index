@@ -740,16 +740,15 @@ roc_ggplots = roc_tbl %>%
       data %>%
         mutate(
           weighting = ifelse(weighting == "normalized", "Normalized", "Unnormalized"),
-          method = ifelse(method == "gam", "GAM logistic regression", ifelse(method == "cox", "Cox PH", "SuperLearner"))
+          method = ifelse(method == "gam", "GAM logistic regression", ifelse(method == "cox", "Cox Model", "SuperLearner"))
         ) %>%
-        ggplot(aes(color = method, linetype = include_risk_score)) +
+        ggplot(aes(color = method)) +
         geom_path(aes(FPR, TPR)) +
         facet_wrap(~ trial) +
         theme(legend.position = "bottom", legend.box = "vertical") +
         scale_color_discrete(name = "Method") +
         geom_abline(intercept = 0, slope = 1) +
-        scale_linetype(name = "Risk Score as Predictor") +
-        scale_color_discrete(name = "Model") +
+        scale_color_discrete(name = "Estimated Surrogate Index") +
         ggtitle("ROC for estimated surrogate index") +
         labs(subtitle = subtitle) +
         theme(legend.spacing.y = unit(0, "cm"),
