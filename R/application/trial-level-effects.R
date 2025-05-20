@@ -27,7 +27,7 @@ time_cumulative_incidence = 80
 ## Intermediate Results ----------------------------------------------------
 
 # Load data set with IPD and estimated surrogate index for every subject.
-ipd_surr_indices_tbl = readRDS(file = "R/application/ipd_surr_indices_tbl.rds")
+ipd_surr_indices_tbl = readRDS(file = "results/raw-results/application/ipd_surr_indices_tbl.rds")
 
 # Trial-Level Treatment Effects --------------------------------------------
 
@@ -281,4 +281,4 @@ ma_trt_effects_tbl = ma_trt_effects_tbl %>%
 # Saving Results ----------------------------------------------------------
 
 # Save data with trial-level treatment effects to file.
-saveRDS(ma_trt_effects_tbl, file = "R/application/ma_trt_effects_tbl.rds")
+saveRDS(ma_trt_effects_tbl, file = "results/raw-results/application/ma_trt_effects_tbl.rds")

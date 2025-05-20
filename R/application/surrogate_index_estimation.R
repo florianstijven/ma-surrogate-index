@@ -786,4 +786,4 @@ rm("roc_tbl")
 # Saving Results ----------------------------------------------------------
 
 # Save data with estimated surrogate index to file.
-saveRDS(ipd_surr_indices_tbl, file = "R/application/ipd_surr_indices_tbl.rds")
+saveRDS(ipd_surr_indices_tbl, file = "R/results/raw-results/application/ipd_surr_indices_tbl.rds")
