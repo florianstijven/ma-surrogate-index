@@ -269,6 +269,8 @@ studentized_CI = function(boot_replicates,
     se = se[good_indices] 
   }
   
+  B = length(boot_replicates)
+  
   # Check length of bootstrap replicates.
   if (B <= 2) {
     stop("BCa could not be computed because there are too few valid bootstrap replicates.")
