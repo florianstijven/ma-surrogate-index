@@ -11,6 +11,7 @@ library(mgcv)
 library(splines)
 library(sl3)
 library(origami)
+library(rstan)
 
 # Set up parallel computing
 if (parallelly::supportsMulticore()) {
