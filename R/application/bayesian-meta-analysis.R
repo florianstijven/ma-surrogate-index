@@ -260,7 +260,8 @@ saveRDS(surrogate_results_tbl, file = "results/raw-results/application/bayesian_
 rho_long_tbl <- surrogate_results_tbl %>%
   mutate(rho_samples = map(stan_fit, ~ as.data.frame(.x)$rho)) %>%
   unnest(rho_samples) %>%
-  rename(rho = rho_samples)
+  rename(rho = rho_samples) %>%
+  select(-stan_fit, -data)
 
 saveRDS(rho_long_tbl, file = "results/raw-results/application/rho_long_tbl.rds")
 
