@@ -20,7 +20,7 @@ if (parallelly::supportsMulticore()) {
 
 # Number of bootstrap replications for computing within-trial covariance
 # matrices.
-B_within_trial = 2e3
+B_within_trial = 5e3
 
 time_cumulative_incidence = 80
 

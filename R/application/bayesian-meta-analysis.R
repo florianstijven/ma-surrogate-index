@@ -244,8 +244,8 @@ surrogate_results_tbl = ma_trt_effects_tbl %>%
       .y = assume_proportional_line,
       .f = fit_surrogacy_model,
       chains = 4,
-      iter = 5e3,
-      warmup = 2e3,
+      iter = 2e4,
+      warmup = 5e3,
       .options = furrr_options(seed = TRUE)
     )
   )
