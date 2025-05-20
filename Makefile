@@ -40,14 +40,14 @@ R/application/data-exploration.Rout: R/application/data-exploration.R $(data)
 results/raw-results/application/ipd_surr_indices_tbl.rds: R/application/surrogate_index_estimation.R $(data)
 	Rscript --verbose R/application/surrogate_index_estimation.R  > R/application/surrogate_index_estimation.Rout 2> R/application/surrogate_index_estimation.Rout
 	
-results/raw-results/application/ma_trt_effects_tbl.rds: R/application/trial-level-effects.R R/application/ipd_surr_indices_tbl.rds
+results/raw-results/application/ma_trt_effects_tbl.rds: R/application/trial-level-effects.R results/raw-results/application/ipd_surr_indices_tbl.rds
 	Rscript --verbose R/application/trial-level-effects.R  > R/application/trial-level-effects.Rout 2> R/application/trial-level-effects.Rout
 	
-R/application/meta_analysis.Rout: R/application/meta_analysis.R R/application/ma_trt_effects_tbl.rds $(analysishelpers)
+R/application/meta_analysis.Rout: R/application/meta_analysis.R results/raw-results/application//ma_trt_effects_tbl.rds $(analysishelpers)
 	Rscript --verbose R/application/meta_analysis.R  > $@ 2> $@
 	
-results/raw-results/application/bayesian_ma_results.rds: R/application/bayesian-meta-analysis.R R/application/ma_trt_effects_tbl.rds
+results/raw-results/application/bayesian_ma_results.rds: R/application/bayesian-meta-analysis.R results/raw-results/application/ma_trt_effects_tbl.rds
 	Rscript --verbose R/application/bayesian-meta-analysis.R  > R/application/bayesian-meta-analysis.Rout 2> R/application/bayesian-meta-analysis.Rout
 	
-R/application/processing-results.Rout: R/application/processing-results.R R/application/bayesian_ma_results.rds R/application/meta_analysis.Rout
+R/application/processing-results.Rout: R/application/processing-results.R results/raw-results/application/bayesian_ma_results.rds R/application/meta_analysis.Rout
 	Rscript --verbose R/application/processing-results.R  > $@ 2> $@
