@@ -50,7 +50,7 @@ if (scenario == "proof-of-concept") {
   n_approximation_MC = 2e2
 } else if (scenario == "vaccine") {
   # Within-trial sample size
-  n = 4e3
+  n = 5e3
   # Number of independent trials
   N = c(6, 12, 24)
   
@@ -369,6 +369,46 @@ compute_bootstrap_cis <- function(data, type) {
   )
 }
 
+# Source helper function to fit Bayesian model. 
+source("R/helper-functions/bayesian-model.R")
+
+# Helper Compute CI based on Bivariate Bayesian Model.
+compute_bayesian_ci = function(data) {
+  data = data %>%
+    rename(
+      trt_effect_surrogate_index_est = treatment_effect_surr,
+      log_RR_est = treatment_effect_clin,
+      vcov = covariance_matrix
+    )
+  
+  fit = fit_surrogacy_model(
+    data,
+    assume_proportional_line = FALSE,
+    iter = 1e4,
+    warmup = 5e3,
+    chains = 3,
+    seed = 1
+  )
+  # Extract 95% credible interval
+  summary_fit <- summary(fit, probs = c(0.025, 0.975))$summary
+  
+  # Extract the row corresponding to 'rho'
+  rho_summary <- summary_fit["rho", ]
+  
+  # View the 95% credible interval
+  rho_ci <- rho_summary[c("2.5%", "97.5%")]
+  
+  return(rho_ci)
+}
+
+compute_bayesian_cis = function(data) {
+  furrr::future_map(
+    .x = data$treatment_effects,
+    .f = compute_bayesian_ci,
+    .options = furrr_options(seed = TRUE)
+  )
+}
+
 if (regime == "small") {
   # 1. "Sandwich" CIs (no bootstrap, just copy as-is)
   sandwich_tbl <- meta_analytic_data_simulated %>%
@@ -381,6 +421,8 @@ if (regime == "small") {
   bca_cis <- compute_bootstrap_cis(pd_false, "BCa")
   studentized_cis <- compute_bootstrap_cis(pd_false, "studentized")
   bcperc_cis <- compute_bootstrap_cis(pd_false, "BC percentile")
+  
+  bayesian_cis = compute_bayesian_cis(pd_false)
   
   # Add CIs as columns (using map_dbl to extract bounds)
   pd_false_bca <- pd_false %>%
@@ -404,12 +446,20 @@ if (regime == "small") {
       CI_type = "BC percentile"
     )
   
+  pd_false_bayesian = pd_false %>%
+    mutate(
+      rho_ci_lower = purrr::map_dbl(bayesian_cis, 1),
+      rho_ci_upper = purrr::map_dbl(bayesian_cis, 2),
+      CI_type = "Bayesian"
+    )
+  
   # Combine all results
   meta_analytic_data_simulated <- bind_rows(
     sandwich_tbl,
     pd_false_bca,
     pd_false_studentized,
-    pd_false_bcperc
+    pd_false_bcperc,
+    pd_false_bayesian
   )
   
 } else {
@@ -420,6 +470,8 @@ if (regime == "small") {
   pd_false <- meta_analytic_data_simulated %>% filter(nearest_PD == FALSE)
   bca_cis <- compute_bootstrap_cis(pd_false, "BCa")
   
+  bayesian_cis = compute_bayesian_cis(pd_false)
+  
   pd_false_bca <- pd_false %>%
     mutate(
       rho_ci_lower = purrr::map_dbl(bca_cis, 1),
@@ -427,9 +479,17 @@ if (regime == "small") {
       CI_type = "BCa"
     )
   
+  pd_false_bayesian = pd_false %>%
+    mutate(
+      rho_ci_lower = purrr::map_dbl(bayesian_cis, 1),
+      rho_ci_upper = purrr::map_dbl(bayesian_cis, 2),
+      CI_type = "Bayesian"
+    )
+  
   meta_analytic_data_simulated <- bind_rows(
     sandwich_tbl,
-    pd_false_bca
+    pd_false_bca,
+    pd_false_bayesian
   )
 }
 

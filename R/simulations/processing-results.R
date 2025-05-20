@@ -427,7 +427,7 @@ coverage_studentized = ma_sim_summary %>%
   theme(legend.position = "bottom", legend.box = "vertical", legend.spacing.y = unit(0, "cm"))
 
 ggsave(
-  plot = coverage_basic,
+  plot = coverage_studentized,
   filename = "coverage-bootstrap-studentized.pdf",
   path = figures_dir,
   height = double_height,
