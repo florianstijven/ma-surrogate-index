@@ -44,6 +44,44 @@ rho_long_tbl = readRDS("results/raw-results/application/rho_long_tbl.rds") %>%
 # Load data with trial-level treatment effects. 
 ma_trt_effects_tbl = readRDS("results/raw-results/application/ma_trt_effects_tbl.rds")
 
+
+# Set of trials corresponding to each analysis set.
+
+trials_first_four = c("Moderna", "AstraZeneca", "Janssen", "Novavax")
+trials_first_four_fct = trials_first_four
+trials_naive_only = c("Moderna",
+                      "AstraZeneca",
+                      "Janssen",
+                      "Novavax",
+                      "Sanofi-1 naive",
+                      "Sanofi-2 naive")
+trials_naive_only_fct = c("Moderna",
+                          "AstraZeneca",
+                          "Janssen",
+                          "Novavax",
+                          "Sanofi 1 (naive)",
+                          "Sanofi 2 (naive)")
+trials_mixed = c(
+  "Moderna",
+  "AstraZeneca",
+  "Janssen",
+  "Novavax",
+  "Sanofi-1 naive",
+  "Sanofi-1 non-naive",
+  "Sanofi-2 naive",
+  "Sanofi-2 non-naive"
+)
+trials_mixed_fct = c(
+  "Moderna",
+  "AstraZeneca",
+  "Janssen",
+  "Novavax",
+  "Sanofi 1 (naive)",
+  "Sanofi 1 (non-naive)",
+  "Sanofi 2 (naive)",
+  "Sanofi 2 (non-naive)"
+)
+
 # Plots -----------------------------------------------------------------
 
 ## MA plots -------------------------------------------------------------
