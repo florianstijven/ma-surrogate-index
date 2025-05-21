@@ -480,17 +480,17 @@ if (regime == "small") {
       CI_type = "BCa"
     )
   
-  pd_false_bayesian = pd_false %>%
-    mutate(
-      rho_ci_lower = purrr::map_dbl(bayesian_cis, 1),
-      rho_ci_upper = purrr::map_dbl(bayesian_cis, 2),
-      CI_type = "Bayesian"
-    )
+  # pd_false_bayesian = pd_false %>%
+  #   mutate(
+  #     rho_ci_lower = purrr::map_dbl(bayesian_cis, 1),
+  #     rho_ci_upper = purrr::map_dbl(bayesian_cis, 2),
+  #     CI_type = "Bayesian"
+  #   )
   
   meta_analytic_data_simulated <- bind_rows(
     sandwich_tbl,
-    pd_false_bca,
-    pd_false_bayesian
+    pd_false_bca
+    # pd_false_bayesian
   )
 }
 
