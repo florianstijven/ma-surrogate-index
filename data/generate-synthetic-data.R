@@ -10,11 +10,14 @@ results_dir = "data/original-vs-synthetic-data/"
 df = read.csv("data/processed_data.csv") %>%
   select(-X)
 
+# Drop redundant variables.
+df = df %>%
+  select(-Ptid, -age.geq.65, -Wstratum, -BMI, -USUBJID, -protocol, -total_proportion_row,, -total_proportion_row_new)
+
 # Recode variables into the correct format for the the synthpop package. Factors
 # should be factors, not 0/1 dummy variables.
 df = df %>%
   mutate(
-    CC_stratum = as.factor(CC_stratum),
     BMI_stratum = case_when(
       BMI_underweight == 1 ~ "Underweight",
       BMI_normal == 1 ~ "Normal",
@@ -23,19 +26,9 @@ df = df %>%
       .default = NA
     ),
     BMI_stratum = as.factor(BMI_stratum),
-    trial.lbl = as.factor(trial.lbl)
+    Delta_bAb = as.integer(Delta_bAb),
+    Delta_nAb = as.integer(Delta_nAb)
   )
-
-# Some patients have titer values event though they were not sampled in the
-# case-cohort sampling. We set the titer values for these patients to NA.
-df = df %>%
-  mutate(
-    bindSpike = ifelse((Delta == 0) & (vax == 1), NA, bindSpike),
-    pseudoneutid50 = ifelse((Delta == 0) &
-                              (vax == 1), NA, pseudoneutid50),
-    Delta = as.integer(Delta)
-  )
-
 
 # Check whether the synthpop recognizes the variables correctly.
 codebook.syn(df)
@@ -45,13 +38,15 @@ codebook.syn(df)
 # should not be in this character vector. The value of such variables is just
 # kept unchanged.
 visit.sequence.ini <- c(
-  "Delta",
+  "Delta_nAb",
+  "Delta_bAb",
   "BMI_stratum",
-  "age.geq.65",
-  "risk_score",
   "Age",
+  "Sex",
+  "risk_score",
   "bindSpike",
-  "pseudoneutid50"
+  "pseudoneutid50",
+  "abrogation_coefficient"
 )
 
 # Method used to predict each variable in the data set. Note that we have one
@@ -61,44 +56,50 @@ visit.sequence.ini <- c(
 # are kept in the synthetic data set).
 method.ini <- c(
   "",
-  "parametric",
-  "parametric",
-  "satcat",
-  "satcat",
+  "norm",
+  "norm",
   "",
+  "logreg",
+  "norm",
+  "survctree",
   "",
-  "parametric",
+  "survctree",
+  "logreg",
+  "norm",
+  "logreg",
+  rep("", 8),
+  "cart",
   "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "",
-  "satcat"
+  "polyreg"
 )
 
 # Generate synthetic data set. The variables are generated in each trial
 # separately. We don't use the syn.strata() function because that function
 # samples from the strata; consequently, the trial-specific sample sizes are not
 # the same in the synthetic data as in the original data.
-strata_tbl = expand_grid(trial = levels(df$trial.lbl),
-                         vax = 0:1,
-                         Y = 0:1)
+strata_tbl = expand_grid(
+  trial = unique(df$trial),
+  treatment = 0:1,
+  event = 0:1,
+  Bserostatus = 0:1
+) %>%
+  # Only in the Sanofi trials are there subjects with Bserostatus == 1.
+  filter((trial %in% c("Sanofi-1", "Sanofi-2") |
+            (!(
+              trial %in% c("Sanofi-1", "Sanofi-2")
+            ) & Bserostatus == 0)))
 sds_list = purrr::pmap(
   .l = list(
     trial = strata_tbl$trial,
-    vax = strata_tbl$vax,
-    Y = strata_tbl$Y
+    treatment = strata_tbl$treatment,
+    event = strata_tbl$event,
+    Bserostatus = strata_tbl$Bserostatus
   ),
-  .f = function(trial, vax, Y) {
+  .f = function(trial, treatment, event, Bserostatus) {
     # In the placebo group, we should not generate Ab titers since they are
     # constant by definition.
-    if (vax == 0) {
-      visit.sequence.ini_temp = visit.sequence.ini[-c(6, 7)]
+    if (treatment == 0 & !(trial %in% c("Sanofi-1", "Sanofi-2"))) {
+      visit.sequence.ini_temp = visit.sequence.ini[-c(7, 8)]
       method.ini_temp = method.ini
       method.ini_temp[2:3] = ""
       
@@ -107,7 +108,7 @@ sds_list = purrr::pmap(
       method.ini_temp = method.ini
     }
     data_temp = df %>%
-      filter(trial.lbl == .env$trial, vax == .env$vax, Y == .env$Y)
+      filter(trial == .env$trial, treatment == .env$treatment, event == .env$event, Bserostatus == .env$Bserostatus)
     sds <- syn(
       data = data_temp,
       visit.sequence = visit.sequence.ini_temp,
@@ -116,10 +117,8 @@ sds_list = purrr::pmap(
       # Variables that are not predicted are kept in the synthetic data set.
       drop.not.used = FALSE,
       drop.pred.only = FALSE,
-      # The CC_stratum variable has 58 categories, so we have to ensure that that
-      # variable is kept as a categorical variable.
-      maxfaclevels = 60,
-      minnumlevels = 20
+      minnumlevels = 5,
+      event = list(time_to_event = "event")
     )
   }
 )
@@ -144,46 +143,52 @@ synthetic_df = lapply(
   ) %>%
   # Remove helper variables that were not present in the original data from
   # which we started in this script.
-  select(-BMI_stratum) %>%
-  mutate(Delta = Delta == 1)
+  select(-BMI_stratum)
 
 # Apply the missing data rules to the synthetic data. In principle, the syn()
 # function can handle this. However, it samples the variables involved in the
 # rules, while we want to keep those variables fixed.
 synthetic_df = synthetic_df %>%
   mutate(
-    bindSpike = ifelse((Delta == 0) & (vax == 1), NA, bindSpike),
-    pseudoneutid50 = ifelse((Delta == 0) &
-                              (vax == 1), NA, pseudoneutid50),
-    A = ifelse(vax == 0, 0, A)
+    bindSpike = ifelse((Delta_bAb == 0) & (treatment == 1), NA, bindSpike),
+    pseudoneutid50 = ifelse((Delta_nAb == 0) &
+                              (treatment == 1), NA, pseudoneutid50)
   )
+
 
 # For some reason, NAs are generated for the titers in the synthetic data. 
 synthetic_df %>%
-  filter(Delta == 1, is.na(bindSpike))
+  filter(Delta_bAb == 1, is.na(bindSpike))
+
+synthetic_df %>%
+  filter(Delta_nAb == 1, is.na(pseudoneutid50))
 
 # No such NAs are present in the original data. 
 df %>%
-  filter(Delta == 1, is.na(bindSpike))
+  filter(Delta_bAb == 1, is.na(bindSpike))
+
+df %>%
+  filter(Delta_nAb == 1, is.na(pseudoneutid50))
 
 # We solve this by replacing the NAs with a randomly sampled variable. 
 synthetic_df = synthetic_df %>%
   mutate(
     bindSpike = ifelse(
       is.na(bindSpike) &
-        Delta == 1 &
-        vax == 1,
+        Delta_bAb == 1 &
+        treatment == 1,
       runif(min = 0.75, max = 1, n = 1),
       bindSpike
     ),
     pseudoneutid50 = ifelse(
       is.na(pseudoneutid50) &
-        Delta == 1 &
-        vax == 1,
+        Delta_nAb == 1 &
+        treatment == 1,
       runif(min = 0.5, max = 1, n = 1),
       pseudoneutid50
     )
   )
+
 
 # Set the universal lower limits of detection for binding and neutralizing
 # antibody titers.
@@ -195,22 +200,39 @@ llod_neut_truncated = log(2.61 / 2, base = 10)
 
 
 # Set all values of placebo to the LLOD divided by 2.
-synthetic_df <- synthetic_df %>% mutate(bindSpike = ifelse(A == 0, llod_spike_truncated, bindSpike))
-synthetic_df <- synthetic_df %>% mutate(pseudoneutid50 = ifelse(A == 0, llod_neut_truncated, pseudoneutid50))
+synthetic_df <- synthetic_df %>% mutate(bindSpike = ifelse(treatment == 0 & !(trial %in% c("Sanofi-1", "Sanofi-2")), llod_spike_truncated, bindSpike))
+synthetic_df <- synthetic_df %>% mutate(pseudoneutid50 = ifelse(treatment == 0 & !(trial %in% c("Sanofi-1", "Sanofi-2")), llod_neut_truncated, pseudoneutid50))
 
 # Patients with measured titers, who have a titer below the LLOD, will have
 # their measurement truncated to the LLOD divided by 2.
 synthetic_df <- synthetic_df %>% mutate(bindSpike = ifelse(
-  Delta == T &
+  Delta_bAb == T &
     bindSpike < llod_spike,
   llod_spike_truncated,
   bindSpike
 ))
 synthetic_df <- synthetic_df %>% mutate(
   pseudoneutid50 = ifelse(
-    Delta == T & pseudoneutid50 < llod_neut,
+    Delta_nAb == T & pseudoneutid50 < llod_neut,
     llod_neut_truncated,
     pseudoneutid50
+  )
+)
+
+# Compute the adjusted neutralizing titer from the sampled titer and abrogation
+# coefficient.
+synthetic_df = synthetic_df %>%
+  mutate(pseudoneutid50_adjusted = pseudoneutid50 - log(abrogation_coefficient, base = 10))
+
+# Because of the adjustment, some patients may not have an adjusted titer below
+# the LLOD. We truncated these values as before.
+# Patients with measured titers, who have a titer below the LLOD, will have
+# their measurement truncated to the LLOD divided by 2.
+synthetic_df <- synthetic_df %>% mutate(
+  pseudoneutid50_adjusted = ifelse(
+    pseudoneutid50_adjusted < llod_neut,
+    llod_neut_truncated,
+    pseudoneutid50_adjusted
   )
 )
 
@@ -221,12 +243,12 @@ bind_rows(df %>%
             mutate(data = "original"),
           synthetic_df %>%
             mutate(data = "synthetic")) %>%
-  group_by(trial.lbl, vax, data, CC_stratum) %>%
+  group_by(trial, treatment, data) %>%
   summarise(n = n(),
-            n_events = sum(Y),
-            n_Delta = sum(Delta)) %>%
+            n_events = sum(event),
+            n_Delta_nAb = sum(Delta_nAb),
+            n_Delta_bAb = sum(Delta_bAb)) %>%
   ungroup() %>%
-  arrange(CC_stratum) %>%
   print(n = 500)
 sink()
 
@@ -234,11 +256,9 @@ bind_rows(df %>%
             mutate(Data = "Original"),
           synthetic_df %>%
             mutate(Data = "Synthetic")) %>%
-  mutate(Treatment = ifelse(vax == 1, "Vaccine", "Placebo"),
-         Age = ifelse(age.geq.65, "Age >= 65", "Age < 65")) %>%
-  ggplot(aes(x = risk_score, y = trial.lbl, fill = Data)) +
+  mutate(Treatment = ifelse(treatment == 1, "Vaccine", "Placebo")) %>%
+  ggplot(aes(x = risk_score, y = trial, fill = Data)) +
   geom_violin() +
-  facet_grid(. ~ Age) +
   ylab(NULL) +
   xlab("Risk Score")
 
@@ -254,11 +274,11 @@ bind_rows(df %>%
             mutate(Data = "Original"),
           synthetic_df %>%
             mutate(Data = "Synthetic")) %>%
-  filter(vax == 1) %>%
+  filter(treatment == 1) %>%
   ggplot(aes(x = risk_score, y = bindSpike, color = Data)) +
   geom_point(alpha = 0.05) +
   geom_smooth(se = FALSE) +
-  facet_wrap("trial.lbl") +
+  facet_wrap("trial") +
   xlab("Risk Score") +
   ylab(expression(paste("Spike Protein IgG (", log[10], "BAU/ml)")))
 ggsave(
@@ -273,15 +293,34 @@ bind_rows(df %>%
             mutate(Data = "Original"),
           synthetic_df %>%
             mutate(Data = "Synthetic")) %>%
-  filter(vax == 1) %>%
+  filter(treatment == 1) %>%
   ggplot(aes(x = risk_score, y = pseudoneutid50, color = Data)) +
   geom_point(alpha = 0.05) +
   geom_smooth(se = FALSE) +
-  facet_wrap("trial.lbl") +
+  facet_wrap("trial") +
   xlab("Risk Score") +
   ylab(expression(paste("Neutralizing Antibody (", log[10], "ID50)")))
 ggsave(
   filename = paste0(results_dir, "pseudoneutid50-vs-risk-score.pdf"),
+  device = "pdf",
+  width = double_width,
+  height = double_height,
+  units = unit
+)
+
+bind_rows(df %>%
+            mutate(Data = "Original"),
+          synthetic_df %>%
+            mutate(Data = "Synthetic")) %>%
+  filter(treatment == 1) %>%
+  ggplot(aes(x = risk_score, y = pseudoneutid50_adjusted, color = Data)) +
+  geom_point(alpha = 0.05) +
+  geom_smooth(se = FALSE) +
+  facet_wrap("trial") +
+  xlab("Risk Score") +
+  ylab(expression(paste("Neutralizing Antibody (", log[10], "ID50)")))
+ggsave(
+  filename = paste0(results_dir, "pseudoneutid50-adjusted-vs-risk-score.pdf"),
   device = "pdf",
   width = double_width,
   height = double_height,

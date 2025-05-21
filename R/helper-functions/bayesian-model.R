@@ -101,7 +101,7 @@ fit_surrogacy_model <- function(data, assume_proportional_line, iter = 10000, wa
     iter = iter,
     warmup = warmup,
     chains = chains,
-    seed = seed
+    seed = seed, refresh = FALSE
   )
   
   return(fit)

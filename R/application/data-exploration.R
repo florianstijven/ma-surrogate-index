@@ -2,9 +2,7 @@
 
 ## Setup ----------------------------------------------------------------------------
 
-# Specify options for saving the plots to files
-figures_dir = "results/figures/application/data-exploration"
-tables_dir = "results/tables/application/data-exploration"
+
 
 # Load required packages. 
 library(tidyverse)
@@ -16,10 +14,30 @@ library(ggpubr)
 
 time_cumulative_incidence = 80
 
+# Extract arguments for analysis.
+args = commandArgs(trailingOnly = TRUE)
+
+# The first argument indicates whether the analysis should be conducted on the
+# original data or on the synthetic data.
+data_set = args[1]
+if (data_set == "real") {
+  data_location = "data/processed_data.csv"
+  
+  # Specify options for saving the plots to files
+  figures_dir = "results/figures/application/data-exploration"
+  tables_dir = "results/tables/application/data-exploration"
+} else if (data_set == "synthetic") {
+  data_location = "data/processed_data_synthetic.csv"
+  
+  # Specify options for saving the plots to files
+  figures_dir = "results/figures/application-synthetic/data-exploration"
+  tables_dir = "results/tables/application-synthetic/data-exploration"
+}
+
 ## Load data and Prepare for Analysis -----------------------------------
 
 # Load the data set. 
-df = read.csv("data/processed_data.csv") %>%
+df = read.csv(data_location) %>%
   select(-X) 
 
 # Split Sanofi trials
@@ -107,26 +125,31 @@ df = df %>%
 df_long = bind_rows(
   df %>%
     mutate(
-      surrogate = "bAb",
+      surrogate = "IgG Spike",
       titer = bindSpike,
       Delta = Delta_bAb,
       sample_weight = case_cohort_weight_bAb
     ),
   df %>%
     mutate(
-      surrogate = "nAb",
+      surrogate = "nAb ID50",
       titer = pseudoneutid50,
       Delta = Delta_nAb,
       sample_weight = case_cohort_weight_nAb
     ),
   df %>%
     mutate(
-      surrogate = "Adjusted nAb",
+      surrogate = "adjusted nAb ID50",
       titer = pseudoneutid50_adjusted,
       Delta = Delta_nAb,
       sample_weight = case_cohort_weight_nAb
     )
-)
+) %>%
+  mutate(surrogate = factor(
+    surrogate,
+    levels = c("IgG Spike", "nAb ID50", "adjusted nAb ID50"),
+    ordered = TRUE
+  ))
 
 # Figures -------------------------------------------------------------
 

@@ -240,6 +240,10 @@ p3005 = p3005 %>%
 data_all = bind_rows(p3001, p3002, p3003, p3004, p3005) %>%
   rename(treatment = Trt)
 
+# Set impossible values to NA.
+data_all = data_all %>%
+  mutate(Sex = ifelse(Sex == 0 | Sex == 1, Sex, NA))
+
 # Record number of rows before filtering the data.
 n1 = nrow(data_all)
 
@@ -258,7 +262,7 @@ data_all = data_all %>%
 
 n3 = nrow(data_all)
 n2 - n3
-# 6686 rows were dropped.
+# 6692 rows were dropped.
 
 # Drop patients with Infinite case-cohort weights.
 data_all = data_all %>%

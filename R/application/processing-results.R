@@ -82,6 +82,50 @@ trials_mixed_fct = c(
   "Sanofi 2 (non-naive)"
 )
 
+# Tables ----------------------------------------------------------------
+
+# Save tables for the trial-level correlation estimates with corresponding
+# confidence intervals. Tables are saves separately by type of CI and whether the
+# original data or pseudo-real data were used.
+format_CI = function(estimate, ci_lower, ci_upper, digits = 2) {
+  paste0(round(estimate, digits), " (", round(ci_lower, digits), ", ", round(ci_upper, digits), ")")
+}
+
+save_inferences_table = function(CI_type, data_type) {
+  if (CI_type == "BCa") {
+    table_temp = surrogate_results_tbl %>%
+      rename(CI_lower = CI_lower_bs, CI_upper = CI_upper_bs)
+  } else if (CI_type == "sandwich") {
+    table_temp = surrogate_results_tbl %>%
+      rename(CI_lower = CI_lower_sandwich, CI_upper = CI_upper_sandwich)
+  }
+  
+  if (data_type == "real-data") {
+    table_temp = table_temp %>% filter(scenario == "real data")
+  } else {
+    table_temp = table_temp %>%
+      filter(scenario != "real data")
+  }
+  
+  outfile = paste0(tables_dir, "/table-inferences-", CI_type, "-", data_type, ".csv")
+
+  table_temp %>%
+    filter(analysis_set == "naive_only") %>%
+    rowwise(everything()) %>%
+    mutate(rho_inference = format_CI(rho_trial, CI_lower, CI_upper)) %>%
+    ungroup() %>%
+    select(surrogate, method, rho_inference, scenario) %>%
+    pivot_wider(values_from = "rho_inference", names_from = "method") %>%
+    write.csv(file = outfile, )
+}
+
+save_inferences_table("BCa", "real-data")
+save_inferences_table("BCa", "pseudo-data")
+save_inferences_table("sandwich", "real-data")
+save_inferences_table("sandwich", "pseudo-data")
+ 
+
+
 # Plots -----------------------------------------------------------------
 
 ## MA plots -------------------------------------------------------------
