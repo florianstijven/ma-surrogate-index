@@ -208,7 +208,7 @@ ipd_tbl = ipd_tbl %>%
 # Convert Character variables to factors. This is more efficient in terms of
 # memory.
 ipd_tbl = ipd_tbl %>%
-  mutate(trial = as.factor(trial), protocol = as.factor(protocol))
+  mutate(trial = as.factor(trial))
 
 
 # Prediction Models -------------------------------------------------------
