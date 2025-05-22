@@ -46,7 +46,9 @@ visit.sequence.ini <- c(
   "risk_score",
   "bindSpike",
   "pseudoneutid50",
-  "abrogation_coefficient"
+  "abrogation_coefficient",
+  "event",
+  "time_to_event"
 )
 
 # Method used to predict each variable in the data set. Note that we have one
@@ -108,7 +110,8 @@ sds_list = purrr::pmap(
       method.ini_temp = method.ini
     }
     data_temp = df %>%
-      filter(trial == .env$trial, treatment == .env$treatment, event == .env$event, Bserostatus == .env$Bserostatus)
+      filter(trial == .env$trial, treatment == .env$treatment, event == .env$event, Bserostatus == .env$Bserostatus) %>%
+      mutate(event = event == 1)
     sds <- syn(
       data = data_temp,
       visit.sequence = visit.sequence.ini_temp,
@@ -118,7 +121,7 @@ sds_list = purrr::pmap(
       drop.not.used = FALSE,
       drop.pred.only = FALSE,
       minnumlevels = 5,
-      event = list(time_to_event = "event")
+      event = list(event = "time_to_event")
     )
   }
 )
@@ -236,6 +239,15 @@ synthetic_df <- synthetic_df %>% mutate(
   )
 )
 
+# The case-cohort indicators should be boolean.
+synthetic_df = synthetic_df %>%
+  mutate(Delta_bAb = Delta_bAb == 1,
+         Delta_nAb = Delta_nAb == 1)
+
+# Add a little bit of noise to the time_to_event.
+synthetic_df = synthetic_df %>%
+  mutate(time_to_event = time_to_event + rexp(n = n(), rate = 3))
+
 # Compare the synthetic and original data in terms of case-cohort sampling and
 # the number of events.
 sink(file = paste0(results_dir, "n-events-delta-comparison.txt"))
@@ -321,6 +333,24 @@ bind_rows(df %>%
   ylab(expression(paste("Neutralizing Antibody (", log[10], "ID50)")))
 ggsave(
   filename = paste0(results_dir, "pseudoneutid50-adjusted-vs-risk-score.pdf"),
+  device = "pdf",
+  width = double_width,
+  height = double_height,
+  units = unit
+)
+
+bind_rows(df %>%
+            mutate(Data = "Original"),
+          synthetic_df %>%
+            mutate(Data = "Synthetic")) %>%
+  mutate(Treatment = ifelse(treatment == 1, "Vaccine", "Placebo")) %>%
+  ggplot(aes(x = time_to_event, y = trial, fill = Data)) +
+  geom_violin() +
+  ylab(NULL) +
+  xlab("Time to Event")
+
+ggsave(
+  filename = paste0(results_dir, "time-to-event-by-trial.pdf"),
   device = "pdf",
   width = double_width,
   height = double_height,
