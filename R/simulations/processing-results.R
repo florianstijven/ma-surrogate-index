@@ -44,7 +44,8 @@ ma_sim_results = bind_rows(
 # Code character columns as factors.
 ma_sim_results = ma_sim_results %>%
   mutate(
-    surrogate_index_estimator = as.factor(surrogate_index_estimator),
+    surrogate_index_estimator = as.factor(surrogate_index_estimator) %>%
+      fct_recode(SuperLearner = "superlearner", "Linear Model" = "lm", "Surrogate" = "surrogate"),
     SI_violation = as.factor(SI_violation),
     estimator_adjustment = as.factor(estimator_adjustment),
     sandwich_adjustment = as.factor(sandwich_adjustment),
@@ -309,6 +310,7 @@ ggsave(
 ## Performance of Inferences ----------------------------------------------
 
 ### Coverage --------------------------------------------------------------
+coverage_limits = c(0.7, 1)
 
 coverage_sandwich = ma_sim_summary %>%
   filter(setting == "small N, large n", CI_type == "sandwich") %>%
@@ -322,7 +324,7 @@ coverage_sandwich = ma_sim_summary %>%
   geom_line() +
   geom_abline(intercept = 0.95, slope = 0) +
   scale_x_continuous(breaks = c(6, 12, 24)) +
-  scale_y_continuous(name = "Coverage", limits = c(0.68, 1)) +
+  scale_y_continuous(name = "Coverage", limits = coverage_limits) +
   scale_color_discrete(name = "Surr. Index Estimator") +
   facet_grid(SI_violation ~ scenario) + 
   theme(legend.position = "bottom", legend.box = "vertical", legend.spacing.y = unit(0, "cm"))
@@ -350,7 +352,7 @@ coverage_bs_bca = ma_sim_summary %>%
   geom_line() +
   geom_abline(intercept = 0.95, slope = 0) +
   scale_x_continuous(breaks = c(6, 12, 24)) +
-  scale_y_continuous(name = "Coverage", limits = c(0.5, 1)) +
+  scale_y_continuous(name = "Coverage", limits = coverage_limits) +
   scale_color_discrete(name = "Surr. Index Estimator") +
   facet_grid(SI_violation ~ scenario) + 
   theme(legend.position = "bottom", legend.box = "vertical", legend.spacing.y = unit(0, "cm"))
@@ -393,7 +395,7 @@ coverage_bc_percentile = ma_sim_summary %>%
   geom_line() +
   geom_abline(intercept = 0.95, slope = 0) +
   scale_x_continuous(breaks = c(6, 12, 24)) +
-  scale_y_continuous(name = "Coverage") +
+  scale_y_continuous(name = "Coverage", limits = coverage_limits) +
   scale_color_discrete(name = "Surr. Index Estimator") +
   facet_grid(SI_violation ~ scenario) + 
   theme(legend.position = "bottom", legend.box = "vertical", legend.spacing.y = unit(0, "cm"))
@@ -422,6 +424,7 @@ coverage_studentized = ma_sim_summary %>%
   geom_abline(intercept = 0.95, slope = 0) +
   scale_x_continuous(breaks = c(6, 12, 24)) +
   scale_y_continuous(name = "Coverage") +
+  coord_cartesian(ylim = coverage_limits) +
   scale_color_discrete(name = "Surr. Index Estimator") +
   facet_grid(SI_violation ~ scenario) + 
   theme(legend.position = "bottom", legend.box = "vertical", legend.spacing.y = unit(0, "cm"))
@@ -449,14 +452,14 @@ coverage_bayesian = ma_sim_summary %>%
   geom_line() +
   geom_abline(intercept = 0.95, slope = 0) +
   scale_x_continuous(breaks = c(6, 12, 24)) +
-  scale_y_continuous(name = "Coverage") +
+  scale_y_continuous(name = "Coverage", limits = coverage_limits) +
   scale_color_discrete(name = "Surr. Index Estimator") +
   facet_grid(SI_violation ~ scenario) + 
   theme(legend.position = "bottom", legend.box = "vertical", legend.spacing.y = unit(0, "cm"))
 
 ggsave(
   plot = coverage_bayesian,
-  filename = "coverage-bootstrap-studentized.pdf",
+  filename = "coverage-bootstrap-bayesian.pdf",
   path = figures_dir,
   height = double_height,
   width = double_width,
