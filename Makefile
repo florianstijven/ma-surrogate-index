@@ -32,7 +32,7 @@ results/raw-results/simple-simulation/ma-sim-results-proof-of-concept-small.rds:
 	Rscript R/simulations/simulations.R proof-of-concept small 100
 	
 results/raw-results/simple-simulation/ma-sim-results-proof-of-concept-large.rds: R/simulations/simulations.R $(analysishelpers) $(simulationhelpers)
-	Rscript R/simulations/simulations.R proof-of-concept large 100
+	Rscript R/simulations/simulations.R proof-of-concept large 5
 	
 results/raw-results/simple-simulation/ma-sim-results-vaccine-small.rds: R/simulations/simulations.R $(analysishelpers) $(simulationhelpers)
 	Rscript R/simulations/simulations.R vaccine small 100
