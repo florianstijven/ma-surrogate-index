@@ -88,7 +88,7 @@ trials_mixed_fct = c(
 ## Intermediate Results  --------------------------------------------------
 
 # Load data with trial-level treatment effects. 
-ma_trt_effects_tbl = readRDS("results/raw-results/application/ma_trt_effects_tbl.rds")
+ma_trt_effects_tbl = readRDS(ma_trt_effects_tbl_location)
 
 # Add proper name of the surrogates.
 ma_trt_effects_tbl = ma_trt_effects_tbl %>%

@@ -12,11 +12,13 @@ args = commandArgs(trailingOnly = TRUE)
 data_set = args[1]
 if (data_set == "real") {
   ma_trt_effects_tbl_location = "results/raw-results/application/ma_trt_effects_tbl.rds"
+  rho_long_tbl_location = "results/raw-results/application/rho_long_tbl.rds"
   # Specify options for saving the plots to files
   figures_dir = "results/figures/application/meta-analysis"
   tables_dir = "results/tables/application/meta-analysis"
 } else if (data_set == "synthetic") {
   ma_trt_effects_tbl_location = "results/raw-results/application-synthetic/ma_trt_effects_tbl.rds"
+  rho_long_tbl_location = "results/raw-results/application-synthetic/rho_long_tbl.rds"
   # Specify options for saving the plots to files
   figures_dir = "results/figures/application-synthetic/meta-analysis"
   tables_dir = "results/tables/application-synthetic/meta-analysis"
