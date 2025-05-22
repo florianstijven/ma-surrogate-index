@@ -802,4 +802,4 @@ rm("roc_tbl")
 # Saving Results ----------------------------------------------------------
 
 # Save data with estimated surrogate index to file.
-saveRDS(ipd_surr_indices_tbl, file = outfile)
+saveRDS(ipd_surr_indices_tbl, file = out_file)
