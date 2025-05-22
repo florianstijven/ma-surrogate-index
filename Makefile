@@ -67,7 +67,7 @@ R/application/data-exploration-synthetic.Rout: R/application/data-exploration.R 
 	Rscript --verbose R/application/data-exploration.R synthetic > R/application/data-exploration-synthetic.Rout 2> R/application/data-exploration-synthetic.Rout
 	
 results/raw-results/application-synthetic/ipd_surr_indices_tbl.rds: R/application/surrogate_index_estimation.R $(data-synthetic)
-	Rscript --verbose R/application/surrogate_index_estimation.R synthetic > R/application/surrogate_index_estimation.Rout 2> R/application/surrogate_index_estimation.Rout
+	Rscript --verbose R/application/surrogate_index_estimation.R synthetic > R/application/surrogate_index_estimation-synthetic.Rout 2> R/application/surrogate_index_estimation-synthetic.Rout
 	
 results/raw-results/application-synthetic/ma_trt_effects_tbl.rds: R/application/trial-level-effects.R results/raw-results/application-synthetic/ipd_surr_indices_tbl.rds
 	Rscript --verbose R/application/trial-level-effects.R synthetic > R/application/trial-level-effects.Rout 2> R/application/trial-level-effects.Rout

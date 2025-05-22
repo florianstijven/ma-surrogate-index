@@ -199,11 +199,11 @@ ipd_tbl %>%
     sum(weight_normalized_bAb_cox * !is.na(bindSpike))
   )
 
-# Drop variables that are not needed further on.
-ipd_tbl = ipd_tbl %>%
-  select(
-    -X,-Ptid,-USUBJID,-(BMI_underweight:abrogation_coefficient),-total_weight_nAb,-total_weight_bAb,-Wstratum,-Bserostatus
-  )
+# # Drop variables that are not needed further on.
+# ipd_tbl = ipd_tbl %>%
+#   select(
+#     -X,-Ptid,-USUBJID,-(BMI_underweight:abrogation_coefficient),-total_weight_nAb,-total_weight_bAb,-Wstratum,-Bserostatus
+#   )
 
 # Convert Character variables to factors. This is more efficient in terms of
 # memory.
