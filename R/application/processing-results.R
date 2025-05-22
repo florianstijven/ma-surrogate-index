@@ -4,12 +4,26 @@ library(ggridges)
 library(RColorBrewer)
 library(scales)
 
-# Specify options for saving the plots to files
-figures_dir = "results/figures/application/meta-analysis"
-tables_dir = "results/tables/application/meta-analysis"
+# Extract arguments for analysis.
+args = commandArgs(trailingOnly = TRUE)
+
+# The first argument indicates whether the analysis should be conducted on the
+# original data or on the synthetic data.
+data_set = args[1]
+if (data_set == "real") {
+  ma_trt_effects_tbl_location = "results/raw-results/application/ma_trt_effects_tbl.rds"
+  # Specify options for saving the plots to files
+  figures_dir = "results/figures/application/meta-analysis"
+  tables_dir = "results/tables/application/meta-analysis"
+} else if (data_set == "synthetic") {
+  ma_trt_effects_tbl_location = "results/raw-results/application-synthetic/ma_trt_effects_tbl.rds"
+  # Specify options for saving the plots to files
+  figures_dir = "results/figures/application-synthetic/meta-analysis"
+  tables_dir = "results/tables/application-synthetic/meta-analysis"
+}
 
 # Read in nonparametric results
-surrogate_results_tbl = read.csv(file = "results/tables/application/meta-analysis/surrogacy-inferences.csv")
+surrogate_results_tbl = read.csv(file = paste0(tables_dir, "/", "surrogacy-inferences.csv"))
 # Change some variables to facilite plotting.
 surrogate_results_tbl = surrogate_results_tbl %>%
   mutate(`Estimated Surrogate Index` = case_when(
@@ -42,7 +56,7 @@ rho_long_tbl = readRDS("results/raw-results/application/rho_long_tbl.rds") %>%
   )
 
 # Load data with trial-level treatment effects. 
-ma_trt_effects_tbl = readRDS("results/raw-results/application/ma_trt_effects_tbl.rds")
+ma_trt_effects_tbl = readRDS(ma_trt_effects_tbl_location)
 
 
 # Set of trials corresponding to each analysis set.
@@ -116,7 +130,7 @@ save_inferences_table = function(CI_type, data_type) {
     ungroup() %>%
     select(surrogate, method, rho_inference, scenario) %>%
     pivot_wider(values_from = "rho_inference", names_from = "method") %>%
-    write.csv(file = outfile, )
+    write.csv(file = outfile)
 }
 
 save_inferences_table("BCa", "real-data")

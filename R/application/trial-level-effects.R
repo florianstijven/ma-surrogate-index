@@ -16,6 +16,28 @@ if (parallelly::supportsMulticore()) {
   plan(multisession)
 }
 
+# Extract arguments for analysis.
+args = commandArgs(trailingOnly = TRUE)
+
+# The first argument indicates whether the analysis should be conducted on the
+# original data or on the synthetic data.
+data_set = args[1]
+if (data_set == "real") {
+  surr_indices_tbl_location = "results/raw-results/application/ipd_surr_indices_tbl.rds"
+  out_file = "results/raw-results/application/ma_trt_effects_tbl.rds"
+  
+  # Specify options for saving the plots to files
+  figures_dir = "results/figures/application/meta-analysis"
+  tables_dir = "results/tables/application/meta-analysis"
+} else if (data_set == "synthetic") {
+  surr_indices_tbl_location = "results/raw-results/application-synthetic/ipd_surr_indices_tbl.rds"
+  out_file = "results/raw-results/application-synthetic/ma_trt_effects_tbl.rds"
+  
+  # Specify options for saving the plots to files
+  figures_dir = "results/figures/application-synthetic/meta-analysis"
+  tables_dir = "results/tables/application-synthetic/meta-analysis"
+}
+
 ## Analysis Parameters -------------------------------------------------- 
 
 # Number of bootstrap replications for computing within-trial covariance
@@ -27,7 +49,7 @@ time_cumulative_incidence = 80
 ## Intermediate Results ----------------------------------------------------
 
 # Load data set with IPD and estimated surrogate index for every subject.
-ipd_surr_indices_tbl = readRDS(file = "results/raw-results/application/ipd_surr_indices_tbl.rds")
+ipd_surr_indices_tbl = readRDS(file = surr_indices_tbl_location)
 
 # Trial-Level Treatment Effects --------------------------------------------
 
@@ -281,4 +303,4 @@ ma_trt_effects_tbl = ma_trt_effects_tbl %>%
 # Saving Results ----------------------------------------------------------
 
 # Save data with trial-level treatment effects to file.
-saveRDS(ma_trt_effects_tbl, file = "results/raw-results/application/ma_trt_effects_tbl.rds")
+saveRDS(ma_trt_effects_tbl, file = out_file)

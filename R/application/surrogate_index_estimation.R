@@ -19,10 +19,27 @@ if (parallelly::supportsMulticore()) {
   plan(multisession)
 }
 
+# Extract arguments for analysis.
+args = commandArgs(trailingOnly = TRUE)
 
-# Specify options for saving the plots to files
-figures_dir = "results/figures/application/surrogate-index"
-tables_dir = "results/tables/application/surrogate-index"
+# The first argument indicates whether the analysis should be conducted on the
+# original data or on the synthetic data.
+data_set = args[1]
+if (data_set == "real") {
+  data_location = "data/processed_data.csv"
+  out_file = "results/raw-results/application/ipd_surr_indices_tbl.rds"
+  
+  # Specify options for saving the plots to files
+  figures_dir = "results/figures/application/surrogate-index"
+  tables_dir = "results/tables/application/surrogate-index"
+} else if (data_set == "synthetic") {
+  data_location = "data/processed_data_synthetic.csv"
+  out_file = "results/raw-results/application-synthetic/ipd_surr_indices_tbl.rds"
+  
+  # Specify options for saving the plots to files
+  figures_dir = "results/figures/application-synthetic/surrogate-index"
+  tables_dir = "results/tables/application-synthetic/surrogate-index"
+}
 
 ## Analysis Parameters --------------------------------------------------
 
@@ -35,7 +52,7 @@ time_cumulative_incidence = 80
 
 # Load data. We immediately start working with tibbles instead of classic data
 # frames.
-ipd_tbl = read.csv("data/processed_data.csv") %>%
+ipd_tbl = read.csv(data_location) %>%
   tibble() %>%
   # Code the BMI dummy variables into a single factor variable.
   mutate(
@@ -785,4 +802,4 @@ rm("roc_tbl")
 # Saving Results ----------------------------------------------------------
 
 # Save data with estimated surrogate index to file.
-saveRDS(ipd_surr_indices_tbl, file = "results/raw-results/application/ipd_surr_indices_tbl.rds")
+saveRDS(ipd_surr_indices_tbl, file = outfile)

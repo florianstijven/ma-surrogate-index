@@ -18,9 +18,25 @@ if (parallelly::supportsMulticore()) {
   plan(multisession)
 }
 
-# Specify options for saving the plots to files
-figures_dir = "results/figures/application/meta-analysis"
-tables_dir = "results/tables/application/meta-analysis"
+# Extract arguments for analysis.
+args = commandArgs(trailingOnly = TRUE)
+
+# The first argument indicates whether the analysis should be conducted on the
+# original data or on the synthetic data.
+data_set = args[1]
+if (data_set == "real") {
+  ma_trt_effects_tbl_location = "results/raw-results/application/ma_trt_effects_tbl.rds"
+  
+  # Specify options for saving the plots to files
+  figures_dir = "results/figures/application/meta-analysis"
+  tables_dir = "results/tables/application/meta-analysis"
+} else if (data_set == "synthetic") {
+  ma_trt_effects_tbl_location = "results/raw-results/application-synthetic/ma_trt_effects_tbl.rds"
+  
+  # Specify options for saving the plots to files
+  figures_dir = "results/figures/application-synthetic/meta-analysis"
+  tables_dir = "results/tables/application-synthetic/meta-analysis"
+}
 
 ## Analysis Parameters -------------------------------------------------- 
 

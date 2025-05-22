@@ -12,12 +12,32 @@ if (parallelly::supportsMulticore()) {
   plan(multisession)
 }
 
+# Extract arguments for analysis.
+args = commandArgs(trailingOnly = TRUE)
+
+# The first argument indicates whether the analysis should be conducted on the
+# original data or on the synthetic data.
+data_set = args[1]
+if (data_set == "real") {
+  ma_trt_effects_tbl_location = "results/raw-results/application/ma_trt_effects_tbl.rds"
+  out_file1 = "results/raw-results/application/bayesian_ma_results.rds"
+  out_file2 = "results/raw-results/application/rho_long_tbl.rds"
+  
+  # Specify options for saving the plots to files
+  figures_dir = "results/figures/application/meta-analysis"
+  tables_dir = "results/tables/application/meta-analysis"
+} else if (data_set == "synthetic") {
+  ma_trt_effects_tbl_location = "results/raw-results/application-synthetic/ma_trt_effects_tbl.rds"
+  out_file1 = "results/raw-results/application-synthetic/bayesian_ma_results.rds"
+  out_file2 = "results/raw-results/application-synthetic/rho_long_tbl.rds"
+  
+  # Specify options for saving the plots to files
+  figures_dir = "results/figures/application-synthetic/meta-analysis"
+  tables_dir = "results/tables/application-synthetic/meta-analysis"
+}
+
 # Source Helper function to fit Bayesian Model. 
 source("R/helper-functions/bayesian-model.R")
-
-# Specify options for saving the plots to files
-figures_dir = "results/figures/application/meta-analysis"
-tables_dir = "results/tables/application/meta-analysis"
 
 trials_first_four = c("Moderna", "AstraZeneca", "Janssen", "Novavax")
 trials_first_four_fct = trials_first_four
@@ -55,7 +75,7 @@ trials_mixed_fct = c(
 )
 
 # Load data with trial-level treatment effects. 
-ma_trt_effects_tbl = readRDS("results/raw-results/application/ma_trt_effects_tbl.rds")
+ma_trt_effects_tbl = readRDS(ma_trt_effects_tbl_location)
 
 # Add proper name of the surrogates.
 ma_trt_effects_tbl = ma_trt_effects_tbl %>%
@@ -149,7 +169,7 @@ surrogate_results_tbl = ma_trt_effects_tbl %>%
 # Saving Results ----------------------------------------------------------
 
 # Save fitted Bayesian models. 
-saveRDS(surrogate_results_tbl, file = "results/raw-results/application/bayesian_ma_results.rds")
+saveRDS(surrogate_results_tbl, file = out_file1)
 
 # The fitted Bayesian models are very large objects. So, we also save a subset
 # of this information next, which is more convenient to work with.
@@ -159,7 +179,7 @@ rho_long_tbl <- surrogate_results_tbl %>%
   rename(rho = rho_samples) %>%
   select(-stan_fit, -data)
 
-saveRDS(rho_long_tbl, file = "results/raw-results/application/rho_long_tbl.rds")
+saveRDS(rho_long_tbl, file = out_file2)
 
 
 
