@@ -471,7 +471,7 @@ if (regime == "small") {
   pd_false <- meta_analytic_data_simulated %>% filter(nearest_PD == FALSE)
   bca_cis <- compute_bootstrap_cis(pd_false, "BCa")
   
-  bayesian_cis = compute_bayesian_cis(pd_false)
+  # bayesian_cis = compute_bayesian_cis(pd_false)
   
   pd_false_bca <- pd_false %>%
     mutate(
