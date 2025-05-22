@@ -12,7 +12,7 @@ stan_code_prop_line =
       vector[2] theta[N];          // latent true effects per trial
     }
     model {
-      mu ~ normal(log(0.5), 1);           
+      mu ~ normal(0, 2);           
       tau ~ normal(0, 2);        
       rho ~ uniform(-1, 1);        
 
@@ -50,7 +50,7 @@ stan_code_default =
       vector[2] theta[N];          // latent true effects per trial
     }
     model {
-      mu ~ normal(log(0.5), 1);           
+      mu ~ normal(0, 2);           
       tau ~ normal(0, 2);        
       rho ~ uniform(-1, 1);        
 
