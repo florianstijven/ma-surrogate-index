@@ -1,4 +1,4 @@
-analysishelpers = R/helper-functions/delta-method-rho-trial.R R/helper-functions/moment-based-estimator.R R/helper-functions/multiplier-bootstrap.R R/helper-functions/train-clinical-prediction-models.R
+analysishelpers = R/helper-functions/delta-method-rho-trial.R R/helper-functions/moment-based-estimator.R R/helper-functions/multiplier-bootstrap.R R/helper-functions/train-clinical-prediction-models.R R/helper-functions/bayesian-model.R
 simulationhelpers = R/helper-functions/simulation-functions.R
 data = data/processed_data.csv
 data-synthetic = data/processed_data_synthetic.csv
