@@ -3,15 +3,12 @@
 a = Sys.time()
 # Load all R packages
 library(tidyverse)
-library(sandwich)
-library(lmtest)
 library(future)
 library(furrr)
 library(mgcv)
 library(splines)
 library(sl3)
 library(origami)
-library(rstan)
 
 # Set up parallel computing
 if (parallelly::supportsMulticore()) {
@@ -179,9 +176,9 @@ meta_analytic_data <- expand_grid(data_set_indicator, dgm_param_tbl) %>%
         
         # Compute/approximate the true trial-level correlation with the given
         # estimated surrogate index.
-        rho_approximated = rep(NA, length(surrogate_index_estimator))
-        for (i in seq_along(1:length(surrogate_index_estimator))) {
-          if (surrogate_index_estimator[i] == "surrogate") {
+        rho_approximated = rep(NA, length(surrogate_index_estimators))
+        for (i in seq_along(1:length(surrogate_index_estimators))) {
+          if (surrogate_index_estimators[i] == "surrogate") {
             # We will not compute the true rho for the surrogate because this is the
             # same true rho across simulations. This value is computed later on just
             # once per setting, so avoiding numerically computing the same thing many
@@ -221,7 +218,8 @@ meta_analytic_data <- expand_grid(data_set_indicator, dgm_param_tbl) %>%
   reframe(
     tibble(
       treatment_effects = list_of_ma_data_objects$meta_analytic_data[[1]],
-      rho_true = list_of_ma_data_objects$rho_approximated
+      rho_true = list_of_ma_data_objects$rho_approximated,
+      surrogate_index_estimator = surrogate_index_estimators
     )
   ) %>%
   ungroup() %>%
@@ -230,8 +228,6 @@ meta_analytic_data <- expand_grid(data_set_indicator, dgm_param_tbl) %>%
 print(Sys.time() - a)
 
 ## Approximate the true trial-level correlation parameter ------------------
-
-print(Sys.time() - a)
 
 # Approximate the true trial-level correlation using the surrogate endpoint.
 rho_true_surrogate_tbl = tibble(sd_beta, SI_violation) %>%
@@ -310,6 +306,9 @@ meta_analytic_data_simulated = meta_analytic_data %>%
   # Drop superfluous variables
   select(-moment_estimates, -rho_delta_method)
 
+rm("meta_analytic_data")
+gc()
+
 print(Sys.time() - a)
 
 statistic_function_factory = function(estimator_adjustment, nearest_PD) {
@@ -363,6 +362,10 @@ source("R/helper-functions/bayesian-model.R")
 
 # Helper Compute CI based on Bivariate Bayesian Model.
 compute_bayesian_ci = function(data) {
+  # Temporarily disable parallelization
+  old_plan <- future::plan("sequential")
+  on.exit(future::plan(old_plan), add = TRUE) # Restore original plan after execution
+  
   data = data %>%
     rename(
       trt_effect_surrogate_index_est = treatment_effect_surr,
@@ -381,6 +384,9 @@ compute_bayesian_ci = function(data) {
   # Extract 95% credible interval
   summary_fit <- summary(fit, probs = c(0.025, 0.975))$summary
   
+  rm("fit")
+  gc()
+  
   # Extract the row corresponding to 'rho'
   rho_summary <- summary_fit["rho", ]
   
@@ -398,10 +404,14 @@ compute_bayesian_cis = function(data) {
   )
 }
 
+gc()
+lobstr::mem_used()
+
 if (regime == "small") {
   # 1. "Sandwich" CIs (no bootstrap, just copy as-is)
   sandwich_tbl <- meta_analytic_data_simulated %>%
-    mutate(CI_type = "sandwich")
+    mutate(CI_type = "sandwich") %>%
+    select(-treatment_effects)
   
   # 2. For nearest_PD == FALSE, compute BCa, studentized, and BC percentile CIs
   pd_false <- meta_analytic_data_simulated %>% filter(nearest_PD == FALSE)
@@ -412,6 +422,9 @@ if (regime == "small") {
   bcperc_cis <- compute_bootstrap_cis(pd_false, "BC percentile")
   
   bayesian_cis = compute_bayesian_cis(pd_false)
+  
+  pd_false = pd_false %>%
+    select(-treatment_effects)
   
   # Add CIs as columns (using map_dbl to extract bounds)
   pd_false_bca <- pd_false %>%
@@ -454,12 +467,16 @@ if (regime == "small") {
 } else {
   # For the large N regime, only BCa CIs for nearest_PD == FALSE
   sandwich_tbl <- meta_analytic_data_simulated %>%
-    mutate(CI_type = "sandwich")
+    mutate(CI_type = "sandwich") %>%
+    select(-treatment_effects)
   
   pd_false <- meta_analytic_data_simulated %>% filter(nearest_PD == FALSE)
   bca_cis <- compute_bootstrap_cis(pd_false, "BCa")
   
   # bayesian_cis = compute_bayesian_cis(pd_false)
+  
+  pd_false = pd_false %>%
+    select(-treatment_effects)
   
   pd_false_bca <- pd_false %>%
     mutate(
@@ -482,12 +499,6 @@ if (regime == "small") {
   )
 }
 
-
-
-
-# Drop columns that are not needed.
-meta_analytic_data_simulated = meta_analytic_data_simulated %>%
-  select(-treatment_effects)
 
 print(Sys.time() - a)
 

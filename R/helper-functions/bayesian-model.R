@@ -68,8 +68,8 @@ stan_code_default =
     }
     "
 
-stan_model_prop_line = stan_model(model_code = stan_code_prop_line)
-stan_model_default = stan_model(model_code = stan_code_default)
+stan_model_prop_line = rstan::stan_model(model_code = stan_code_prop_line)
+stan_model_default = rstan::stan_model(model_code = stan_code_default)
 
 fit_surrogacy_model <- function(data, assume_proportional_line, iter = 10000, warmup = 5000, chains = 4, seed = 123) {
   # Define Stan code dynamically based on the assumption of an identity regression line
@@ -95,13 +95,14 @@ fit_surrogacy_model <- function(data, assume_proportional_line, iter = 10000, wa
   )
   
   # Fit model
-  fit <- sampling(
+  fit <- rstan::sampling(
     object = stan_model,
     data = stan_data,
     iter = iter,
     warmup = warmup,
     chains = chains,
-    seed = seed, refresh = FALSE
+    seed = seed, 
+    refresh = FALSE
   )
   
   return(fit)
