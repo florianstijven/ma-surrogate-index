@@ -162,13 +162,13 @@ meta_analytic_data <- expand_grid(data_set_indicator, dgm_param_tbl) %>%
         N = N,
         surrogate_index_estimators = surrogate_index_estimators
       ),
-      .f = function(sd_beta, n, N, surrogate_index_estimators, scenario, regime) {
+      .f = function(sd_beta, n, N, surrogate_index_estimators, scenario, regime, N_approximation_MC, n_approximation_MC) {
         # Temporarily disable parallelization
         old_plan <- future::plan("sequential")
         on.exit(future::plan(old_plan), add = TRUE) # Restore original plan after execution
         
-        # Call the generate_meta_analytic_data function
-        generate_meta_analytic_data(
+        # Generate the actual MA data
+        meta_analytic_data = generate_meta_analytic_data(
           sd_beta = sd_beta,
           n = n,
           N = N,
@@ -176,7 +176,42 @@ meta_analytic_data <- expand_grid(data_set_indicator, dgm_param_tbl) %>%
           scenario = scenario,
           regime = regime
         )
+        
+        # Compute/approximate the true trial-level correlation with the given
+        # estimated surrogate index.
+        rho_approximated = rep(NA, length(surrogate_index_estimator))
+        for (i in seq_along(1:length(surrogate_index_estimator))) {
+          if (surrogate_index_estimator[i] == "surrogate") {
+            # We will not compute the true rho for the surrogate because this is the
+            # same true rho across simulations. This value is computed later on just
+            # once per setting, so avoiding numerically computing the same thing many
+            # times.
+            rho_approximated[i] = NA
+          } else {
+            # Compute the true rho given the surrogate index f.
+            rho_approximated[i] = rho_MC_approximation(
+              sd_beta = sd_beta,
+              # We are assuming here that there is only one non-trivial
+              # surrogate index estimator.
+              f = meta_analytic_data[[2]][[2]],
+              N_approximation_MC = N_approximation_MC,
+              n_approximation_MC = n_approximation_MC,
+              scenario = scenario,
+              regime = regime
+            )
+          }
+        }
+
+        
+        return(
+          list(
+            meta_analytic_data = meta_analytic_data,
+            rho_approximated = rho_approximated
+          )
+        )
       },
+      N_approximation_MC = N_approximation_MC,
+      n_approximation_MC = n_approximation_MC,
       scenario = scenario,
       regime = regime,
       .options = furrr_options(seed = TRUE)
@@ -185,9 +220,8 @@ meta_analytic_data <- expand_grid(data_set_indicator, dgm_param_tbl) %>%
   rowwise(everything()) %>%
   reframe(
     tibble(
-      treatment_effects = list_of_ma_data_objects[[1]],
-      surrogate_index_f_list = list_of_ma_data_objects[[2]],
-      surrogate_index_estimator = surrogate_index_estimators
+      treatment_effects = list_of_ma_data_objects$meta_analytic_data[[1]],
+      rho_true = list_of_ma_data_objects$rho_approximated
     )
   ) %>%
   ungroup() %>%
@@ -196,52 +230,6 @@ meta_analytic_data <- expand_grid(data_set_indicator, dgm_param_tbl) %>%
 print(Sys.time() - a)
 
 ## Approximate the true trial-level correlation parameter ------------------
-
-# For each surrogate index prediction function, approximate the true trial-level
-# correlation through MC approximation.
-meta_analytic_data$rho_true = future_pmap_dbl(
-  .l = list(
-    f = meta_analytic_data$surrogate_index_f_list,
-    sd_beta = meta_analytic_data$sd_beta,
-    surrogate_index_estimator = meta_analytic_data$surrogate_index_estimator
-  ),
-  .f = function(f,
-                sd_beta,
-                surrogate_index_estimator,
-                N_approximation_MC,
-                n_approximation_MC,
-                scenario,
-                regime) {
-    if (surrogate_index_estimator == "surrogate") {
-      # We will not compute the true rho for the surrogate because this is the
-      # same true rho across simulations. This value is computed later on just
-      # once per setting, so avoiding numerically computing the same thing many
-      # times.
-      return(NA)
-    } else {
-      return(
-        # Compute the true rho given the surrogate index f.
-        rho_MC_approximation(
-          sd_beta = sd_beta,
-          f = f,
-          N_approximation_MC = N_approximation_MC,
-          n_approximation_MC = n_approximation_MC,
-          scenario = scenario,
-          regime = regime
-        )
-      )
-    }
-  },
-  N_approximation_MC = N_approximation_MC,
-  n_approximation_MC = n_approximation_MC,
-  scenario = scenario,
-  regime = regime,
-  .options = furrr_options(seed = TRUE, packages = c("mgcv"))
-)
-
-# Drop surrogate index function as this function is no longer needed.
-meta_analytic_data = meta_analytic_data %>%
-  select(-surrogate_index_f_list)
 
 print(Sys.time() - a)
 
