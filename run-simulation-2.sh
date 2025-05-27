@@ -10,4 +10,4 @@ export OMP_NUM_THREADS=1
 
 Rscript -e "renv::restore()"
 
-make results/raw-results/simple-simulation/ma-sim-results-proof-of-concept-large.rds
+make results/raw-results/simulations/ma-sim-results-proof-of-concept-large.rds
