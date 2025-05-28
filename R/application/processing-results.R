@@ -471,7 +471,14 @@ conf_int_plot_f(FALSE, "sandwich", FALSE, "real data")
 ## Bayesian MA -------------------------------------------------------------
 
 # Define helper function to make and save plots.
-posterior_plots_f = function(assume_proportional_line, include_risk_score) {
+posterior_plots_f = function(assume_proportional_line, include_risk_score, orientation) {
+  if (orientation == "vertical") {
+    facet_formula = surrogate_name~.
+    height_adjustment = 1
+  } else if (orientation == "horizontal") {
+    facet_formula = .~surrogate_name
+    height_adjustment = 0.6
+  }
   posterior_plot = rho_long_tbl %>% filter(
     assume_proportional_line == .env$assume_proportional_line,
     include_risk_score == .env$include_risk_score | is.na(include_risk_score),
@@ -486,7 +493,7 @@ posterior_plots_f = function(assume_proportional_line, include_risk_score) {
     ggplot(aes(x = rho, y = `Estimated Surrogate Index`, fill = `Estimated Surrogate Index`)) +
     geom_density_ridges(quantile_lines = TRUE,
                         quantiles = c(0.025, 0.5, 0.975)) +
-    facet_grid(surrogate_name~.) +
+    facet_grid(facet_formula) +
     scale_y_discrete(labels = NULL) +
     labs(title = "Posterior Distributions of Trial-Level Correlation",
          x = expr(rho[trial]),
@@ -499,12 +506,12 @@ posterior_plots_f = function(assume_proportional_line, include_risk_score) {
   
   assume_proportional_line_chr = ifelse(assume_proportional_line, "prop-line", "default")
   risk_score_chr = ifelse(include_risk_score, "w-riskscore", "wo-riskscore")
-  outfile = paste0("/posterior-distributions-", assume_proportional_line_chr, "-", risk_score_chr, ".pdf")
+  outfile = paste0("/posterior-distributions-", assume_proportional_line_chr, "-", risk_score_chr, "-", orientation, ".pdf")
 
   ggsave(
     outfile,
     path = figures_dir,
-    height = double_height,
+    height = double_height * height_adjustment,
     width = double_width,
     dpi = res,
     device = "pdf",
@@ -514,9 +521,11 @@ posterior_plots_f = function(assume_proportional_line, include_risk_score) {
 
 # Make plots for specified scenarios
 # posterior_plots_f(TRUE, TRUE)
-posterior_plots_f(TRUE, FALSE)
+posterior_plots_f(TRUE, FALSE, "vertical")
 # posterior_plots_f(FALSE, TRUE)
-posterior_plots_f(FALSE, FALSE)
+posterior_plots_f(FALSE, FALSE, "vertical")
+posterior_plots_f(TRUE, FALSE, "horizontal")
+posterior_plots_f(FALSE, FALSE, "horizontal")
 
 # Compute posterior mean, median, and quantiles.
 rho_long_tbl %>%

@@ -376,14 +376,13 @@ compute_bayesian_ci = function(data) {
   fit = fit_surrogacy_model(
     data,
     assume_proportional_line = FALSE,
-    iter = 1e4,
+    iter = 2e4,
     warmup = 5e3,
-    chains = 3,
+    chains = 4,
     seed = 1
   )
   # Extract 95% credible interval
-  summary_fit <- summary(fit, probs = c(0.025, 0.975))$summary
-  
+  summary_fit <- rstan::summary(fit, probs = c(0.025, 0.975))$summary
   rm("fit")
   gc()
   
