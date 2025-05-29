@@ -231,19 +231,18 @@ print(Sys.time() - a)
 
 # Approximate the true trial-level correlation using the surrogate endpoint.
 rho_true_surrogate_tbl = tibble(sd_beta, SI_violation) %>%
-  mutate(surrogate_index_estimator = "surrogate") %>%
-  mutate(
-    rho_true = future_map_dbl(
-      .x = sd_beta,
-      .f = rho_MC_approximation,
-      N_approximation_MC = N_approximation_MC,
-      n_approximation_MC = n_approximation_MC,
-      f = NULL,
-      scenario = scenario,
-      regime = regime,
-      .options = furrr_options(seed = TRUE)
-    )
-  )
+  mutate(surrogate_index_estimator = "surrogate") 
+
+rho_true_surrogate_tbl$rho_true = future_map_dbl(
+  .x = rho_true_surrogate_tbl$sd_beta,
+  .f = rho_MC_approximation,
+  N_approximation_MC = N_approximation_MC,
+  n_approximation_MC = n_approximation_MC,
+  f = NULL,
+  scenario = scenario,
+  regime = regime,
+  .options = furrr_options(seed = TRUE)
+)
 
 print(Sys.time() - a)
 
