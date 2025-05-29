@@ -78,6 +78,13 @@ df = df %>%
       "Sanofi 1 (non-naive)",
       "Sanofi 2 (naive)",
       "Sanofi 2 (non-naive)"
+    ),
+    trial_alt = fct_recode(
+      trial,
+      "Moderna" = "Moderna (naive)",
+      "AstraZeneca" = "AstraZeneca (naive)",
+      "Janssen" = "Janssen (naive)",
+      "Novavax" = "Novavax (naive)"
     )
   )
 
@@ -208,6 +215,24 @@ ggsave(
   units = unit
 )
 
+df_long %>%
+  filter(!is.na(titer), !(trial_alt %in% c("Sanofi 1 (non-naive)", "Sanofi 2 (non-naive)")), Treatment == "Vaccine") %>%
+  ggplot(aes(x = titer, y = trial_alt)) +
+  geom_boxplot(aes(weight = sample_weight)) +
+  facet_grid(.~surrogate) +
+  theme(legend.position = "none") +
+  ylab("Trial") +
+  xlab("Titer")
+
+ggsave(
+  filename = "distribution-titers-naive.pdf",
+  device = "pdf",
+  path = figures_dir,
+  width = double_width,
+  height = double_height / 2, 
+  units = unit
+)
+
 # Pairwise scatterplots of the distribution of the neutralization titer and the
 # corresponding titer adjusted to circulating variants.
 df %>%
@@ -230,6 +255,28 @@ ggsave(
   path = figures_dir,
   width = double_width,
   height = double_height, 
+  units = unit
+)
+
+df %>%
+  filter(Delta_nAb, !(trial_alt %in% c("Sanofi 1 (non-naive)", "Sanofi 2 (non-naive)")), Treatment == "Vaccine")  %>% 
+  ggplot(aes(
+    x = pseudoneutid50,
+    y = pseudoneutid50_adjusted
+  )) +
+  geom_point(alpha = 0.25) +
+  facet_wrap( ~ trial_alt) +
+  geom_abline(slope = 1, intercept = 0) +
+  xlab("nAb ID50 against reference strain") +
+  ylab("Adjusted titer") +
+  theme(legend.position = "bottom")
+
+ggsave(
+  filename = "scatterplot-titer-adjustment-naive.pdf",
+  device = "pdf",
+  path = figures_dir,
+  width = double_width,
+  height = double_height * (2/3), 
   units = unit
 )
 
