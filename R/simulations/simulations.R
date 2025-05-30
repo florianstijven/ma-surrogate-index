@@ -482,7 +482,7 @@ print(Sys.time() - a)
 # Save the simulated MA data sets with the corresponding rho estimates and
 # confidence intervals.
 saveRDS(
-  meta_analytic_data_simulated,
+  simulations_results_tbl,
   paste0(
     "results/raw-results/simulations/ma-sim-results-",
     scenario,
