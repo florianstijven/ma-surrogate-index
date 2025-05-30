@@ -7,9 +7,9 @@ library(furrr)
 
 # Set up parallel computing
 if (parallelly::supportsMulticore()) {
-  plan("multicore")
+  plan("multicore", workers = parallel::detectCores() - 1)
 } else {
-  plan(multisession)
+  plan(multisession, workers = parallel::detectCores() - 1)
 }
 
 # Extract arguments for analysis.

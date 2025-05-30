@@ -12,9 +12,9 @@ library(origami)
 
 # Set up parallel computing
 if (parallelly::supportsMulticore()) {
-  plan("multicore")
+  plan("multicore", workers = parallel::detectCores() - 1)
 } else {
-  plan(multisession)
+  plan(multisession, workers = parallel::detectCores() - 1)
 }
 # Extract arguments for analysis.
 args = commandArgs(trailingOnly = TRUE)
@@ -78,6 +78,9 @@ if (regime == "small") {
   # Define the number of bootstrap replications depending on the number of
   # independent trials.
   B_N_lookup = tibble(N = c(6, 12, 24), B = c(1e5, 5e4, 2.5e4))
+  bootstrap_types = c("BCa", "BC percentile", "studentized")
+  
+  bayesian = TRUE
 } else if (regime == "large") {
   if (scenario == "vaccine") {
     stop("The large sample regime is not suitable for the vaccine scenario.")
@@ -98,6 +101,9 @@ if (regime == "small") {
   # Define the number of bootstrap replications depending on the number of
   # independent trials.
   B_N_lookup = tibble(N = N, B = 2e3)
+  bootstrap_types = "BCa"
+  
+  bayesian = FALSE
   
   sd_beta = list(c(0.10, 0.10))
   SI_violation = c("moderate")
@@ -114,6 +120,7 @@ source("R/helper-functions/moment-based-estimator.R")
 source("R/helper-functions/delta-method-rho-trial.R")
 source("R/helper-functions/multiplier-bootstrap.R")
 source("R/helper-functions/train-clinical-prediction-models.R")
+source("R/helper-functions/bayesian-model.R")
 
 # Set the surrogate index estimation methods.
 if (scenario == "proof-of-concept") {
@@ -132,183 +139,6 @@ if (scenario == "proof-of-concept") {
   # surrogate index here.
   surrogate_index_estimator = c("surrogate", "superlearner")
 }
-
-
-# Simulation Study ---------------------------------------------------------
-
-# Tibble with simulation parameters. Each row corresponds to a data-generating
-# mechanism.
-dgm_param_tbl = expand_grid(tibble(sd_beta, SI_violation), N, n) %>%
-  mutate(surrogate_index_estimators = list(surrogate_index_estimator)) %>%
-  left_join(B_N_lookup)
-
-## Simulate IPD data and compute trial-level estimates  --------------------
-
-# Generate N meta-analytic data sets and compute the trial-level Pearson
-# correlation for (i) the treatment effects on the surrogate and clinical
-# endpoints and (ii) the treatment effects on the surrogate index and clinical
-# endpoint.
-data_set_indicator = 1:N_MC
-
-meta_analytic_data <- expand_grid(data_set_indicator, dgm_param_tbl) %>%
-  mutate(
-    list_of_ma_data_objects = future_pmap(
-      .l = list(
-        sd_beta = sd_beta,
-        n = n,
-        N = N,
-        surrogate_index_estimators = surrogate_index_estimators
-      ),
-      .f = function(sd_beta, n, N, surrogate_index_estimators, scenario, regime, N_approximation_MC, n_approximation_MC) {
-        # Temporarily disable parallelization
-        old_plan <- future::plan("sequential")
-        on.exit(future::plan(old_plan), add = TRUE) # Restore original plan after execution
-        
-        # Generate the actual MA data
-        meta_analytic_data = generate_meta_analytic_data(
-          sd_beta = sd_beta,
-          n = n,
-          N = N,
-          surrogate_index_estimators = surrogate_index_estimators,
-          scenario = scenario,
-          regime = regime
-        )
-        
-        # Compute/approximate the true trial-level correlation with the given
-        # estimated surrogate index.
-        rho_approximated = rep(NA, length(surrogate_index_estimators))
-        for (i in seq_along(1:length(surrogate_index_estimators))) {
-          if (surrogate_index_estimators[i] == "surrogate") {
-            # We will not compute the true rho for the surrogate because this is the
-            # same true rho across simulations. This value is computed later on just
-            # once per setting, so avoiding numerically computing the same thing many
-            # times.
-            rho_approximated[i] = NA
-          } else {
-            # Compute the true rho given the surrogate index f.
-            rho_approximated[i] = rho_MC_approximation(
-              sd_beta = sd_beta,
-              # We are assuming here that there is only one non-trivial
-              # surrogate index estimator.
-              f = meta_analytic_data[[2]][[2]],
-              N_approximation_MC = N_approximation_MC,
-              n_approximation_MC = n_approximation_MC,
-              scenario = scenario,
-              regime = regime
-            )
-          }
-        }
-
-        
-        return(
-          list(
-            meta_analytic_data = meta_analytic_data,
-            rho_approximated = rho_approximated
-          )
-        )
-      },
-      N_approximation_MC = N_approximation_MC,
-      n_approximation_MC = n_approximation_MC,
-      scenario = scenario,
-      regime = regime,
-      .options = furrr_options(seed = TRUE)
-    )
-  ) %>%
-  rowwise(everything()) %>%
-  reframe(
-    tibble(
-      treatment_effects = list_of_ma_data_objects$meta_analytic_data[[1]],
-      rho_true = list_of_ma_data_objects$rho_approximated,
-      surrogate_index_estimator = surrogate_index_estimators
-    )
-  ) %>%
-  ungroup() %>%
-  select(-list_of_ma_data_objects, -surrogate_index_estimators)
-
-print(Sys.time() - a)
-
-## Approximate the true trial-level correlation parameter ------------------
-
-# Approximate the true trial-level correlation using the surrogate endpoint.
-rho_true_surrogate_tbl = tibble(sd_beta, SI_violation) %>%
-  mutate(surrogate_index_estimator = "surrogate") 
-
-rho_true_surrogate_tbl$rho_true = future_map_dbl(
-  .x = rho_true_surrogate_tbl$sd_beta,
-  .f = rho_MC_approximation,
-  N_approximation_MC = N_approximation_MC,
-  n_approximation_MC = n_approximation_MC,
-  f = NULL,
-  scenario = scenario,
-  regime = regime,
-  .options = furrr_options(seed = TRUE)
-)
-
-print(Sys.time() - a)
-
-
-# Add the true trial-level rho parameters to the tibble with the simulated data
-# sets.
-meta_analytic_data = meta_analytic_data %>%
-  left_join(
-    rho_true_surrogate_tbl %>%
-      select(-sd_beta),
-    by = c("SI_violation", "surrogate_index_estimator"),
-    relationship = "many-to-one"
-  ) %>%
-  # rho_true is present in both tibbles before joining. Hence, we get rho_true.x
-  # and .y in the joined data set. We keep the non-missing value.
-  mutate(rho_true = coalesce(rho_true.x, rho_true.y)) %>%
-  select(-rho_true.x, -rho_true.y)
-
-
-print(Sys.time() - a)
-
-## Moment-based estimator --------------------------------------------------
-
-# Estimate trial-level Pearson correlation for the generated meta-analytic data
-# sets of treatment effects and add everything to a tibble.
-meta_analytic_data_simulated = meta_analytic_data %>%
-  cross_join(expand_grid(
-    estimator_adjustment = c("N - 1"),
-    sandwich_adjustment = c("N - 1"),
-    nearest_PD = c(TRUE, FALSE)
-  )) %>%
-  rowwise(everything()) %>%
-  summarise(
-    # Estimate the meta-analytic parameters using the moment-based estimator.
-    moment_estimates = list(
-      moment_estimator(
-        treatment_effects$treatment_effect_surr,
-        treatment_effects$treatment_effect_clin,
-        treatment_effects$covariance_matrix,
-        estimator_adjustment = estimator_adjustment,
-        sandwich_adjustment = sandwich_adjustment,
-        nearest_PD = nearest_PD
-      )
-    ),
-    # Estimate the trial-level Pearson correlation using the delta method.
-    rho_delta_method = list(
-      rho_delta_method(
-        moment_estimates$coefs,
-        moment_estimates$vcov,
-        method = "t-adjustment",
-        N = N
-      )
-    ),
-    rho_est = rho_delta_method$rho,
-    rho_se = rho_delta_method$se,
-    rho_ci_lower = rho_delta_method$ci[1],
-    rho_ci_upper = rho_delta_method$ci[2]
-  ) %>%
-  ungroup() %>%
-  # Drop superfluous variables
-  select(-moment_estimates, -rho_delta_method)
-
-rm("meta_analytic_data")
-gc()
-
-print(Sys.time() - a)
 
 statistic_function_factory = function(estimator_adjustment, nearest_PD) {
   statistic_f = function(data, weights) {
@@ -334,31 +164,6 @@ statistic_function_factory = function(estimator_adjustment, nearest_PD) {
   return(statistic_f)
 }
 
-# Helper: Compute bootstrap CIs of specified type for a batch of rows
-compute_bootstrap_cis <- function(data, type) {
-  furrr::future_pmap(
-    .l = list(
-      treatment_effects = data$treatment_effects,
-      estimator_adjustment = data$estimator_adjustment,
-      nearest_PD = data$nearest_PD,
-      B = data$B
-    ),
-    .f = function(treatment_effects, estimator_adjustment, nearest_PD, B) {
-      multiplier_bootstrap_ci(
-        data = treatment_effects,
-        statistic = statistic_function_factory(estimator_adjustment, nearest_PD),
-        B = B,
-        alpha = 0.05,
-        type = type
-      )
-    },
-    .options = furrr_options(seed = TRUE)
-  )
-}
-
-# Source helper function to fit Bayesian model. 
-source("R/helper-functions/bayesian-model.R")
-
 # Helper Compute CI based on Bivariate Bayesian Model.
 compute_bayesian_ci = function(data) {
   # Temporarily disable parallelization
@@ -377,7 +182,7 @@ compute_bayesian_ci = function(data) {
     assume_proportional_line = FALSE,
     iter = 2e4,
     warmup = 5e3,
-    chains = 4,
+    chains = 1,
     seed = 1
   )
   # Extract 95% credible interval
@@ -394,108 +199,280 @@ compute_bayesian_ci = function(data) {
   return(rho_ci)
 }
 
-compute_bayesian_cis = function(data) {
-  furrr::future_map(
-    .x = data$treatment_effects,
-    .f = compute_bayesian_ci,
-    .options = furrr_options(seed = TRUE)
+
+## Simulation Function --------------------------------------------------
+
+# Function to analyze one data set.
+analyze = function(alpha_hat,
+                   beta_hat,
+                   vcov_list,
+                   estimator_adjustment,
+                   sandwich_adjustment,
+                   nearest_PD,
+                   bootstraps,
+                   B,
+                   bayesian,
+                   N_approximation_MC,
+                   n_approximation_MC) {
+  # Construct tibble with a cross-tabulation of all analysis options.
+  analysis_options = expand_grid(
+    estimator_adjustment,
+    sandwich_adjustment,
+    nearest_PD
+  )
+  
+  N = length(alpha_hat)
+  
+  # Estimate MA model parameters.
+  inferences_tbl = analysis_options %>%
+    rowwise(everything()) %>%
+    summarise(
+      # Estimate the meta-analytic parameters using the moment-based estimator.
+      moment_estimates = list(
+        moment_estimator(
+          alpha_hat,
+          beta_hat,
+          vcov_list,
+          estimator_adjustment = estimator_adjustment,
+          sandwich_adjustment = sandwich_adjustment,
+          nearest_PD = nearest_PD
+        )
+      ),
+      # Estimate the trial-level Pearson correlation using the delta method.
+      rho_delta_method = list(
+        rho_delta_method(
+          moment_estimates$coefs,
+          moment_estimates$vcov,
+          method = "t-adjustment",
+          N = N
+        )
+      ),
+      rho_est = rho_delta_method$rho,
+      rho_se = rho_delta_method$se,
+      rho_ci_lower = rho_delta_method$ci[1],
+      rho_ci_upper = rho_delta_method$ci[2]
+    ) %>%
+    ungroup() %>%
+    select(-moment_estimates, -rho_delta_method) %>%
+    mutate(CI_type = "sandwich")
+  
+  # Compute boostrap confidence intervals if required.
+  if (length(bootstraps) >= 1) {
+    inferences_bootstrap_tbl = analysis_options %>%
+      right_join(inferences_tbl %>% select(-CI_type, -rho_ci_upper, -rho_ci_lower)) %>%
+      cross_join(tibble(CI_type = bootstraps)) %>%
+      rowwise(everything()) %>%
+      summarise(
+        bootstrap_ci = list(
+          multiplier_bootstrap_ci(
+            data = tibble(
+              treatment_effect_surr = alpha_hat,
+              treatment_effect_clin = beta_hat,
+              covariance_matrix = vcov_list
+            ),
+            statistic = statistic_function_factory(estimator_adjustment, nearest_PD),
+            B = B,
+            alpha = 0.05,
+            type = CI_type
+          )
+        ),
+        rho_ci_lower = bootstrap_ci$ci_lower,
+        rho_ci_upper = bootstrap_ci$ci_upper,
+      ) %>%
+      ungroup() %>%
+      select(-bootstrap_ci)
+    
+    # Join to inferences_tbl 
+    inferences_tbl = inferences_tbl %>%
+      bind_rows(inferences_bootstrap_tbl)
+  }
+  
+  
+  # Compute Bayesian CIs if required
+  if (bayesian) {
+    credible_interval = compute_bayesian_ci(
+      tibble(
+        treatment_effect_surr = alpha_hat,
+        treatment_effect_clin = beta_hat,
+        covariance_matrix = vcov_list
+      )
+    )
+    inferences_tbl = inferences_tbl %>%
+      bind_rows(
+        tibble(
+          rho_ci_lower = credible_interval[1],
+          rho_ci_upper = credible_interval[2],
+          CI_type = "Bayesian"
+        )
+      )
+  }
+  return(inferences_tbl)
+}
+
+# Function to simulate and analyze one data set. 
+simulate_and_analyze = function(sd_beta, n, N, surrogate_index_estimators,scenario, regime, bootstraps, B, bayesian, N_approximation_MC, n_approximation_MC) {
+  # Temporarily disable parallelization
+  old_plan <- future::plan("sequential")
+  on.exit(future::plan(old_plan), add = TRUE) # Restore original plan after execution
+
+  # Generate the actual MA data
+  meta_analytic_data = generate_meta_analytic_data(
+    sd_beta = sd_beta,
+    n = n,
+    N = N,
+    surrogate_index_estimators = surrogate_index_estimators,
+    scenario = scenario,
+    regime = regime
+  )
+  
+
+  
+  # Compute/approximate the true trial-level correlation with the given
+  # estimated surrogate index.
+  rho_approximated = rep(NA, length(surrogate_index_estimators))
+  inferences_tbl = tibble(
+    estimator_adjustment = character(),
+    sandwich_adjustment = character(),
+    nearest_PD = logical(),
+    rho_est = numeric(),
+    rho_se = numeric(),
+    rho_ci_lower = numeric(),
+    rho_ci_upper = numeric(),
+    CI_type = character(),
+    surrogate_index_estimator = character()
+  )
+  for (i in seq_along(1:length(surrogate_index_estimators))) {
+    # Estimate the meta-analytic parameters.
+    inferences_tbl = inferences_tbl %>%
+      bind_rows(
+        analyze(
+          alpha_hat = meta_analytic_data[[1]][[i]]$treatment_effect_surr,
+          beta_hat = meta_analytic_data[[1]][[i]]$treatment_effect_clin,
+          vcov_list = meta_analytic_data[[1]][[i]]$covariance_matrix,
+          estimator_adjustment = "N - 1",
+          sandwich_adjustment = "N - 1",
+          nearest_PD = c(TRUE, FALSE),
+          bootstraps = bootstraps,
+          B = B,
+          bayesian = bayesian,
+          n_approximation_MC = n_approximation_MC,
+          N_approximation_MC = N_approximation_MC
+        ) %>%
+          mutate(surrogate_index_estimator = surrogate_index_estimators[i])
+      )
+    
+    if (surrogate_index_estimators[i] == "surrogate") {
+      # We will not compute the true rho for the surrogate because this is the
+      # same true rho across simulations. This value is computed later on just
+      # once per setting, so avoiding numerically computing the same thing many
+      # times.
+      rho_approximated[i] = NA
+    } else {
+      # Compute the true rho given the surrogate index f.
+      rho_approximated[i] = rho_MC_approximation(
+        sd_beta = sd_beta,
+        # We are assuming here that there is only one non-trivial
+        # surrogate index estimator.
+        f = meta_analytic_data[[2]][[i]],
+        N_approximation_MC = N_approximation_MC,
+        n_approximation_MC = n_approximation_MC,
+        scenario = scenario,
+        regime = regime
+      )
+    }
+  }
+  # Add approximated rhos to tibble with inferences.
+  inferences_tbl = inferences_tbl %>%
+    left_join(
+      tibble(rho_true = rho_approximated, surrogate_index_estimator = surrogate_index_estimators)
+    )
+  
+  return(
+    inferences_tbl
   )
 }
 
-gc()
-lobstr::mem_used()
 
-if (regime == "small") {
-  # 1. "Sandwich" CIs (no bootstrap, just copy as-is)
-  sandwich_tbl <- meta_analytic_data_simulated %>%
-    mutate(CI_type = "sandwich") %>%
-    select(-treatment_effects)
-  
-  # 2. For nearest_PD == FALSE, compute BCa, studentized, and BC percentile CIs
-  pd_false <- meta_analytic_data_simulated %>% filter(nearest_PD == FALSE)
-  
-  # Compute all bootstrap CIs OUTSIDE mutate!
-  bca_cis <- compute_bootstrap_cis(pd_false, "BCa")
-  studentized_cis <- compute_bootstrap_cis(pd_false, "studentized")
-  bcperc_cis <- compute_bootstrap_cis(pd_false, "BC percentile")
-  
-  bayesian_cis = compute_bayesian_cis(pd_false)
-  
-  pd_false = pd_false %>%
-    select(-treatment_effects)
-  
-  # Add CIs as columns (using map_dbl to extract bounds)
-  pd_false_bca <- pd_false %>%
-    mutate(
-      rho_ci_lower = purrr::map_dbl(bca_cis, 1),
-      rho_ci_upper = purrr::map_dbl(bca_cis, 2),
-      CI_type = "BCa"
+# Simulation Study ---------------------------------------------------------
+
+# Tibble with simulation parameters. Each row corresponds to a data-generating
+# mechanism.
+dgm_param_tbl = expand_grid(tibble(sd_beta, SI_violation), N, n) %>%
+  mutate(surrogate_index_estimators = list(surrogate_index_estimator)) %>%
+  left_join(B_N_lookup)
+
+## Simulate IPD data and compute trial-level estimates  --------------------
+
+# Generate N meta-analytic data sets and compute the trial-level Pearson
+# correlation for (i) the treatment effects on the surrogate and clinical
+# endpoints and (ii) the treatment effects on the surrogate index and clinical
+# endpoint.
+data_set_indicator = 1:N_MC
+
+simulations_results_tbl <- expand_grid(data_set_indicator, dgm_param_tbl) %>%
+  mutate(
+    inferences_tbl = future_pmap(
+      .l = list(
+        sd_beta = sd_beta,
+        n = n,
+        N = N,
+        surrogate_index_estimators = surrogate_index_estimators,
+        B = B
+      ),
+      .f = simulate_and_analyze,
+      bayesian = bayesian,
+      N_approximation_MC = N_approximation_MC,
+      n_approximation_MC = n_approximation_MC,
+      bootstraps = bootstrap_types,
+      scenario = scenario,
+      regime = regime,
+      .options = furrr_options(seed = TRUE)
     )
-  
-  pd_false_studentized <- pd_false %>%
-    mutate(
-      rho_ci_lower = purrr::map_dbl(studentized_cis, 1),
-      rho_ci_upper = purrr::map_dbl(studentized_cis, 2),
-      CI_type = "studentized"
-    )
-  
-  pd_false_bcperc <- pd_false %>%
-    mutate(
-      rho_ci_lower = purrr::map_dbl(bcperc_cis, 1),
-      rho_ci_upper = purrr::map_dbl(bcperc_cis, 2),
-      CI_type = "BC percentile"
-    )
-  
-  pd_false_bayesian = pd_false %>%
-    mutate(
-      rho_ci_lower = purrr::map_dbl(bayesian_cis, 1),
-      rho_ci_upper = purrr::map_dbl(bayesian_cis, 2),
-      CI_type = "Bayesian"
-    )
-  
-  # Combine all results
-  meta_analytic_data_simulated <- bind_rows(
-    sandwich_tbl,
-    pd_false_bca,
-    pd_false_studentized,
-    pd_false_bcperc,
-    pd_false_bayesian
   )
-  
-} else {
-  # For the large N regime, only BCa CIs for nearest_PD == FALSE
-  sandwich_tbl <- meta_analytic_data_simulated %>%
-    mutate(CI_type = "sandwich") %>%
-    select(-treatment_effects)
-  
-  pd_false <- meta_analytic_data_simulated %>% filter(nearest_PD == FALSE)
-  bca_cis <- compute_bootstrap_cis(pd_false, "BCa")
-  
-  # bayesian_cis = compute_bayesian_cis(pd_false)
-  
-  pd_false = pd_false %>%
-    select(-treatment_effects)
-  
-  pd_false_bca <- pd_false %>%
-    mutate(
-      rho_ci_lower = purrr::map_dbl(bca_cis, 1),
-      rho_ci_upper = purrr::map_dbl(bca_cis, 2),
-      CI_type = "BCa"
-    )
-  
-  # pd_false_bayesian = pd_false %>%
-  #   mutate(
-  #     rho_ci_lower = purrr::map_dbl(bayesian_cis, 1),
-  #     rho_ci_upper = purrr::map_dbl(bayesian_cis, 2),
-  #     CI_type = "Bayesian"
-  #   )
-  
-  meta_analytic_data_simulated <- bind_rows(
-    sandwich_tbl,
-    pd_false_bca
-    # pd_false_bayesian
-  )
+
+simulations_results_tbl = simulations_results_tbl %>%
+  rowwise(!(c(inferences_tbl, surrogate_index_estimators, sd_beta))) %>%
+  reframe(inferences_tbl)
+
+print(Sys.time() - a)
+
+## Approximate the true trial-level correlation parameter ------------------
+
+# Approximate the true trial-level correlation using the surrogate endpoint.
+rho_true_surrogate_tbl = tibble(sd_beta, SI_violation) %>%
+  mutate(surrogate_index_estimator = "surrogate") 
+
+rho_true_surrogate_tbl$rho_true = future_map_dbl(
+  .x = rho_true_surrogate_tbl$sd_beta,
+  .f = rho_MC_approximation,
+  N_approximation_MC = N_approximation_MC,
+  n_approximation_MC = n_approximation_MC,
+  f = NULL,
+  scenario = scenario,
+  regime = regime,
+  .options = furrr_options(seed = TRUE)
+)
+
+print(Sys.time() - a)
+
+if (regime == "large") {
+  plan(sequential)
 }
+
+
+# Add the true trial-level rho parameters to the tibble with the simulated data
+# sets.
+simulations_results_tbl = simulations_results_tbl %>%
+  left_join(
+    rho_true_surrogate_tbl %>%
+      select(-sd_beta),
+    by = c("SI_violation", "surrogate_index_estimator"),
+    relationship = "many-to-one"
+  ) %>%
+  # rho_true is present in both tibbles before joining. Hence, we get rho_true.x
+  # and .y in the joined data set. We keep the non-missing value.
+  mutate(rho_true = coalesce(rho_true.x, rho_true.y)) %>%
+  select(-rho_true.x, -rho_true.y)
 
 
 print(Sys.time() - a)
