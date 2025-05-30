@@ -2,27 +2,22 @@
 # unit exponential distributions.
 multiplier_bootstrap_sampling <- function(data, statistic, B) {
   # Number of rows in the data set that is to be bootstrapped
-  n <- nrow(data)
+  N <- nrow(data)
+
+  # Initialize vector for the estimates and the standard errors.
+  bootstrap_estimates = rep(0, B)
+  bootstrap_ses = rep(0, B)
   
-  # Function that samples weights and evaluates statistic in reweighted data.
-  bootstrap_replicate_f = function(x) {
+  # Sample bootstrap weights and compute the estimated and SE.
+  for (i in seq_along(1:B)) {
     # Generate random weights from the unit exponential distribution
-    weights <- rexp(n = n, rate = 1)
+    weights <- rexp(n = N, rate = 1)
     
-    # Compute statistic on the weighted data set
     estimate = statistic(data, weights)
-    return(estimate)
+    bootstrap_estimates[i] = estimate[[1]]
+    bootstrap_ses[i] = estimate[[2]]
   }
 
-  # Compute estimate on reweighted data. A list of estimates is returned.
-  bootstrap_est_list = purrr::map(.x = 1:B, .f = bootstrap_replicate_f)
-  
-  # Extract estimates from the list of estimates.
-  bootstrap_estimates = purrr::map_dbl(.x = bootstrap_est_list, 1)
-  
-  # Extraxt SEs from the list of estimates.
-  bootstrap_ses = purrr::map_dbl(.x = bootstrap_est_list, 2)
-  
   # Return list with bootstrap replicates and standard errors.
   return(list(
     bootstrap_estimates = bootstrap_estimates,

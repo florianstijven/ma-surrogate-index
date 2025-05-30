@@ -69,17 +69,23 @@ if (regime == "small") {
   # control the surrogacy and comparability assumptions. A non-zero variance
   # implies some violation of these assumptions.
   if (scenario == "vaccine") {
+    # Which SDs correspond to slight and moderate violations of surrogayc and
+    # comparability depend on the scenario.
     sd_beta = list(c(0.15, 0.15), c(0.30, 0.30))
   } else if (scenario == "proof-of-concept") {
     sd_beta = list(c(0.05, 0.05), c(0.1, 0.1))
   }
+  # The elements of sd_beta correspond to "slight" and "moderate" violations.
   SI_violation = c("slight", "moderate")
   
   # Define the number of bootstrap replications depending on the number of
   # independent trials.
   B_N_lookup = tibble(N = c(6, 12, 24), B = c(1e5, 5e4, 2.5e4))
-  bootstrap_types = c("BCa", "BC percentile", "studentized")
   
+  # The types of bootstrap CIs studied in the simulations. 
+  bootstrap_types = c("BCa", "BC percentile")
+  
+  # Indicator of whether Bayesian inferences are included in the simulations.
   bayesian = TRUE
 } else if (regime == "large") {
   if (scenario == "vaccine") {
@@ -100,7 +106,7 @@ if (regime == "small") {
   # Set the number of bootstrap replications to something lower.
   # Define the number of bootstrap replications depending on the number of
   # independent trials.
-  B_N_lookup = tibble(N = N, B = 2e3)
+  B_N_lookup = tibble(N = N, B = 1e3)
   bootstrap_types = "BCa"
   
   bayesian = FALSE
@@ -140,6 +146,11 @@ if (scenario == "proof-of-concept") {
   surrogate_index_estimator = c("surrogate", "superlearner")
 }
 
+# Function factory that returns "statistic" functions which take the MA data and
+# corresponding weights as input, and return the estimated trial-level
+# correlation and SE. This function factory allows for different versions of the
+# correlation etimator: (i) finite-sample estimator adjustment and (ii)
+# truncating the estima
 statistic_function_factory = function(estimator_adjustment, nearest_PD) {
   statistic_f = function(data, weights) {
     moment_estimate = moment_estimator(
@@ -150,16 +161,12 @@ statistic_function_factory = function(estimator_adjustment, nearest_PD) {
       weights = weights,
       nearest_PD = nearest_PD
     )
-    rho = rho_delta_method(
-      coefs = moment_estimate$coefs,
-      vcov = moment_estimate$vcov,
-      method = "t-adjustment",
-      # N is only used for the t-adjustment, it doesn't matter for the estimate
-      # or SE.
-      N = 5
-    )
     
-    return(list(estimate = rho$rho, se = rho$se))
+    coefs_est = moment_estimate$coefs
+    # We're not computing the SE because we're not using the studentized
+    # interval in these simulations. If we were to use the studentized interval,
+    # we would have to modify this part of the code.
+    return(list(estimate = coefs_est[5] / sqrt(coefs_est[4] * coefs_est[3]), se = NA))
   }
   return(statistic_f)
 }
@@ -180,7 +187,7 @@ compute_bayesian_ci = function(data) {
   fit = fit_surrogacy_model(
     data,
     assume_proportional_line = FALSE,
-    iter = 2e4,
+    iter = 1e4,
     warmup = 5e3,
     chains = 1,
     seed = 1
@@ -215,11 +222,7 @@ analyze = function(alpha_hat,
                    N_approximation_MC,
                    n_approximation_MC) {
   # Construct tibble with a cross-tabulation of all analysis options.
-  analysis_options = expand_grid(
-    estimator_adjustment,
-    sandwich_adjustment,
-    nearest_PD
-  )
+  analysis_options = expand_grid(estimator_adjustment, sandwich_adjustment, nearest_PD)
   
   N = length(alpha_hat)
   
@@ -263,7 +266,7 @@ analyze = function(alpha_hat,
       cross_join(tibble(CI_type = bootstraps)) %>%
       rowwise(everything()) %>%
       summarise(
-        bootstrap_ci = list(
+        bootstrap_ci =
           multiplier_bootstrap_ci(
             data = tibble(
               treatment_effect_surr = alpha_hat,
@@ -274,15 +277,15 @@ analyze = function(alpha_hat,
             B = B,
             alpha = 0.05,
             type = CI_type
-          )
-        ),
+          ),
         rho_ci_lower = bootstrap_ci$ci_lower,
         rho_ci_upper = bootstrap_ci$ci_upper,
       ) %>%
       ungroup() %>%
       select(-bootstrap_ci)
     
-    # Join to inferences_tbl 
+    
+    # Join to inferences_tbl
     inferences_tbl = inferences_tbl %>%
       bind_rows(inferences_bootstrap_tbl)
   }
@@ -309,12 +312,22 @@ analyze = function(alpha_hat,
   return(inferences_tbl)
 }
 
-# Function to simulate and analyze one data set. 
-simulate_and_analyze = function(sd_beta, n, N, surrogate_index_estimators,scenario, regime, bootstraps, B, bayesian, N_approximation_MC, n_approximation_MC) {
+# Function to simulate and analyze one data set.
+simulate_and_analyze = function(sd_beta,
+                                n,
+                                N,
+                                surrogate_index_estimators,
+                                scenario,
+                                regime,
+                                bootstraps,
+                                B,
+                                bayesian,
+                                N_approximation_MC,
+                                n_approximation_MC) {
   # Temporarily disable parallelization
   old_plan <- future::plan("sequential")
   on.exit(future::plan(old_plan), add = TRUE) # Restore original plan after execution
-
+  
   # Generate the actual MA data
   meta_analytic_data = generate_meta_analytic_data(
     sd_beta = sd_beta,
@@ -325,7 +338,7 @@ simulate_and_analyze = function(sd_beta, n, N, surrogate_index_estimators,scenar
     regime = regime
   )
   
-
+  
   
   # Compute/approximate the true trial-level correlation with the given
   # estimated surrogate index.
@@ -387,9 +400,7 @@ simulate_and_analyze = function(sd_beta, n, N, surrogate_index_estimators,scenar
       tibble(rho_true = rho_approximated, surrogate_index_estimator = surrogate_index_estimators)
     )
   
-  return(
-    inferences_tbl
-  )
+  return(inferences_tbl)
 }
 
 
@@ -409,26 +420,29 @@ dgm_param_tbl = expand_grid(tibble(sd_beta, SI_violation), N, n) %>%
 # endpoint.
 data_set_indicator = 1:N_MC
 
-simulations_results_tbl <- expand_grid(data_set_indicator, dgm_param_tbl) %>%
-  mutate(
-    inferences_tbl = future_pmap(
-      .l = list(
-        sd_beta = sd_beta,
-        n = n,
-        N = N,
-        surrogate_index_estimators = surrogate_index_estimators,
-        B = B
-      ),
-      .f = simulate_and_analyze,
-      bayesian = bayesian,
-      N_approximation_MC = N_approximation_MC,
-      n_approximation_MC = n_approximation_MC,
-      bootstraps = bootstrap_types,
-      scenario = scenario,
-      regime = regime,
-      .options = furrr_options(seed = TRUE)
-    )
+simulations_results_tbl <- expand_grid(data_set_indicator, dgm_param_tbl)
+
+simulations_results_tbl$inferences_tbl = future_pmap(
+  .l = list(
+    sd_beta = simulations_results_tbl$sd_beta,
+    n = simulations_results_tbl$n,
+    N = simulations_results_tbl$N,
+    surrogate_index_estimators = simulations_results_tbl$surrogate_index_estimators,
+    B = simulations_results_tbl$B
+  ),
+  .f = simulate_and_analyze,
+  bayesian = bayesian,
+  N_approximation_MC = N_approximation_MC,
+  n_approximation_MC = n_approximation_MC,
+  bootstraps = bootstrap_types,
+  scenario = scenario,
+  regime = regime,
+  .options = furrr_options(
+    seed = TRUE,
+    stdout = FALSE,
+    conditions = character()
   )
+)
 
 simulations_results_tbl = simulations_results_tbl %>%
   rowwise(!(c(inferences_tbl, surrogate_index_estimators, sd_beta))) %>%
