@@ -101,7 +101,8 @@ estimand_plot_1 = ma_sim_results %>%
     surrogate_index_estimator != "surrogate",
     setting == "small N, large n",
     CI_type == "sandwich",
-    scenario == "proof-of-concept"
+    scenario == "proof-of-concept",
+    surrogate_index_estimator != "Surrogate"
   ) %>%
   mutate(surrogate_index_estimator = fct_drop(surrogate_index_estimator, only = c("surrogate"))) %>%
   ggplot(aes(x = rho_true, color = surrogate_index_estimator)) +
@@ -110,7 +111,7 @@ estimand_plot_1 = ma_sim_results %>%
     aes(xintercept = rho_true),
     data = ma_sim_results %>%
       filter(
-        surrogate_index_estimator == "surrogate",
+        surrogate_index_estimator == "Surrogate",
         setting == "small N, large n"
       ) %>%
       mutate(rho_true = abs(rho_true)) %>%
@@ -119,7 +120,7 @@ estimand_plot_1 = ma_sim_results %>%
       slice_head(n = 1) %>%
       ungroup()
   ) +
-  scale_x_continuous(lim = c(0.4, 1), name = expr(rho[trial]^{(g[N])}), n.breaks = 4) +
+  scale_x_continuous(lim = c(0.60, 1), name = expr(rho[trial]^{(g[N])}), n.breaks = 4) +
   scale_color_discrete(name = "Surr. Index Estimator", drop = FALSE) +
   facet_grid(SI_violation ~ N_chr, scales = "free")
 
@@ -149,7 +150,7 @@ estimand_plot_2 = ma_sim_results %>%
     aes(xintercept = rho_true),
     data = ma_sim_results %>%
       filter(
-        surrogate_index_estimator == "surrogate",
+        surrogate_index_estimator == "Surrogate",
         setting == "small N, large n"
       ) %>%
       mutate(rho_true = abs(rho_true)) %>%
@@ -158,7 +159,7 @@ estimand_plot_2 = ma_sim_results %>%
       slice_head(n = 1) %>%
       ungroup()
   ) +
-  scale_x_continuous(lim = c(0.80, 1), name = expr(rho[trial]^{(g[N])}), n.breaks = 4) +
+  scale_x_continuous(lim = c(0.60, 1), name = expr(rho[trial]^{(g[N])}), n.breaks = 4) +
   scale_color_discrete(name = "Surr. Index Estimator", drop = FALSE) +
   facet_grid(SI_violation ~ N_chr, scales = "free")
 
@@ -310,7 +311,7 @@ ggsave(
 ## Performance of Inferences ----------------------------------------------
 
 ### Coverage --------------------------------------------------------------
-coverage_limits = c(0.7, 1)
+coverage_limits = c(0.65, 1)
 
 coverage_sandwich = ma_sim_summary %>%
   filter(setting == "small N, large n", CI_type == "sandwich") %>%
@@ -368,20 +369,6 @@ ggsave(
   units = "cm"
 )
 
-ggarrange(
-  coverage_sandwich, coverage_bs_bca, common.legend = TRUE, legend = "bottom", labels = "auto", nrow = 2
-)
-
-ggsave(
-  filename = "coverage-combined.pdf",
-  path = figures_dir,
-  height = double_height,
-  width = double_width,
-  dpi = res,
-  device = "pdf",
-  units = "cm"
-)
-
 
 coverage_bc_percentile = ma_sim_summary %>%
   filter(setting == "small N, large n", CI_type == "BC percentile") %>%
@@ -411,42 +398,13 @@ ggsave(
   units = "cm"
 )
 
-coverage_studentized = ma_sim_summary %>%
-  filter(setting == "small N, large n", CI_type == "studentized") %>%
-  ggplot(aes(
-    x = N,
-    y = coverage,
-    color = surrogate_index_estimator,
-    linetype = `PD correction`
-  )) +
-  geom_point(position = position_dodge(width = 0.1)) +
-  geom_line() +
-  geom_abline(intercept = 0.95, slope = 0) +
-  scale_x_continuous(breaks = c(6, 12, 24)) +
-  scale_y_continuous(name = "Coverage") +
-  coord_cartesian(ylim = coverage_limits) +
-  scale_color_discrete(name = "Surr. Index Estimator") +
-  facet_grid(SI_violation ~ scenario) + 
-  theme(legend.position = "bottom", legend.box = "vertical", legend.spacing.y = unit(0, "cm"))
-
-ggsave(
-  plot = coverage_studentized,
-  filename = "coverage-bootstrap-studentized.pdf",
-  path = figures_dir,
-  height = double_height,
-  width = double_width,
-  dpi = res,
-  device = "pdf",
-  units = "cm"
-)
 
 coverage_bayesian = ma_sim_summary %>%
   filter(setting == "small N, large n", CI_type == "Bayesian") %>%
   ggplot(aes(
     x = N,
     y = coverage,
-    color = surrogate_index_estimator,
-    linetype = `PD correction`
+    color = surrogate_index_estimator
   )) +
   geom_point(position = position_dodge(width = 0.1)) +
   geom_line() +
@@ -459,10 +417,91 @@ coverage_bayesian = ma_sim_summary %>%
 
 ggsave(
   plot = coverage_bayesian,
-  filename = "coverage-bootstrap-bayesian.pdf",
+  filename = "coverage-bayesian.pdf",
   path = figures_dir,
   height = double_height,
   width = double_width,
+  dpi = res,
+  device = "pdf",
+  units = "cm"
+)
+
+
+ggarrange(
+  coverage_sandwich, coverage_bs_bca, coverage_bayesian, common.legend = TRUE, legend = "bottom", labels = "auto", nrow = 3
+)
+
+ggsave(
+  filename = "coverage-combined.pdf",
+  path = figures_dir,
+  height = double_height * (4 / 3),
+  width = double_width,
+  dpi = res,
+  device = "pdf",
+  units = "cm"
+)
+
+coverage_large_N_bca = ma_sim_summary %>%
+  filter(setting == "large N, small n", CI_type == "BCa", nearest_PD == FALSE) %>%
+  ggplot(aes(
+    x = N,
+    y = coverage,
+    color = as.factor(n)
+  )) +
+  geom_point(position = position_dodge(width = 0.1)) +
+  geom_line() +
+  geom_abline(intercept = 0.95, slope = 0) +
+  scale_y_continuous(name = "Coverage", limits = c(0, 1)) +
+  scale_x_continuous(breaks = c(100, 500, 1000, 2000, 5000)) +
+  scale_color_discrete(name = "n") +
+  theme(legend.position = "bottom", legend.box = "vertical", legend.spacing.y = unit(0, "cm"))
+
+ggsave(
+  plot = coverage_large_N_bca,
+  filename = "coverage-bootstrap-bca-large-N.pdf",
+  path = figures_dir,
+  height = single_height,
+  width = single_width,
+  dpi = res,
+  device = "pdf",
+  units = "cm"
+)
+
+coverage_large_N_sandwich = ma_sim_summary %>%
+  filter(setting == "large N, small n", CI_type == "sandwich", nearest_PD == FALSE) %>%
+  ggplot(aes(
+    x = N,
+    y = coverage,
+    color = as.factor(n)
+  )) +
+  geom_point(position = position_dodge(width = 0.1)) +
+  geom_line() +
+  geom_abline(intercept = 0.95, slope = 0) +
+  scale_y_continuous(name = "Coverage", limits = 0:1) +
+  scale_x_continuous(breaks = c(100, 500, 1000, 2000, 5000)) +
+  scale_color_discrete(name = "n") +
+  theme(legend.position = "bottom", legend.box = "vertical", legend.spacing.y = unit(0, "cm"))
+
+ggsave(
+  plot = coverage_large_N_sandwich,
+  filename = "coverage-sandwich-large-N.pdf",
+  path = figures_dir,
+  height = single_height,
+  width = single_width,
+  dpi = res,
+  device = "pdf",
+  units = "cm"
+)
+
+ggarrange(
+  coverage_large_N_sandwich, coverage_large_N_bca, common.legend = TRUE, legend = "bottom", labels = "auto", nrow = 2
+)
+
+ggsave(
+  filename = "coverage-combined-large-N.pdf",
+  path = figures_dir,
+  height =double_height,
+  width =double_width,
   dpi = res,
   device = "pdf",
   units = "cm"

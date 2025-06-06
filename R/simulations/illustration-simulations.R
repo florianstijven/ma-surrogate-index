@@ -8,7 +8,7 @@ source("R/helper-functions/train-clinical-prediction-models.R")
 figures_dir = "results/figures/simulations/"
 tables_dir = "results/tables/simulations/"
 
-set.seed(1)
+set.seed(2)
 
 # Number of Independent trials
 N = 6
@@ -18,7 +18,7 @@ simulation_parameters_tbl = tibble(
   N = N,
   n = c(2e3, 2e3, 5e3, 5e3),
   scenario = c("proof-of-concept", "proof-of-concept", "vaccine", "vaccine"),
-  sd_beta = list(c(0.05, 0.05), c(0.1, 0.1), c(0.125, 0.125), c(0.25, 0.25)),
+  sd_beta = list(c(0.05, 0.05), c(0.1, 0.1), c(0.15, 0.15), c(0.30, 0.30)),
   violations = c("slight", "moderate", "slight", "moderate")
 )
 
