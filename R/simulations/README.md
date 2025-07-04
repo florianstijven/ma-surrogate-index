@@ -4,6 +4,7 @@ This folder contains the R scripts used for conducting, illustrating, and
 analyzing the simulations. The following R scripts are present:
 
 ### `simulations.R`
+
 This script is used for actually conducting the simulation studies. It takes the
 following command-line arguments in the presented order:
 
