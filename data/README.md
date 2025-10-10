@@ -70,7 +70,12 @@ for the BMI categories defined as follows:
 the neutralizing titer to the circulating strains. The matched titer is
 `pseudoneutid50_adjusted`.
 * `pseudoneutid50_adjusted`. This is the adjusted neutralizing titer. See manuscript
-for details on how this is computed. 
+for details on how this is computed.
+
+# Others
+
+The `VariantNeutralizationScores.docx` file contains details about the GMT estimates that 
+were used for adjusting neutralization titers against the circulating variants. 
 
 
 
