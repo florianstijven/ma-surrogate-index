@@ -64,3 +64,4 @@ results/*/*/*/*.csv
 *.txt
 *.out
 *.rds
+*.png

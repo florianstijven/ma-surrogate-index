@@ -3,6 +3,8 @@ library(tidyverse)
 library(ggridges)
 library(RColorBrewer)
 library(scales)
+library(patchwork)
+library(ggpp)
 
 # Extract arguments for analysis.
 args = commandArgs(trailingOnly = TRUE)
@@ -124,7 +126,7 @@ save_inferences_table = function(CI_type, data_type) {
   }
   
   outfile = paste0(tables_dir, "/table-inferences-", CI_type, "-", data_type, ".csv")
-
+  
   table_temp %>%
     filter(analysis_set == "naive_only") %>%
     rowwise(everything()) %>%
@@ -139,7 +141,7 @@ save_inferences_table("BCa", "real-data")
 save_inferences_table("BCa", "pseudo-data")
 save_inferences_table("sandwich", "real-data")
 save_inferences_table("sandwich", "pseudo-data")
- 
+
 
 
 # Plots -----------------------------------------------------------------
@@ -215,7 +217,7 @@ transform_VE = new_transform(
 )
 
 # Summarize the estimated trial-level treatment effects in meta-analytic plots.
-ma_trt_effects_tbl %>% 
+plot_ma_standard = ma_trt_effects_tbl %>% 
   filter(method == "untransformed surrogate", trial %in% trials_naive_only) %>%
   ggplot(aes(x = trt_effect_surrogate_index_est, y = 1 - exp(log_RR_est), color = trial_fct, shape = trial_fct)) +
   geom_point() +
@@ -239,6 +241,8 @@ ma_trt_effects_tbl %>%
   xlab("Estimated Treatment Effect on Antibody Marker") +
   ylab("Estimated VE") +
   theme(legend.position = "bottom", legend.title = element_blank())
+
+plot_ma_standard
 
 ggsave(
   filename = "ma-standard-naive-only.pdf",
@@ -304,6 +308,7 @@ ma_plot_helper = function(weighting, analysis_set, VE_scale, include_risk_score)
       scale_y_continuous(transform = transform_VE, breaks = c(0, 0.5, 0.75, 0.90, 0.95)) +
       scale_x_continuous(transform = transform_VE, breaks = c(0, 0.5, 0.75, 0.90, 0.95))
   }
+  
   
   weighting_chr = ifelse(weighting == "normalized", "normalized", "unnormalized")
   VE_scale_chr = ifelse(VE_scale, "ve-scale", "transformed-scale")
@@ -394,6 +399,163 @@ ggsave(
   units = "cm"
 )
 
+### Plot for Poster ------------------------------------------------------
+
+# Use the data set with the trial-level correlation results to produce a text
+# variable with the estimated correlation and 95% CI to be added to the MA plots.
+surrogate_results_text_for_plots = surrogate_results_tbl %>%
+  # If we're working with the untransformed surrogate, the estimates and CI
+  # limits should be multiplied with -1 because the treatment effect on the
+  # surrogate is defined as log(RR) and higher values of the surrogate are
+  # better.
+  mutate(
+    rho_trial = ifelse(method == "untransformed surrogate", -1 * rho_trial, rho_trial),
+    CI_lower_bs_new = ifelse(method == "untransformed surrogate", -1 * CI_upper_bs, CI_lower_bs),
+    CI_upper_bs_new = ifelse(method == "untransformed surrogate", -1 * CI_lower_bs, CI_upper_bs)
+  ) %>%
+  rowwise(everything()) %>%
+  summarise(rho_inference = list({
+    bquote(rho[trial] == .(round(rho_trial, 2)) *  ~ "(" * .(round(CI_lower_bs_new, 2)) * ", " * .(round(CI_upper_bs_new, 2)) * ")")
+  })) %>%
+  ungroup() %>%
+  filter(scenario == "real data") %>%
+  select(surrogate,
+         method,
+         rho_inference,
+         analysis_set,
+         weighting,
+         include_risk_score) %>%
+  mutate(
+    surrogate_name = case_when(
+      surrogate == "bindSpike" ~ "IgG Spike",
+      surrogate == "pseudoneutid50" ~ "nAb ID50",
+      surrogate == "pseudoneutid50_adjusted" ~ "adjusted nAb ID50"
+    )
+  ) %>%
+  mutate(surrogate_name = factor(
+    surrogate_name,
+    levels = c("IgG Spike", "nAb ID50", "adjusted nAb ID50"),
+    ordered = TRUE
+  ))
+
+# Extra plot that contains the MA plot for the untransformed surrogate and the
+# MA plot for the surrogate index based on SuperLearner. This plot will be used
+# in a poster, so the background is transparant.
+theme_transparent <- theme(
+  panel.background        = element_rect(fill = "transparent", colour = NA),
+  plot.background         = element_rect(fill = "transparent", colour = NA),
+  legend.background       = element_rect(fill = "transparent", colour = NA),
+  legend.box.background   = element_rect(fill = "transparent", colour = NA),
+  strip.background        = element_rect(fill = "transparent", colour = NA)
+)
+
+plot_ma_sl = ma_trt_effects_tbl %>% filter(method != "untransformed surrogate", 
+                                           analysis_set == "naive_only", 
+                                           trial_fct %in% trials_naive_only_fct,
+                                           weighting == "unnormalized", 
+                                           include_risk_score == FALSE,
+                                           method == "sl") %>%
+  ggplot(aes(
+    x = 1 - exp(trt_effect_surrogate_index_est),
+    y = 1 - exp(log_RR_est),
+    color = trial_fct,
+    shape = trial_fct
+  )) +
+  geom_point() +
+  geom_errorbar(aes(
+    ymin = 1 - exp(log_RR_est - 1.96 * log_RR_est_se),
+    ymax = 1 - exp(log_RR_est + 1.96 * log_RR_est_se)
+  ), width = 0.01) +
+  geom_errorbarh(aes(
+    xmin = 1 - exp(
+      trt_effect_surrogate_index_est - 1.96 * trt_effect_surrogate_index_est_se
+    ),
+    xmax = 1 - exp(
+      trt_effect_surrogate_index_est + 1.96 * trt_effect_surrogate_index_est_se
+    )
+  ), height = 0.01) +
+  geom_abline(intercept = 0, slope = 1) +
+  scale_color_manual(values = my_palette, limits = trials_naive_only_fct) +
+  scale_shape_manual(values = my_shapes, limits = trials_naive_only_fct) +
+  coord_cartesian(ylim = c(-0.2, 0.95)) +
+  facet_grid(. ~ surrogate_name) +
+  xlab("Estimated VE on Estimated Surrogate Index") +
+  ylab("Estimated VE") +
+  theme(legend.position = "bottom", legend.title = element_blank(),
+        panel.background = element_rect(fill = "transparent", colour = NA),
+        plot.background  = element_rect(fill = "transparent", colour = NA)) +
+  scale_y_continuous(transform = transform_VE, breaks = c(0, 0.5, 0.75, 0.90, 0.95)) +
+  scale_x_continuous(transform = transform_VE, breaks = c(0, 0.5, 0.75, 0.90, 0.95)) +
+  ggtitle("Meta-Analysis with SuperLearner") +
+  theme_transparent +
+  # add text with estimated trial-level correlation and 95% CI
+  geom_text_npc(
+    data = surrogate_results_text_for_plots %>%
+      filter(
+        method == "sl",
+        analysis_set == "naive_only",
+        weighting == "unnormalized",
+        include_risk_score == FALSE
+      ),
+    aes(
+      npcx = 0.02,
+      npcy = 0.95,
+      label = rho_inference
+    ),
+    inherit.aes = FALSE,
+    color = "black",
+    size = 2.5,
+    parse = TRUE
+  )
+
+
+
+# Add two plots together vertically.
+
+
+
+plot_ma_standard = plot_ma_standard +
+  facet_grid(cols = vars(surrogate_name), scales = "free_x") +
+  theme_transparent +
+  ggtitle("Canonical Meta-Analysis") +
+  # add text with estimated trial-level correlation and 95% CI
+  geom_text_npc(
+    data = surrogate_results_text_for_plots %>%
+      filter(
+        method == "untransformed surrogate",
+        analysis_set == "naive_only"
+      ),
+    aes(
+      npcx = 0.02,
+      npcy = 0.95,
+      label = rho_inference
+    ),
+    inherit.aes = FALSE,
+    color = "black",
+    size = 2.5,
+    parse = TRUE
+  )
+combined <- (plot_ma_standard / plot_ma_sl) +
+  plot_layout(guides = "collect") &
+  theme(legend.position = "right", 
+        legend.text.position = "top",
+        legend.text = element_text(size = 6)) +
+  theme(plot.background = element_rect(scales::alpha("white", 0.5), colour = NA))
+
+# Save the picture in high resolution with transparent background. We need to
+# save as png to ensure that the background is truly transparent when using this
+# picture in latex etc.
+ggsave(
+  filename = "ma-standard-and-sl-naive-only.png",
+  plot = combined,
+  path = figures_dir,
+  height = double_height * 0.80,
+  width = double_width * 1.1,
+  dpi = res*3,
+  device = "png",
+  units = "cm",
+  bg = "transparent"
+)
 
 
 ## Non-Parametric MA ----------------------------------------------------
@@ -423,8 +585,8 @@ conf_int_plot_f = function(include_risk_score, type, res_var_prop, scenario) {
         CI_upper = ifelse(method == "untransformed surrogate", -1 * CI_upper, CI_upper)
       )
   }
-
-
+  
+  
   conf_int_plot = plotting_data %>%
     ggplot(aes(x = surrogate_name, color = `Estimated Surrogate Index`)) +
     geom_point(aes(y = rho_trial), position = position_dodge(width = 0.5)) +
@@ -507,7 +669,7 @@ posterior_plots_f = function(assume_proportional_line, include_risk_score, orien
   assume_proportional_line_chr = ifelse(assume_proportional_line, "prop-line", "default")
   risk_score_chr = ifelse(include_risk_score, "w-riskscore", "wo-riskscore")
   outfile = paste0("/posterior-distributions-", assume_proportional_line_chr, "-", risk_score_chr, "-", orientation, ".pdf")
-
+  
   ggsave(
     outfile,
     path = figures_dir,
@@ -546,4 +708,3 @@ rho_long_tbl %>%
     quantile_97.5 = quantile(rho, 0.975)
   ) %>%
   write.csv(paste0(tables_dir, "/posterior-summaries.csv"))
-
