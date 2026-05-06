@@ -51,6 +51,7 @@ rsconnect/
 
 # Data files
 data/*.csv
+*.sas7bdat
 
 # Figures and html files are not tracked
 *.pdf
