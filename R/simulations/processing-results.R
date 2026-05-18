@@ -45,7 +45,7 @@ ma_sim_results = bind_rows(
 ma_sim_results = ma_sim_results %>%
   mutate(
     surrogate_index_estimator = as.factor(surrogate_index_estimator) %>%
-      fct_recode(SuperLearner = "superlearner", "Linear Model" = "lm", "Surrogate" = "surrogate"),
+      fct_recode(SuperLearner = "superlearner", "Linear Model" = "lm", "Surrogate S" = "surrogate"),
     SI_violation = as.factor(SI_violation),
     estimator_adjustment = as.factor(estimator_adjustment),
     sandwich_adjustment = as.factor(sandwich_adjustment),
@@ -98,11 +98,10 @@ ma_sim_summary = ma_sim_results %>%
 ## Distribution of the estimands ------------------------------------------
 estimand_plot_1 = ma_sim_results %>%
   filter(
-    surrogate_index_estimator != "surrogate",
     setting == "small N, large n",
     CI_type == "sandwich",
     scenario == "proof-of-concept",
-    surrogate_index_estimator != "Surrogate"
+    surrogate_index_estimator != "Surrogate S"
   ) %>%
   mutate(surrogate_index_estimator = fct_drop(surrogate_index_estimator, only = c("surrogate"))) %>%
   ggplot(aes(x = rho_true, color = surrogate_index_estimator)) +

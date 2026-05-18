@@ -750,7 +750,7 @@ roc_ggplots = roc_tbl %>%
         naive_only = "all trials, naive subjects only",
         mixed = "all trials"
       )
-      subtitle = paste0("Surrogate index for ",
+      subtitle = paste0("Based on ",
                         surrogate_chr,
                         " using ",
                         analysis_set_chr)
