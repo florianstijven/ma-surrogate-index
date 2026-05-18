@@ -20,7 +20,7 @@ if (parallelly::supportsMulticore()) {
 
 # Data Preparation --------------------------------------------------------
 
-full_data_new_endpoints_long = readRDS(file = "R/data/intermediate-objects/full_data_tbl_long.rds")
+full_data_new_endpoints_long = readRDS(file = "additional-application/R/data/intermediate-objects/full_data_tbl_long.rds")
 
 endpoints = c("CORON", "CVMB_DTH", "CVMB", "CVMM")
 
