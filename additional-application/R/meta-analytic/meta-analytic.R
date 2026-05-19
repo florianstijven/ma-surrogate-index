@@ -11,10 +11,10 @@ pred_time = 2.5 * 365.25
 
 # Data Preparation --------------------------------------------------------
 
-full_data_tbl_wide = readRDS("R/data/intermediate-objects/full_data_tbl_wide.rds") %>%
+full_data_tbl_wide = readRDS("additional-application/R/data/intermediate-objects/full_data_tbl_wide.rds") %>%
   rename(clustering_variable = any_of(clustering_variable_chr))
-landmark_predictions_tbl = readRDS(file = "R/meta-analytic/intermediate-objects/landmark_predictions_tbl.rds")
-full_data_tbl_long = readRDS("R/data/intermediate-objects/full_data_tbl_long.rds") %>%
+landmark_predictions_tbl = readRDS(file = "additional-application/R/meta-analytic/intermediate-objects/landmark_predictions_tbl.rds")
+full_data_tbl_long = readRDS("additional-application/R/data/intermediate-objects/full_data_tbl_long.rds") %>%
   rename(clustering_variable = any_of(clustering_variable_chr))
 
 endpoints = c("CORON", "CVMB_DTH", "CVMB", "CVMM")

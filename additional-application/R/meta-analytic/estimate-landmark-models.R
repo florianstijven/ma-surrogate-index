@@ -198,27 +198,58 @@ landmark_cox_models_tbl = landmark_cox_models_tbl %>%
 ## SuperLearner Models ----------------------------------------------------
 
 # For Superlearner prediction models, we will use the event status at month 36
-# as outcome. To deal with the censoring, we're using only the observations with
-# an observed event status at month 36. These observations will be weighted with
-# inverse probability of censoring weights.
+# as outcome, denoted by Y. The SuperLearner estimates the following regression
+# function: E[Y | X, S, T > landmark_time], where X are the baseline covariates,
+# S are the surrogates, and T is the time to event. We have to deal with two
+# types of censoring: (i) patients that are censored before the landmark time,
+# and (ii) patients that are censored after the landmark time but before month
+# 36. 
+
+# For the first type of censoring, we simply exclude these patients from the
+# analysis, as they do not contribute to the estimation of the regression
+# function. This is valid under the assumption that the censoring is independent
+# of the event time conditionally on the covariates and surrogates included in
+# the model.
+
+# For the second type of censoring, we can include these patients in the
+# analysis, but we have to account for the fact that their event status at month
+# 36 is not observed. We will do this by using inverse probability of censoring
+# weights (IPCW). Let D be the censoring status at month 36 (1 if censored, 0 if
+# event observed). The IPCW for a patient is defined as 1 / P(D = 0 | X, S, T >
+# t). In other words, the IPCW is the inverse of the probability that a patient
+# is not censored at month 36 given that they are still under observation at the
+# time t. We further assume that P(D = 0 | X, S, T > t) = P(D = 0 | T > t). The
+# latter can be estimated using the Kaplan-Meier estimator for the censoring
+# distribution among patients that are still under observation at the landmark
+# time, under the assumption that the censoring is independent of the event
+# time.
+
 time_cumulative_incidence = 2.5 * 365.25
 
 # Function to estimate inverse probability of censoring weights. It takes a
-# vector of event times and event indicators (1 if event, 0 if censored) and
-# returns the IPCW weights.
-ipcw_estimator  = function(time_to_event, event) {
-  survfit_object = survfit(Surv(time_to_event, event) ~ 1)
+# vector of event times and event indicators (1 if event, 0 if censored), and
+# the landmark time. It returns the IPCWs for each subject.
+ipcw_estimator  = function(time_to_event, event, landmark_time) {
+  # We only use patients that are still under observation at the landmark time for
+  # estimating the censoring distribution. We further set the IPCW to zero for
+  # patients that are censored before the landmark time, as they do not contribute
+  # to the estimation of the regression function.
+  included = time_to_event > landmark_time
   
-  time = unique(pmin(time_to_event, time_cumulative_incidence))
+  time_to_event_landmark = time_to_event[included] - landmark_time
+  event_landmark = event[included]
   
-  surv_probs_tbl = summary(survfit_object, times = time)[c("surv", "time")] %>%
-    as_tibble()
+  survfit_object = survfit(Surv(time_to_event_landmark, event_landmark) ~ 1)
   
-  censoring_probs = tibble(time = pmin(time_to_event, time_cumulative_incidence))  %>%
-    left_join(surv_probs_tbl) %>%
-    pull(surv)
+  censoring_probs = summary(survfit_object, times = time_cumulative_incidence - landmark)[c("surv", "time")] %>%
+    as_tibble() %>%
+    pull(surv) %>%
+    rep(length(time_to_event_landmark))
   
-  return(1 / censoring_probs)
+  weights = rep(NA, length(time_to_event))
+  weights[included] = censoring_probs
+  
+  return(weights)
 }
 
 # Compute the IPCW for each patient. These weights are based on the KM estimate
@@ -234,7 +265,7 @@ full_data_new_endpoints_landmark_tbl = full_data_new_endpoints_landmark_tbl %>%
   ) %>%
   ungroup()
 
-# Predict the infection outcome using a Superlearner with a modified
+# Predict the infection outcome using a SuperLearner with a modified
 # leave-one-trial-out CV procedure.
 sl_fitter = function(predictors_chr,
                      endpoint,
@@ -287,7 +318,7 @@ sl_fitter = function(predictors_chr,
       "ipcw",
       covariates
     )))
-  
+  browser()
   # Check for missing values.
   data_temp %>%
     filter(!if_all(all_of(covariates), ~ !is.na(.))) %>%
