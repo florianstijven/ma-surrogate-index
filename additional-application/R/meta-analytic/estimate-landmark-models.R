@@ -10,6 +10,10 @@ library(furrr)
 library(sl3)
 library(origami)
 library(splines)
+library(dbarts)
+library(glmnet)
+library(mgcv)
+
 
 # Set up parallel computing
 if (parallelly::supportsMulticore()) {
@@ -235,19 +239,25 @@ ipcw_estimator  = function(time_to_event, event, landmark_time) {
   # patients that are censored before the landmark time, as they do not contribute
   # to the estimation of the regression function.
   included = time_to_event > landmark_time
+  included[is.na(included)] = FALSE
   
   time_to_event_landmark = time_to_event[included] - landmark_time
   event_landmark = event[included]
   
   survfit_object = survfit(Surv(time_to_event_landmark, event_landmark) ~ 1)
   
-  censoring_probs = summary(survfit_object, times = time_cumulative_incidence - landmark_time)[c("surv", "time")] %>%
-    as_tibble() %>%
-    pull(surv) %>%
-    rep(length(time_to_event_landmark))
+  time = unique(pmin(time_to_event_landmark, time_cumulative_incidence - landmark_time))
+  surv_probs_tbl = summary(survfit_object, times =  time)[c("surv", "time")] %>%
+    as_tibble()
+  
+  censoring_probs = tibble(time = pmin(time_to_event_landmark, time_cumulative_incidence - landmark_time))  %>%
+    left_join(surv_probs_tbl) %>%
+    pull(surv)
   
   weights = rep(NA, length(time_to_event))
-  weights[included] = censoring_probs
+  weights[included] = 1 / censoring_probs
+  
+  if (any(weights == Inf | weights == 0, na.rm = TRUE)) stop("invalid weights computed")
   
   return(weights)
 }
@@ -318,7 +328,7 @@ sl_fitter = function(predictors_chr,
       "ipcw",
       covariates
     )))
-  browser()
+  
   # Check for missing values.
   data_temp %>%
     filter(!if_all(all_of(covariates), ~ !is.na(.))) %>%
@@ -329,14 +339,14 @@ sl_fitter = function(predictors_chr,
   lrn_glmnet = Lrnr_glmnet$new()
   lrn_gam = Lrnr_gam$new()
   lrn_dbarts = Lrnr_dbarts$new()
-  lrn_xgboost = Lrnr_xgboost$new()
+  # lrn_xgboost = Lrnr_xgboost$new()
   
   
   stack = Stack$new(
     lrn_glmnet,
     lrn_gam,
-    lrn_dbarts,
-    lrn_xgboost
+    lrn_dbarts
+    # lrn_xgboost
   )
   
   task = make_sl3_Task(
