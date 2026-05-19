@@ -34,7 +34,7 @@ endpoints = c("CORON", "CVMB_DTH", "CVMB", "CVMM")
 
 # For patients that remain under observations up to a certain time point, we
 # estimate a landmark prediction models. This model is based on the patients at
-# under observation at X months. We further use penalized cox models. 
+# under observation at X months. We further use penalized cox models.
 landmark_times = 365.25 * c(1 / 12, 2 / 12, 3 / 12, 4 / 12, 5 / 12, 0.5, 1, 1.5, 2)
 
 # Function to estimate landmark model.
@@ -100,8 +100,7 @@ landmark_cox_model = function(data, type = "full") {
 
 full_data_new_endpoints_landmark_tbl = full_data_new_endpoints_long %>%
   filter(FALSE) %>%
-  mutate(timing = numeric(), 
-         landmark_time = numeric()) %>%
+  mutate(timing = numeric(), landmark_time = numeric()) %>%
   select(-VISNAM1A, days, months)
 for (landmark_time in landmark_times) {
   # Given the landmark time, find the times of the three most recent measurements.
@@ -112,7 +111,7 @@ for (landmark_time in landmark_times) {
   # Only post-randomization time points should be included. The baseline
   # measurements of blood pressure and sitting pulse will be added later on.
   latest_days = latest_days[latest_days > 0]
-  # Construct the correct data set for the given landmark time. 
+  # Construct the correct data set for the given landmark time.
   full_data_new_endpoints_landmark_tbl = bind_rows(
     full_data_new_endpoints_landmark_tbl,
     full_data_new_endpoints_long %>%
@@ -121,8 +120,10 @@ for (landmark_time in landmark_times) {
       arrange(-days, .by_group = TRUE) %>%
       mutate(timing = row_number()) %>%
       select(-days, -months, -VISNAM1A) %>%
-      pivot_wider(values_from = c(SBPAVG3N, DBPAVG3N, STNPLS1N),
-                  names_from = timing) %>%
+      pivot_wider(
+        values_from = c(SBPAVG3N, DBPAVG3N, STNPLS1N),
+        names_from = timing
+      ) %>%
       mutate(landmark_time = landmark_time)
   )
 }
@@ -152,13 +153,9 @@ full_data_new_endpoints_landmark_tbl = full_data_new_endpoints_landmark_tbl %>%
 
 
 
-# For each time-to-event endpoint, 
-landmark_cox_models_tbl = expand_grid(
-  landmark_time_model = landmark_times,
-  endpoint_model = endpoints
-) %>%
-  group_by(landmark_time_model,
-           endpoint_model) %>%
+# For each time-to-event endpoint,
+landmark_cox_models_tbl = expand_grid(landmark_time_model = landmark_times, endpoint_model = endpoints) %>%
+  group_by(landmark_time_model, endpoint_model) %>%
   summarize(
     cox_fit = list(
       landmark_cox_model(
@@ -186,17 +183,16 @@ landmark_cox_models_tbl = expand_grid(
       )
     )
   ) %>%
-  rename(
-    landmark_time = landmark_time_model,
-    endpoint = endpoint_model
-  )
+  rename(landmark_time = landmark_time_model, endpoint = endpoint_model)
 
 
 # Restructure to have one model per row.
 landmark_cox_models_tbl = landmark_cox_models_tbl %>%
-  pivot_longer(cols = c("cox_fit", "cox_fit_base"), 
-               values_to = "cox_model", 
-               names_to = "model_type") %>%
+  pivot_longer(
+    cols = c("cox_fit", "cox_fit_base"),
+    values_to = "cox_model",
+    names_to = "model_type"
+  ) %>%
   mutate(model_type = ifelse(model_type == "cox_fit", "full", "base"))
 
 ## SuperLearner Models ----------------------------------------------------
@@ -207,7 +203,7 @@ landmark_cox_models_tbl = landmark_cox_models_tbl %>%
 # S are the surrogates, and T is the time to event. We have to deal with two
 # types of censoring: (i) patients that are censored before the landmark time,
 # and (ii) patients that are censored after the landmark time but before month
-# 36. 
+# 36.
 
 # For the first type of censoring, we simply exclude these patients from the
 # analysis, as they do not contribute to the estimation of the regression
@@ -246,25 +242,33 @@ ipcw_estimator  = function(time_to_event, event, landmark_time) {
   
   survfit_object = survfit(Surv(time_to_event_landmark, event_landmark) ~ 1)
   
-  time = unique(pmin(time_to_event_landmark, time_cumulative_incidence - landmark_time))
+  time = unique(pmin(
+    time_to_event_landmark,
+    time_cumulative_incidence - landmark_time
+  ))
   surv_probs_tbl = summary(survfit_object, times =  time)[c("surv", "time")] %>%
     as_tibble()
   
-  censoring_probs = tibble(time = pmin(time_to_event_landmark, time_cumulative_incidence - landmark_time))  %>%
+  censoring_probs = tibble(time = pmin(
+    time_to_event_landmark,
+    time_cumulative_incidence - landmark_time
+  ))  %>%
     left_join(surv_probs_tbl) %>%
     pull(surv)
   
   weights = rep(NA, length(time_to_event))
   weights[included] = 1 / censoring_probs
   
-  if (any(weights == Inf | weights == 0, na.rm = TRUE)) stop("invalid weights computed")
+  if (any(weights == Inf |
+          weights == 0, na.rm = TRUE))
+    stop("invalid weights computed")
   
   return(weights)
 }
 
 # Compute the IPCW for each patient. These weights are based on the KM estimate
 # by country and treatment arm. We immediately also do this for each of the new
-# composite endpoints separately to take into account the possibility that 
+# composite endpoints separately to take into account the possibility that
 # the censoring time is not the same across all endpoints.
 full_data_new_endpoints_landmark_tbl = full_data_new_endpoints_landmark_tbl %>%
   group_by(COU1A, TRTREG1C, endpoint, landmark_time) %>%
@@ -277,9 +281,7 @@ full_data_new_endpoints_landmark_tbl = full_data_new_endpoints_landmark_tbl %>%
 
 # Predict the infection outcome using a SuperLearner with a modified
 # leave-one-trial-out CV procedure.
-sl_fitter = function(predictors_chr,
-                     endpoint,
-                     landmark) {
+sl_fitter = function(predictors_chr, endpoint, landmark) {
   # Define the covariates that will be included as predictors.
   covariates = c(
     "PCI_B",
@@ -323,10 +325,7 @@ sl_fitter = function(predictors_chr,
     filter(!(time < time_cumulative_incidence & censored == 1)) %>%
     # keep only variables needed further on.
     select(any_of(c(
-      "COU1A",
-      "event_status",
-      "ipcw",
-      covariates
+      "COU1A", "event_status", "ipcw", covariates
     )))
   
   # Check for missing values.
@@ -394,13 +393,17 @@ surrogate_2 = c("SBPAVG3N_1",
                 "STNPLS1N_1",
                 "STNPLS1N_2")
 
-sl_models_tbl = expand_grid(landmark_time_model = landmark_times[-1],
-                            endpoint_model = endpoints,
-                            surrogates = list(surrogate_1)) %>%
+sl_models_tbl = expand_grid(
+  landmark_time_model = landmark_times[-1],
+  endpoint_model = endpoints,
+  surrogates = list(surrogate_1)
+) %>%
   bind_rows(
-    expand_grid(landmark_time_model = landmark_times[1],
-                endpoint_model = endpoints,
-                surrogates = list(surrogate_2))
+    expand_grid(
+      landmark_time_model = landmark_times[1],
+      endpoint_model = endpoints,
+      surrogates = list(surrogate_2)
+    )
   ) %>%
   mutate(fitted_model = future_pmap(
     .l = list(
@@ -420,9 +423,5 @@ saveRDS(full_data_new_endpoints_landmark_tbl, file =
           "R/meta-analytic/intermediate-objects/full_data_new_endpoints_landmark_tbl.rds")
 saveRDS(landmark_cox_models_tbl, file =
           "R/meta-analytic/intermediate-objects/landmark_cox_models_tbl.rds")
-saveRDS(
-  sl_models_tbl,
-  file = paste0(
-    "R/meta-analytic/intermediate-objects/sl_models_tbl.rds"
-  )
-)
+saveRDS(sl_models_tbl,
+        file = paste0("R/meta-analytic/intermediate-objects/sl_models_tbl.rds"))

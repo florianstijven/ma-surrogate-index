@@ -4,12 +4,12 @@
 library(tidyverse)
 library(scales)
 library(splines)
-library(WeightedROC)
-library(mgcv)
+# library(WeightedROC)
+# library(mgcv)
 library(future)
 library(furrr)
-library(survival)
-library(RColorBrewer)
+# library(survival)
+# library(RColorBrewer)
 
 # Set up parallel computing
 if (parallelly::supportsMulticore()) {
@@ -45,6 +45,18 @@ ma_trt_effects_tbl = ma_trt_effects_tbl %>%
   rename(treatment_effect_surr = "trt_effect_surrogate_index_est",
          treatment_effect_clin = "trt_effect_clinical_est",
          covariance_matrix = "vcov")
+
+# Duplicate original data where the vcov matrices are divided by 2, to get
+# results that better illustrate the methods.
+ma_trt_effects_tbl = bind_rows(
+  ma_trt_effects_tbl %>%
+    mutate(vcov_multiplier = 1),
+  ma_trt_effects_tbl %>%
+    mutate(
+      covariance_matrix = purrr::map(covariance_matrix, ~ .x / 2),
+      vcov_multiplier = 0.5
+    )
+)
   
 
 # Formal Meta-Analysis -----------------------------------------------------
@@ -116,7 +128,7 @@ statistic_f_residual_var_prop = function(data, weights) {
 # Estimate the surrogacy parameters on each data set of trial-level treatment
 # effect estimates.
 surrogate_results_tbl = ma_trt_effects_tbl %>%
-  group_by(landmark_time, endpoint, method) %>%
+  group_by(landmark_time, endpoint, method, vcov_multiplier) %>%
   summarise(data_tbl = list(pick(everything())), N = nrow(data_tbl[[1]])) %>%
   ungroup() %>%
   mutate(
