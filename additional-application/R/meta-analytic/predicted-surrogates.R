@@ -69,7 +69,6 @@ landmark_predictions_tbl = full_data_landmark_tbl %>%
            censored == 1)
 
 
-
 # Saving Results -----------------------------------------------------------
 
 saveRDS(landmark_predictions_tbl,
