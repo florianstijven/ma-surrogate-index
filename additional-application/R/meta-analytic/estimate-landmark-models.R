@@ -241,7 +241,7 @@ ipcw_estimator  = function(time_to_event, event, landmark_time) {
   
   survfit_object = survfit(Surv(time_to_event_landmark, event_landmark) ~ 1)
   
-  censoring_probs = summary(survfit_object, times = time_cumulative_incidence - landmark)[c("surv", "time")] %>%
+  censoring_probs = summary(survfit_object, times = time_cumulative_incidence - landmark_time)[c("surv", "time")] %>%
     as_tibble() %>%
     pull(surv) %>%
     rep(length(time_to_event_landmark))
@@ -257,9 +257,9 @@ ipcw_estimator  = function(time_to_event, event, landmark_time) {
 # composite endpoints separately to take into account the possibility that 
 # the censoring time is not the same across all endpoints.
 full_data_new_endpoints_landmark_tbl = full_data_new_endpoints_landmark_tbl %>%
-  group_by(COU1A, TRTREG1C, endpoint) %>%
+  group_by(COU1A, TRTREG1C, endpoint, landmark_time) %>%
   mutate(
-    ipcw = ipcw_estimator(time, censored),
+    ipcw = ipcw_estimator(time, censored, landmark_time[1]),
     ipcw = ifelse(time < time_cumulative_incidence &
                     censored == 1, 0, ipcw)
   ) %>%

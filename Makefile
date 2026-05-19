@@ -95,13 +95,13 @@ additional-application/R/meta-analytic/estimate-landmark-models.Rout: additional
 	Rscript --verbose additional-application/R/meta-analytic/estimate-landmark-models.R > $@ 2> $@
 	
 additional-application/R/meta-analytic/intermediate-objects/landmark_predictions_tbl.rds: additional-application/R/meta-analytic/estimate-landmark-models.Rout additional-application/R/meta-analytic/predicted-surrogates.R
-	Rscript --verbose additional-application/R/meta-analytic/predicted-surrogates.R > $@ 2> $@
+	Rscript --verbose additional-application/R/meta-analytic/predicted-surrogates.R
 	
-additional-application/results/raw-results/ma_trt_effects_tbl.rds: additional-application/R/meta-analytic/trial-level-effects.R R/meta-analytic/intermediate-objects/landmark_predictions_tbl.rds
-	Rscript --verbose additional-application/R/meta-analytic/trial-level-effects.R > $@ 2> $@
+additional-application/results/raw-results/ma_trt_effects_tbl.rds: additional-application/R/meta-analytic/trial-level-effects.R additional-application/R/meta-analytic/intermediate-objects/landmark_predictions_tbl.rds
+	Rscript --verbose additional-application/R/meta-analytic/trial-level-effects.R
 	
 additional-application/results/tables/surrogacy-inferences.csv: additional-application/R/meta-analytic/meta-analysis.R additional-application/results/raw-results/ma_trt_effects_tbl.rds
-	Rscript --verbose additional-application/R/meta-analytic/meta-analysis.R > $@ 2> $@
+	Rscript --verbose additional-application/R/meta-analytic/meta-analysis.R
 
 additional-application/R/meta-analytic/processing-results.Rout: additional-application/R/meta-analytic/processing-results.R additional-application/results/raw-results/ma_trt_effects_tbl.rds additional-application/results/tables/surrogacy-inferences.csv
 	Rscript --verbose additional-application/R/meta-analytic/processing-results.R > $@ 2> $@
