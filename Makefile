@@ -29,7 +29,7 @@ application-synthetic: R/application/data-exploration-synthetic.Rout \
 	R/application/processing-results-synthetic.Rout
 	
 additional-application: additional-application/R/meta-analytic/estimate-landmark-models.Rout \
-	R/meta-analytic/intermediate-objects/landmark_predictions_tbl.rds \
+	additional-application/R/meta-analytic/intermediate-objects/landmark_predictions_tbl.rds \
 	additional-application/results/raw-results/ma_trt_effects_tbl.rds \
 	additional-application/results/tables/surrogacy-inferences.csv \
 	additional-application/R/meta-analytic/processing-results.Rout
@@ -94,7 +94,7 @@ R/application/processing-results-synthetic.Rout: R/application/processing-result
 additional-application/R/meta-analytic/estimate-landmark-models.Rout: additional-application/R/meta-analytic/estimate-landmark-models.R
 	Rscript --verbose additional-application/R/meta-analytic/estimate-landmark-models.R > $@ 2> $@
 	
-R/meta-analytic/intermediate-objects/landmark_predictions_tbl.rds: additional-application/R/meta-analytic/estimate-landmark-models.Rout additional-application/R/meta-analytic/predicted-surrogates.R
+additional-application/R/meta-analytic/intermediate-objects/landmark_predictions_tbl.rds: additional-application/R/meta-analytic/estimate-landmark-models.Rout additional-application/R/meta-analytic/predicted-surrogates.R
 	Rscript --verbose additional-application/R/meta-analytic/predicted-surrogates.R > $@ 2> $@
 	
 additional-application/results/raw-results/ma_trt_effects_tbl.rds: additional-application/R/meta-analytic/trial-level-effects.R R/meta-analytic/intermediate-objects/landmark_predictions_tbl.rds
