@@ -5,13 +5,18 @@ args = commandArgs(trailingOnly=TRUE)
 library(tidyverse)
 library(survival)
 library(sl3)
+library(dbarts)
+library(xgboost)
+library(glmnet)
+library(mgcv)
+
 
 # Data Preparation --------------------------------------------------------
 
-source("R/data-fusion/helper-functions.R")
-landmark_cox_models_tbl = readRDS(file = "R/meta-analytic/intermediate-objects/landmark_cox_models_tbl.rds")
-sl_models_tbl = readRDS(file = "R/meta-analytic/intermediate-objects/sl_models_tbl.rds")
-full_data_landmark_tbl = readRDS(file = "R/meta-analytic/intermediate-objects/full_data_new_endpoints_landmark_tbl.rds")
+source("additional-application/R/meta-analytic/helper-functions.R")
+landmark_cox_models_tbl = readRDS(file = "additional-application/R/meta-analytic/intermediate-objects/landmark_cox_models_tbl.rds")
+sl_models_tbl = readRDS(file = "additional-application/R/meta-analytic/intermediate-objects/sl_models_tbl.rds")
+full_data_landmark_tbl = readRDS(file = "additional-application/R/meta-analytic/intermediate-objects/full_data_new_endpoints_landmark_tbl.rds")
 
 landmark_times = 365.25 * c(1 / 12, 2 / 12, 3 / 12, 4 / 12, 5 / 12, 0.5, 1, 1.5, 2)
 
