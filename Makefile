@@ -3,10 +3,11 @@ simulationhelpers = R/helper-functions/simulation-functions.R
 data = data/processed_data.csv
 data-synthetic = data/processed_data_synthetic.csv
 
-.PHONY: all application simulation
+.PHONY: all application simulation additional-application
 all: simulation \
 	application \
-	application-synthetic
+	application-synthetic \
+	additional-application
 	
 simulation: results/raw-results/simulations/ma-sim-results-proof-of-concept-small.rds \
 	results/raw-results/simulations/ma-sim-results-vaccine-small.rds \
@@ -26,6 +27,13 @@ application-synthetic: R/application/data-exploration-synthetic.Rout \
 	R/application/meta_analysis-synthetic.Rout \
 	results/raw-results/application-synthetic/bayesian_ma_results.rds \
 	R/application/processing-results-synthetic.Rout
+	
+additional-application: additional-application/R/meta-analytic/estimate-landmark-models.Rout \
+	R/meta-analytic/intermediate-objects/landmark_predictions_tbl.rds \
+	additional-application/results/raw-results/ma_trt_effects_tbl.rds \
+	additional-application/results/tables/surrogacy-inferences.csv \
+	additional-application/R/meta-analytic/processing-results.Rout
+
 	
 
 results/raw-results/simulations/ma-sim-results-proof-of-concept-small.rds: R/simulations/simulations.R $(analysishelpers) $(simulationhelpers)
@@ -80,3 +88,27 @@ results/raw-results/application-synthetic/bayesian_ma_results.rds: R/application
 	
 R/application/processing-results-synthetic.Rout: R/application/processing-results.R results/raw-results/application-synthetic/bayesian_ma_results.rds R/application/meta_analysis-synthetic.Rout
 	Rscript --verbose R/application/processing-results.R synthetic > R/application/processing-results-synthetic.Rout 2> R/application/processing-results-synthetic.Rout
+	
+	
+	
+additional-application/R/meta-analytic/estimate-landmark-models.Rout: additional-application/R/meta-analytic/estimate-landmark-models.R
+	Rscript --verbose additional-application/R/meta-analytic/estimate-landmark-models.R > $@ 2> $@
+	
+R/meta-analytic/intermediate-objects/landmark_predictions_tbl.rds: additional-application/R/meta-analytic/estimate-landmark-models.Rout additional-application/R/meta-analytic/predicted-surrogates.R
+	Rscript --verbose additional-application/R/meta-analytic/predicted-surrogates.R > $@ 2> $@
+	
+additional-application/results/raw-results/ma_trt_effects_tbl.rds: additional-application/R/meta-analytic/trial-level-effects.R R/meta-analytic/intermediate-objects/landmark_predictions_tbl.rds
+	Rscript --verbose additional-application/R/meta-analytic/trial-level-effects.R > $@ 2> $@
+	
+additional-application/results/tables/surrogacy-inferences.csv: additional-application/R/meta-analytic/meta-analysis.R additional-application/results/raw-results/ma_trt_effects_tbl.rds
+	Rscript --verbose additional-application/R/meta-analytic/meta-analysis.R > $@ 2> $@
+
+additional-application/R/meta-analytic/processing-results.Rout: additional-application/R/meta-analytic/processing-results.R additional-application/results/raw-results/ma_trt_effects_tbl.rds additional-application/results/tables/surrogacy-inferences.csv
+	Rscript --verbose additional-application/R/meta-analytic/processing-results.R > $@ 2> $@
+
+
+
+
+
+
+

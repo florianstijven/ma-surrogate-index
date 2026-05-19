@@ -35,8 +35,6 @@ set.seed(1)
 # meta-analytic parameters.
 B_multiplier = 1e5
 
-time_cumulative_incidence = 80
-
 
 ## Intermediate Results  --------------------------------------------------
 

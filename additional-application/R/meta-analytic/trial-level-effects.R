@@ -35,7 +35,7 @@ clustering_variable_chr = "COU1A"
 
 # Number of bootstrap replications for computing within-trial covariance
 # matrices.
-B_within_trial = 5e2
+B_within_trial = 1e3
 
 time_cumulative_incidence = 2.5 * 365.25
 
