@@ -9,12 +9,12 @@ library(future)
 library(furrr)
 library(survival)
 
-# # Set up parallel computing
-# if (parallelly::supportsMulticore()) {
-#   plan("multicore")
-# } else {
-#   plan(multisession, workers = parallel::detectCores() - 1)
-# }
+# Set up parallel computing
+if (parallelly::supportsMulticore()) {
+  plan("multicore")
+} else {
+  plan(multisession, workers = parallel::detectCores() - 1)
+}
 
 # Extract arguments for analysis.
 args = commandArgs(trailingOnly = TRUE)
