@@ -31,7 +31,7 @@ time_cumulative_incidence = 2.5 * 365.25
 
 full_data_new_endpoints_long = readRDS(file = "additional-application/R/data/intermediate-objects/full_data_tbl_long.rds")
 
-endpoints = c("CORON", "CVMB_DTH", "CVMB", "CVMM")
+endpoints = c("CVMB_DTH")
 
 # Data Preparation --------------------------------------------------------
 
