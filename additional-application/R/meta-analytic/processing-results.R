@@ -56,12 +56,36 @@ ma_trt_effects_tbl = bind_rows(
 # Tables ----------------------------------------------------------------
 
 # Save tables for the trial-level correlation estimates with corresponding
-# confidence intervals. Tables are saves separately by type of CI and whether the
-# original data or pseudo-real data were used.
+# confidence intervals. Tables are saved separately for vcov_multiplier.
 format_CI = function(estimate, ci_lower, ci_upper, digits = 2) {
   paste0(round(estimate, digits), " (", round(ci_lower, digits), ", ", round(ci_upper, digits), ")")
 }
 
+surrogate_results_tbl %>%
+  select(
+    landmark_time_months,
+    model,
+    model_type,
+    vcov_multiplier,
+    rho_trial,
+    CI_lower_sandwich,
+    CI_upper_sandwich
+  ) %>%
+  mutate(rho_CI = format_CI(rho_trial, CI_lower_sandwich, CI_upper_sandwich)) %>%
+  select(-rho_trial, -CI_lower_sandwich, -CI_upper_sandwich) %>%
+  pivot_wider(names_from = c(model, model_type),
+              values_from = rho_CI) %>%
+  arrange(landmark_time_months) %>%
+  group_by(vcov_multiplier) %>%
+  group_walk(~ capture.output(
+    print(., n = Inf, width = Inf),
+    file = paste0(
+      tables_dir,
+      "/trial-level-correlation-",
+      .y$vcov_multiplier,
+      ".txt"
+    )
+  ))
 # Plots -----------------------------------------------------------------
 
 ## MA plots -------------------------------------------------------------
@@ -145,9 +169,9 @@ plotting_pms %>%
 
 # Function to create plot of trial-level correlation estimates with confidence
 # intervals.
-plot_rho_f = function() {
+plot_rho_f = function(vcov_multiplier) {
   surrogate_results_tbl %>%
-    filter(vcov_multiplier == 0.1) %>%
+    filter(vcov_multiplier == .env$vcov_multiplier) %>%
     ggplot(aes(
       x = landmark_time_months,
       y = rho_trial,
@@ -168,7 +192,7 @@ plot_rho_f = function() {
     theme(legend.position = "bottom", legend.title = element_blank())
   
   ggsave(
-    filename = "trial-level-correlation.pdf",
+    filename = paste0("trial-level-correlation-", vcov_multiplier, ".pdf"),
     plot = last_plot(),
     device = "pdf",
     width = double_width,
@@ -178,3 +202,7 @@ plot_rho_f = function() {
     path = figures_dir
   )
 }
+
+# Save plots
+plot_rho_f(1)
+plot_rho_f(0.1)
