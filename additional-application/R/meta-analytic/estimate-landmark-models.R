@@ -69,7 +69,7 @@ for (landmark_time in landmark_times) {
       pivot_wider(
         values_from = c(SBPAVG3N, DBPAVG3N, STNPLS1N),
         names_from = timing
-      ) %>%
+      ) %>% 
       mutate(landmark_time = landmark_time)
   )
 }
@@ -446,8 +446,8 @@ sl_models_tbl$fitted_model = future_pmap(
 # Save the data in landmark-prediction format and the fitted landmark cox
 # models.
 saveRDS(full_data_new_endpoints_landmark_tbl, file =
-          "R/meta-analytic/intermediate-objects/full_data_new_endpoints_landmark_tbl.rds")
+          "additional-application/R/meta-analytic/intermediate-objects/full_data_new_endpoints_landmark_tbl.rds")
 saveRDS(landmark_cox_models_tbl, file =
-          "R/meta-analytic/intermediate-objects/landmark_cox_models_tbl.rds")
+          "additional-application/R/meta-analytic/intermediate-objects/landmark_cox_models_tbl.rds")
 saveRDS(sl_models_tbl,
-        file = paste0("R/meta-analytic/intermediate-objects/sl_models_tbl.rds"))
+        file = paste0("additional-application/R/meta-analytic/intermediate-objects/sl_models_tbl.rds"))
