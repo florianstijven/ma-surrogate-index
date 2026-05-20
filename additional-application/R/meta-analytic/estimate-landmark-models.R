@@ -352,10 +352,9 @@ sl_fitter = function(predictors_chr, endpoint, landmark) {
   
   # Instantiate a set of learners.
   lrn_mean = Lrnr_mean$new()
-  lrn_glm = Lrnr_glm_fast$new(formula = base_formula_chr)
+  lrn_glm = Lrnr_glm_fast$new(formula = simple_formula_chr)
   lrn_glmnet = Lrnr_glmnet$new()
   lrn_dbarts = Lrnr_dbarts$new()
-  # lrn_xgboost = Lrnr_xgboost$new()
   lrn_nnet = Lrnr_nnet$new(trace = FALSE)
   
   slscreener <- Lrnr_pkg_SuperLearner_screener$new("screen.glmnet")
@@ -437,7 +436,7 @@ sl_models_tbl$fitted_model = future_pmap(
     predictors_chr = sl_models_tbl$surrogates
   ),
   .f = sl_fitter,
-  .options = furrr_options(packages = "splines", seed = TRUE)
+  .options = furrr_options(seed = TRUE)
 )
 
 # Save Results -----------------------------------------------------------
