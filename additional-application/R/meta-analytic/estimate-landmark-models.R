@@ -323,7 +323,6 @@ sl_fitter = function(predictors_chr, endpoint, landmark) {
   # Formula for a simple learner that only includes the surrogates.
   simple_formula_chr = paste0("event_status ~ ", paste(c("STNPLS1N_1", "REN1", "AGE_1N"), collapse = " + "))
   
-  browser()
   
   # Filter the data set to the relevant clinical endpoint.
   data_temp = full_data_new_endpoints_landmark_tbl %>%
