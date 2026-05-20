@@ -47,8 +47,7 @@ predict_surv_prob_cox = function(newdata, cox_model, time) {
     -1 * predict(
       cox_model,
       newdata = newdata %>%
-        # We use treatment A as the reference in the predictions.
-        mutate(time = .env$time, censored = 1, TRTREG1C = "A"),
+        mutate(time = .env$time, censored = 1),
       type = "expected"
     )
   )
