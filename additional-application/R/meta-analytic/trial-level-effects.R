@@ -9,12 +9,12 @@ library(future)
 library(furrr)
 library(survival)
 
-# Set up parallel computing
-if (parallelly::supportsMulticore()) {
-  plan("multicore")
-} else {
-  plan(multisession)
-}
+# # Set up parallel computing
+# if (parallelly::supportsMulticore()) {
+#   plan("multicore")
+# } else {
+#   plan(multisession, workers = parallel::detectCores() - 1)
+# }
 
 # Extract arguments for analysis.
 args = commandArgs(trailingOnly = TRUE)
@@ -49,17 +49,8 @@ full_data_new_endpoints_landmark_tbl = readRDS(file = demographic_tbl_location)
 # Add the clustering information to ``ipd_surr_indices_tbl``.
 ipd_surr_indices_tbl = ipd_surr_indices_tbl %>%
   left_join(full_data_new_endpoints_landmark_tbl %>%
-              select(SID1A, any_of(clustering_variable_chr)),
+              select(SID1A, any_of(clustering_variable_chr), TRTREG1C),
             by = "SID1A")
-
-# Change `ipd_surr_indices_tbl` to long format with one estimated surrogate
-# index per row.
-ipd_surr_indices_tbl = ipd_surr_indices_tbl %>%
-  pivot_longer(
-    cols = c("predicted_prob_cox", "predicted_prob_sl"),
-    names_to = "method",
-    values_to = "surrogate_index"
-  )
 
 ## IPCW -------------------------------------------------------------------
 
@@ -71,23 +62,35 @@ ipd_surr_indices_tbl = ipd_surr_indices_tbl %>%
 # treat events as censored and censoring times as events.
 
 ipcw_estimator  = function(time_to_event, event, landmark_time) {
-  survfit_object = survfit(Surv(time_to_event, 1 - event) ~ 1)
+  survfit_object = survfit(Surv(time_to_event, event) ~ 1)
   
-  time = unique(pmin(time_to_event, landmark_time))
+  time = unique(pmin(
+    time_to_event,
+    landmark_time
+  ))
   surv_probs_tbl = summary(survfit_object, times =  time)[c("surv", "time")] %>%
     as_tibble()
   
-  censoring_probs = tibble(time = pmin(time_to_event, landmark_time))  %>%
+  censoring_probs = tibble(time = pmin(
+    time_to_event,
+    landmark_time
+  ))  %>%
     left_join(surv_probs_tbl) %>%
     pull(surv)
   
-  return(1 / censoring_probs)
+  weights = 1 / censoring_probs
+  
+  if (any(weights == Inf |
+          weights == 0, na.rm = TRUE))
+    stop("invalid weights computed")
+  
+  return(weights)
 }
 
 # Add IPCW weights to the data set.
 ipd_surr_indices_tbl = ipd_surr_indices_tbl %>%
-  group_by(landmark_time, endpoint, TRTREG1C, COU1A, method) %>%
-  mutate(ipcw = ipcw_estimator(time, 1 - censored, landmark_time[1])) %>%
+  group_by(landmark_time, endpoint, TRTREG1C, COU1A, model, model_type) %>%
+  mutate(ipcw_SI = ipcw_estimator(time, censored, landmark_time[1])) %>%
   ungroup()
 
 # Trial-Level Treatment Effects --------------------------------------------
@@ -99,8 +102,8 @@ estimate_treatment_effect_surrogate_index = function(data) {
   # Estimate treatment effect on surrogate index using IPCW mean.
   trt_effect_surrogate_index_est = data %>%
     group_by(TRTREG1C) %>%
-    summarise(weighted_mean = weighted.mean(surrogate_index, w = ipcw, na.rm = TRUE))
-  
+    summarise(weighted_mean = weighted.mean(predicted_prob, w = ipcw_SI, na.rm = TRUE))
+
   return(trt_effect_surrogate_index_est %>%
            pivot_wider(names_from = TRTREG1C, values_from = weighted_mean) %>%
            mutate(trt_effect_surrogate_index_est = B - A) %>%
@@ -173,7 +176,7 @@ estimate_treatment_effects = function(data, B) {
 # clinical endpoint.
 ma_trt_effects_tbl =
   ipd_surr_indices_tbl %>%
-  group_by(landmark_time, endpoint, COU1A, method) %>%
+  group_by(landmark_time, endpoint, COU1A, model, model_type) %>%
   summarize(data = list(pick(everything()))) %>%
   ungroup() %>%
   mutate(

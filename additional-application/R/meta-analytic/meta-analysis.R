@@ -4,18 +4,14 @@
 library(tidyverse)
 library(scales)
 library(splines)
-# library(WeightedROC)
-# library(mgcv)
 library(future)
 library(furrr)
-# library(survival)
-# library(RColorBrewer)
 
 # Set up parallel computing
 if (parallelly::supportsMulticore()) {
   plan("multicore")
 } else {
-  plan(multisession)
+  plan(multisession, workers = parallel::detectCores() - 1)
 }
 
 # Extract arguments for analysis.

@@ -9,102 +9,126 @@ library(future)
 library(furrr)
 library(survival)
 
-# Set up parallel computing
-if (parallelly::supportsMulticore()) {
-  plan("multicore")
-} else {
-  plan(multisession)
-}
-
 # Extract arguments for analysis.
 args = commandArgs(trailingOnly = TRUE)
 
 surr_indices_tbl_location = "additional-application/R/meta-analytic/intermediate-objects/landmark_predictions_tbl.rds"
+demographic_tbl_location = "additional-application/R/data/intermediate-objects/full_data_tbl_wide.rds"
+out_file = "additional-application/results/raw-results/ma_trt_effects_tbl.rds"
+
+# Specify options for saving the plots to files
+figures_dir = "additional-application/results/figures"
+tables_dir = "additional-application/results/tables"
+
+# clustering variable used in the analysis. 
+clustering_variable_chr = "COU1A"
+
 # Load data set with IPD and estimated surrogate index for every subject.
 ipd_surr_indices_tbl = readRDS(file = surr_indices_tbl_location)
+# Load data with demographic information, including the clustering variable.
+full_data_new_endpoints_landmark_tbl = readRDS(file = demographic_tbl_location)
+
+# Add the clustering information to ``ipd_surr_indices_tbl``.
+ipd_surr_indices_tbl = ipd_surr_indices_tbl %>%
+  left_join(full_data_new_endpoints_landmark_tbl %>%
+              select(SID1A, any_of(clustering_variable_chr), TRTREG1C),
+            by = "SID1A")
+
+time_cumulative_incidence = 2.5 * 365.25
+
+## IPCW -------------------------------------------------------------------
+
+# Function to estimate inverse probability of censoring weights. It takes a
+# vector of event times and event indicators (1 if event, 0 if censored). It
+# returns the IPCWs for each subject.
+ipcw_estimator  = function(time_to_event, event) {
+  survfit_object = survfit(Surv(time_to_event, event) ~ 1)
+  
+  time = unique(pmin(
+    time_to_event,
+    time_cumulative_incidence
+  ))
+  surv_probs_tbl = summary(survfit_object, times =  time)[c("surv", "time")] %>%
+    as_tibble()
+  
+  censoring_probs = tibble(time = pmin(
+    time_to_event,
+    time_cumulative_incidence
+  ))  %>%
+    left_join(surv_probs_tbl) %>%
+    pull(surv)
+  
+  weights = 1 / censoring_probs
+  
+  if (any(weights == Inf |
+          weights == 0, na.rm = TRUE))
+    stop("invalid weights computed")
+  
+  return(weights)
+}
+
+# Compute the IPCW for each patient. These weights are based on the KM estimate
+# by country and treatment arm. We immediately also do this for each of the new
+# composite endpoints separately to take into account the possibility that
+# the censoring time is not the same across all endpoints.
+ipd_surr_indices_tbl = ipd_surr_indices_tbl %>%
+  group_by(COU1A, TRTREG1C, endpoint) %>%
+  mutate(
+    ipcw_roc = ipcw_estimator(time, censored),
+    ipcw_roc = ifelse(time < time_cumulative_incidence &
+                    censored == 1, 0, ipcw_roc)
+  ) %>%
+  ungroup()
 
 
 ## Prediction Model Performance -------------------------------------------
 roc_tbl = ipd_surr_indices_tbl %>%
-  filter(!is.na(surrogate_index) & !(is.na(event_status))) %>%
-  group_by(method, surrogate, COU1A) %>%
+  filter(!is.na(predicted_prob) & !(is.na(censored))) %>%
+  filter(ipcw_roc != 0) %>%
+  group_by(model, model_type, COU1A, endpoint, landmark_time) %>%
   reframe(
     WeightedROC(
-      guess = surrogate_index,
-      label = event_status,
-      weight = ipcw
+      guess = predicted_prob,
+      label = censored,
+      weight = ipcw_roc
     )
   )
 
 # Make and save the plots for all combinations of `surrogate` and `weighting`.
-roc_ggplots = roc_tbl %>%
-  group_by(analysis_set, surrogate) %>%
-  summarise(data = list(pick(everything()))) %>%
-  ungroup() %>%
-  mutate(ggplot_object = purrr::pmap(
-    .l = list(
-      data = data,
-      analysis_set = analysis_set,
-      surrogate = surrogate
-    ),
-    .f = function(data, analysis_set, surrogate) {
-      surrogate_chr = switch(
-        surrogate,
-        bindSpike = "IgG Spike",
-        pseudoneutid50 = "nAb ID50",
-        pseudoneutid50_adjusted = "adjusted nAb ID50"
-      )
-      analysis_set_chr = switch(
-        analysis_set,
-        first_four = "first four trials",
-        naive_only = "all trials, naive subjects only",
-        mixed = "all trials"
-      )
-      subtitle = paste0("Surrogate index for ",
-                        surrogate_chr,
-                        " using ",
-                        analysis_set_chr)
-      data %>%
-        mutate(
-          weighting = ifelse(weighting == "normalized", "Normalized", "Unnormalized"),
-          method = ifelse(method == "gam", "GAM logistic regression", ifelse(method == "cox", "Cox Model", "SuperLearner"))
-        ) %>%
-        ggplot(aes(color = method)) +
-        geom_path(aes(FPR, TPR)) +
-        facet_wrap(~ trial) +
-        theme(legend.position = "bottom", legend.box = "vertical") +
-        scale_color_discrete(name = "Method") +
-        geom_abline(intercept = 0, slope = 1) +
-        scale_color_discrete(name = "Estimated Surrogate Index") +
-        ggtitle("ROC for estimated surrogate index") +
-        labs(subtitle = subtitle) +
-        theme(legend.spacing.y = unit(0, "cm"),
-              legend.box.spacing = unit(0, "cm"))
-    }
-  ))
+roc_tbl %>%       
+  ggplot(aes(color = model, linetype = model_type)) +
+  geom_path(aes(FPR, TPR)) +
+  facet_grid(COU1A ~ landmark_time)
 
-roc_ggplots %>%
-  rowwise(analysis_set, surrogate) %>%
-  summarise(
-    ggsave(
-      plot = ggplot_object,
-      paste0("roc-", surrogate, "-", analysis_set, ".pdf"),
-      path = figures_dir,
-      height = double_height,
-      width = double_width,
-      device = "pdf",
-      units = "cm"
-    )
-  )
-
+roc_tbl %>%       
+  ggplot(aes(color = model, linetype = model_type)) +
+  geom_path(aes(FPR, TPR)) +
+  facet_wrap(~ landmark_time)
+  
 
 roc_tbl %>%
-  group_by(method, surrogate, weighting, trial, analysis_set, include_risk_score) %>%
-  filter(method != "untransformed surrogate") %>%
+  group_by(COU1A, landmark_time, endpoint, model, model_type) %>%
   summarise(AUC = WeightedAUC(pick(c(
     TPR, FPR, FP, FN, threshold
   )))) %>%
-  pivot_wider(names_from = "method", values_from = "AUC") %>%
-  write.csv(paste0(tables_dir, "/auc-surrogate-indices.csv"))
+  ggplot(aes(color = model, x = model_type, y = AUC)) +
+  geom_point() +
+  facet_grid(COU1A ~ landmark_time)
 
-rm("roc_tbl")
+roc_tbl %>%
+  group_by(COU1A, landmark_time, endpoint, model, model_type) %>%
+  summarise(AUC = WeightedAUC(pick(c(
+    TPR, FPR, FP, FN, threshold
+  )))) %>%
+  ggplot(aes(color = model, shape = model_type, y = AUC, x = landmark_time)) +
+  geom_point() +
+  facet_wrap(~COU1A)
+
+roc_tbl %>%
+  group_by(COU1A, landmark_time, endpoint, model, model_type) %>%
+  summarise(AUC = WeightedAUC(pick(c(
+    TPR, FPR, FP, FN, threshold
+  )))) %>%
+  ggplot(aes(color = model, x = model_type, y = AUC, shape = COU1A)) +
+  geom_point() +
+  facet_wrap(~ landmark_time)

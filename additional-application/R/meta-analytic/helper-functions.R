@@ -1,15 +1,15 @@
 # Function to predict X-Year survival probability given landmark cox model or
 # superlearner, landmark time, and a new data set.
-landmark_prediction = function(newdata, model, landmark_time, time, model_type = "cox") {
-  if (model_type == "cox") {
+landmark_prediction = function(newdata, fitted_model, landmark_time, time, model = "cox") {
+  if (model == "cox") {
     landmark_predictions_tbl = bind_cols(
-      tibble(predicted_prob_landmark = predict_surv_prob_cox(newdata, model, time)),
+      tibble(predicted_prob_landmark = predict_surv_prob_cox(newdata, fitted_model, time)),
       newdata %>%
         select(SID1A, time, censored, TRTREG1C)
     )
-  } else if (model_type == "sl") {
+  } else if (model == "sl") {
     landmark_predictions_tbl = bind_cols(
-      tibble(predicted_prob_landmark = 1 - sl_prediction_f(newdata, model, time)),
+      tibble(predicted_prob_landmark = 1 - sl_prediction_f(newdata, fitted_model, time)),
       newdata %>%
         select(SID1A, time, censored, TRTREG1C)
     )

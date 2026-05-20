@@ -16,7 +16,13 @@ tables_dir = "additional-application/results/tables"
 
 
 # Read in nonparametric results
-surrogate_results_tbl = read.csv(file = paste0(tables_dir, "/", "surrogacy-inferences.csv"))
+surrogate_results_tbl = read.csv(file = paste0(tables_dir, "/", "surrogacy-inferences.csv")) %>%
+  # Add Number of months as variable.
+  mutate(
+    landmark_time_months = 12 * landmark_time / 365.25,
+    landmark_time_months_chr = paste0(landmark_time_months, " months"),
+    landmark_time_months_fct = forcats::fct_reorder(landmark_time_months_chr, landmark_time_months)
+  )
 
 # Load data with trial-level treatment effects. 
 ma_trt_effects_tbl = readRDS(ma_trt_effects_tbl_location)
@@ -136,7 +142,7 @@ plotting_pms %>%
 # intervals.
 plot_rho_f = function() {
   surrogate_results_tbl %>%
-    ggplot(aes(x = landmark_time, y = rho_trial, color = method, shape = method)) +
+    ggplot(aes(x = landmark_time_months, y = rho_trial, color = method, shape = method)) +
     geom_point() +
     geom_errorbar(aes(ymin = CI_lower_sandwich, ymax = CI_upper_sandwich), width = 0.01) +
     facet_grid(endpoint~.) +

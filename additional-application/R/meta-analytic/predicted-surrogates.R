@@ -33,18 +33,19 @@ landmark_predictions_tbl = full_data_landmark_tbl %>%
   group_by(landmark_time, endpoint) %>%
   summarize(data_set = list(pick(everything()))) %>%
   left_join(
-    landmark_cox_models_tbl %>%
-      filter(model_type == "full"),
-    by = c("landmark_time", "endpoint")
-  ) %>%
-  left_join(
-    sl_models_tbl %>%
-      rename(
-        "landmark_time" = landmark_time_model,
-        "endpoint" = endpoint_model,
-        "sl_model" = fitted_model
-      ) %>%
-      select(-surrogates),
+    bind_rows(
+      landmark_cox_models_tbl %>%
+        mutate(model = "cox") %>%
+        rename(fitted_model = "cox_model"),
+      sl_models_tbl %>%
+        rename(
+          landmark_time = "landmark_time_model",
+          endpoint = "endpoint_model",
+          fitted_model = "fitted_model"
+        ) %>%
+        select(-surrogates) %>%
+        mutate(model = "sl", model_type = "full")
+    ),
     by = c("landmark_time", "endpoint")
   ) %>%
   # We only look at the 30 months survival probability.
@@ -52,18 +53,17 @@ landmark_predictions_tbl = full_data_landmark_tbl %>%
   # Only keep entries where the landmark time is smaller than the X-year time
   # point.
   filter(landmark_time < times) %>%
-  # For each row, which contains a full data set and the fitted gam, the
+  # For each row, which contains a full data set and the fitted models, the
   # predictions are computed and we return to a normal tibble with one row per
   # data entry. To reduce memory usage, we only keep the variables that are
   # needed further on.
-  group_by(landmark_time, endpoint) %>%
+  group_by(landmark_time, endpoint, model, model_type) %>%
   reframe(bind_cols(
     tibble(
-      predicted_prob_cox = landmark_prediction(data_set[[1]], cox_model[[1]], landmark_time[1], times[1], model_type = "cox"),
-      predicted_prob_sl = landmark_prediction(data_set[[1]], sl_model[[1]], landmark_time[1], times[1], model_type = "sl")
+      predicted_prob = landmark_prediction(data_set[[1]], fitted_model[[1]], landmark_time[1], times[1], model = model[1])
     ),
     data_set[[1]] %>%
-      select(SID1A, time, censored, TRTREG1C)
+      select(SID1A, time, censored, ipcw)
   )) %>%
   mutate(censored_before_landmark = (time <= landmark_time) &
            censored == 1)
