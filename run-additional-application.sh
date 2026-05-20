@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --output=par-%J.out
 #SBATCH --ntasks=1 --cpus-per-task=72 --nodes=1
-#SBATCH --time=02:00:00
+#SBATCH --time=00:45:00
 #SBATCH --cluster=wice
 #SBATCH --mail-type=END,FAIL,REQUEUE,STAGE_OUT
 #SBATCH -A lp_doctoralresearch
