@@ -47,9 +47,9 @@ ma_trt_effects_tbl = bind_rows(
     mutate(vcov_multiplier = 1),
   ma_trt_effects_tbl %>%
     mutate(
-      trt_effect_surrogate_index_est_se = purrr::map_dbl(trt_effect_surrogate_index_est_se, ~ .x / sqrt(2)),
-      trt_effect_clinical_est_se = purrr::map_dbl(trt_effect_clinical_est_se, ~ .x / sqrt(2)),
-      vcov_multiplier = 0.5
+      trt_effect_surrogate_index_est_se = purrr::map_dbl(trt_effect_surrogate_index_est_se, ~ .x / sqrt(10)),
+      trt_effect_clinical_est_se = purrr::map_dbl(trt_effect_clinical_est_se, ~ .x / sqrt(10)),
+      vcov_multiplier = 0.1
     )
 )
 
@@ -67,12 +67,13 @@ format_CI = function(estimate, ci_lower, ci_upper, digits = 2) {
 ## MA plots -------------------------------------------------------------
 
 # Function to create MA plots for given time period, SI estimation method.
-plot_ma_f = function(time_start, time_end, method, vcov_multiplier) {
+plot_ma_f = function(time_start, time_end, model_type, model, vcov_multiplier) {
   ma_trt_effects_tbl %>%
     filter(
       landmark_time >= time_start,
       landmark_time < time_end,
-      method == .env$method,
+      model_type == .env$model_type,
+      model == .env$model,
       vcov_multiplier == .env$vcov_multiplier
     ) %>%
     ggplot(
@@ -98,7 +99,8 @@ plot_ma_f = function(time_start, time_end, method, vcov_multiplier) {
       ),
       height = 0.01
     ) +
-    facet_grid(endpoint ~ landmark_time_months_fct) +
+    coord_cartesian(xlim = c(-0.15, 0.15), ylim = c(-0.15, 0.15)) +
+    facet_wrap( ~ landmark_time_months_fct) +
     xlab("Treatment effect on Est. SI") +
     ylab("Diff in Surv Prob") +
     theme(legend.position = "bottom", legend.title = element_blank())
@@ -108,25 +110,28 @@ plot_ma_f = function(time_start, time_end, method, vcov_multiplier) {
 plotting_pms = expand_grid(
   time_start = 0,
   time_end = 365.25/2,
-  method = c("predicted_prob_cox", "predicted_prob_sl"),
-  vcov_multiplier = c(1, 0.5)
+  model = c("cox", "sl"),
+  model_type = c("full", "base"),
+  vcov_multiplier = c(1, 0.1)
 ) %>%
   bind_rows(
     expand_grid(
       time_start = 365.25/2,
       time_end = 1e4,
-      method = c("predicted_prob_cox", "predicted_prob_sl"),
-      vcov_multiplier = c(1, 0.5)
+      model = c("cox", "sl"),
+      model_type = c("full", "base"),
+      vcov_multiplier = c(1, 0.1)
     )
-  ) 
+  ) %>%
+  filter(!(model == "sl" & model_type == "base"))
 
 # Save plots.
 plotting_pms %>%
   rowwise() %>%
   summarise(
     ggsave(
-      filename = paste0("ma-", method, "-", time_start, "-", time_end, "-", vcov_multiplier, ".pdf"),
-      plot = plot_ma_f(time_start, time_end, method, vcov_multiplier),
+      filename = paste0("ma-", model, "-", model_type, "-", time_start, "-", time_end, "-", vcov_multiplier, ".pdf"),
+      plot = plot_ma_f(time_start, time_end, model_type, model, vcov_multiplier),
       device = "pdf",
       width = double_width,
       height = double_height,
@@ -142,12 +147,34 @@ plotting_pms %>%
 # intervals.
 plot_rho_f = function() {
   surrogate_results_tbl %>%
-    ggplot(aes(x = landmark_time_months, y = rho_trial, color = method, shape = method)) +
-    geom_point() +
-    geom_errorbar(aes(ymin = CI_lower_sandwich, ymax = CI_upper_sandwich), width = 0.01) +
-    facet_grid(endpoint~.) +
+    filter(vcov_multiplier == 0.1) %>%
+    ggplot(aes(
+      x = landmark_time_months,
+      y = rho_trial,
+      color = model,
+      shape = model_type
+    )) +
+    geom_point(position = position_dodge(width = 0.5)) +
+    geom_errorbar(
+      aes(ymin = CI_lower_sandwich, ymax = CI_upper_sandwich),
+      width = 0.01,
+      position = position_dodge(width = 0.5),
+      alpha = 0.4
+    ) +
+    facet_grid(endpoint ~ .) +
     coord_cartesian(ylim = c(-1, 1)) +
     xlab("Time") +
     ylab("Trial-level correlation") +
     theme(legend.position = "bottom", legend.title = element_blank())
+  
+  ggsave(
+    filename = "trial-level-correlation.pdf",
+    plot = last_plot(),
+    device = "pdf",
+    width = double_width,
+    height = double_height,
+    units = "cm",
+    dpi = res, 
+    path = figures_dir
+  )
 }

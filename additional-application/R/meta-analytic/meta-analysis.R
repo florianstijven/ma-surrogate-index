@@ -29,7 +29,7 @@ tables_dir = "additional-application/results/tables"
 set.seed(1)
 # Number of bootstrap replications for the multiplier bootstrap for the
 # meta-analytic parameters.
-B_multiplier = 1e5
+B_multiplier = 1e3
 
 
 ## Intermediate Results  --------------------------------------------------
@@ -49,8 +49,8 @@ ma_trt_effects_tbl = bind_rows(
     mutate(vcov_multiplier = 1),
   ma_trt_effects_tbl %>%
     mutate(
-      covariance_matrix = purrr::map(covariance_matrix, ~ .x / 2),
-      vcov_multiplier = 0.5
+      covariance_matrix = purrr::map(covariance_matrix, ~ .x / 10),
+      vcov_multiplier = 0.1
     )
 )
   
@@ -124,7 +124,7 @@ statistic_f_residual_var_prop = function(data, weights) {
 # Estimate the surrogacy parameters on each data set of trial-level treatment
 # effect estimates.
 surrogate_results_tbl = ma_trt_effects_tbl %>%
-  group_by(landmark_time, endpoint, method, vcov_multiplier) %>%
+  group_by(landmark_time, endpoint, model, model_type, vcov_multiplier) %>%
   summarise(data_tbl = list(pick(everything())), N = nrow(data_tbl[[1]])) %>%
   ungroup() %>%
   mutate(
