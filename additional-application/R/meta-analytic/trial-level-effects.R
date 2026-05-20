@@ -127,7 +127,7 @@ estimate_treatment_effect_clinical_km = function(data) {
 
 # Function to estimate the treatment effects in a given trial together with a
 # covariance matrix based on the non-parametric bootstrap.
-estimate_treatment_effects = function(data, B = 2e2) {
+estimate_treatment_effects = function(data, B) {
   # Estimate treatment effect on surrogate index.
   trt_effect_surrogate_index_est = estimate_treatment_effect_surrogate_index(data)
   

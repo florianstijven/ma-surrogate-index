@@ -13,6 +13,8 @@ library(splines)
 library(dbarts)
 library(glmnet)
 library(mgcv)
+library(speedglm)
+library(SuperLearner)
 
 
 # Set up parallel computing
@@ -45,7 +47,7 @@ endpoints = c("CORON", "CVMB_DTH", "CVMB", "CVMM")
 full_data_new_endpoints_landmark_tbl = full_data_new_endpoints_long %>%
   filter(FALSE) %>%
   mutate(timing = numeric(), landmark_time = numeric()) %>%
-  select(-VISNAM1A, days, months)
+  dplyr::select(-VISNAM1A, days, months)
 for (landmark_time in landmark_times) {
   # Given the landmark time, find the times of the three most recent measurements.
   days_measurements = unique(full_data_new_endpoints_long$days) %>%
@@ -63,7 +65,7 @@ for (landmark_time in landmark_times) {
       group_by(SID1A) %>%
       arrange(-days, .by_group = TRUE) %>%
       mutate(timing = row_number()) %>%
-      select(-days, -months, -VISNAM1A) %>%
+      dplyr::select(-days, -months, -VISNAM1A) %>%
       pivot_wider(
         values_from = c(SBPAVG3N, DBPAVG3N, STNPLS1N),
         names_from = timing
@@ -77,7 +79,7 @@ full_data_new_endpoints_landmark_tbl = full_data_new_endpoints_landmark_tbl %>%
   left_join(
     full_data_new_endpoints_long %>%
       filter(days == -14) %>%
-      select(
+      dplyr::select(
         SID1A,
         SBPAVG3N_baseline = SBPAVG3N,
         DBPAVG3N_baseline = DBPAVG3N,
@@ -94,7 +96,7 @@ full_data_new_endpoints_landmark_tbl = full_data_new_endpoints_landmark_tbl %>%
     variable_type = ifelse(stringr::str_starts(name, "C4"), "censored", "time"),
     endpoint = stringr::str_sub(name, start = 3)
   ) %>%
-  select(-name) %>%
+  dplyr::select(-name) %>%
   pivot_wider(values_from = "value", names_from = "variable_type")
 
 ## IPCW -------------------------------------------------------------------
@@ -290,8 +292,6 @@ landmark_cox_models_tbl = landmark_cox_models_tbl %>%
 
 ## SuperLearner Models ----------------------------------------------------
 
-
-
 # Predict the infection outcome using a SuperLearner with a modified
 # leave-one-trial-out CV procedure.
 sl_fitter = function(predictors_chr, endpoint, landmark) {
@@ -318,7 +318,12 @@ sl_fitter = function(predictors_chr, endpoint, landmark) {
     predictors_chr
   )
   
+  # Base formula for the ML methods.
   base_formula_chr = paste0("event_status ~ ", paste(covariates, collapse = " + "))
+  # Formula for a simple learner that only includes the surrogates.
+  simple_formula_chr = paste0("event_status ~ ", paste(c("STNPLS1N_1", "REN1", "AGE_1N"), collapse = " + "))
+  
+  browser()
   
   # Filter the data set to the relevant clinical endpoint.
   data_temp = full_data_new_endpoints_landmark_tbl %>%
@@ -337,7 +342,7 @@ sl_fitter = function(predictors_chr, endpoint, landmark) {
     # Only keep rows where the event_status was actually observed.
     filter(!(time < time_cumulative_incidence & censored == 1)) %>%
     # keep only variables needed further on.
-    select(any_of(c(
+    dplyr::select(any_of(c(
       "COU1A", "event_status", "ipcw", covariates
     )))
   
@@ -347,18 +352,25 @@ sl_fitter = function(predictors_chr, endpoint, landmark) {
     nrow()
   
   # Instantiate a set of learners.
-  # lrn_glm = Lrnr_glm_fast$new()
+  lrn_mean = Lrnr_mean$new()
+  lrn_glm = Lrnr_glm_fast$new(formula = base_formula_chr)
   lrn_glmnet = Lrnr_glmnet$new()
-  lrn_gam = Lrnr_gam$new()
   lrn_dbarts = Lrnr_dbarts$new()
   # lrn_xgboost = Lrnr_xgboost$new()
+  lrn_nnet = Lrnr_nnet$new(trace = FALSE)
+  
+  slscreener <- Lrnr_pkg_SuperLearner_screener$new("screen.glmnet")
+  glm_learner <- Lrnr_glm$new()
+  screen_and_glm <- Pipeline$new(slscreener, glm_learner)
   
   
   stack = Stack$new(
+    lrn_glm,
     lrn_glmnet,
-    lrn_gam,
-    lrn_dbarts
-    # lrn_xgboost
+    lrn_dbarts,
+    lrn_nnet,
+    screen_and_glm,
+    lrn_mean
   )
   
   task = make_sl3_Task(
