@@ -1,8 +1,10 @@
 #!/bin/bash
-#SBATCH --nodes=1
 #SBATCH --output=par-%J.out
-#SBATCH --cpus-per-task=36
+#SBATCH --ntasks=1 --cpus-per-task=72 --nodes=1
+#SBATCH --time=02:00:00
+#SBATCH --cluster=wice
 #SBATCH --mail-type=END,FAIL,REQUEUE,STAGE_OUT
+#SBATCH -A lp_doctoralresearch
 
 module load cluster/wice/batch
 module load R/4.4.2-gfbf-2024a
