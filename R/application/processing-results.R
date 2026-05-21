@@ -399,7 +399,9 @@ ggsave(
   units = "cm"
 )
 
-### Plot for Poster ------------------------------------------------------
+### Plot for Presentation ------------------------------------------------
+
+# Create MA plot for the untransformed surrogate, for each surrogate separately.
 
 # Use the data set with the trial-level correlation results to produce a text
 # variable with the estimated correlation and 95% CI to be added to the MA plots.
@@ -437,6 +439,73 @@ surrogate_results_text_for_plots = surrogate_results_tbl %>%
     levels = c("IgG Spike", "nAb ID50", "adjusted nAb ID50"),
     ordered = TRUE
   ))
+
+# Function that makes MA plot for given surrogate.
+ma_plot_simple_helper = function(surrogate_name) {
+  ma_plot = ma_trt_effects_tbl %>% filter(method == "untransformed surrogate",
+                                surrogate_name == .env$surrogate_name, 
+                                only_naive) %>%
+    ggplot(aes(x = trt_effect_surrogate_index_est, y = 1 - exp(log_RR_est), color = trial_fct, shape = trial_fct)) +
+    geom_point() +
+    geom_errorbar(aes(
+      ymin = 1 - exp(log_RR_est - 1.96 * log_RR_est_se),
+      ymax = 1 - exp(log_RR_est + 1.96 * log_RR_est_se)
+    ),
+    width = 0.01) +
+    geom_errorbarh(
+      aes(
+        xmin = trt_effect_surrogate_index_est - 1.96 * trt_effect_surrogate_index_est_se,
+        xmax = trt_effect_surrogate_index_est + 1.96 * trt_effect_surrogate_index_est_se
+      ),
+      height = 0.01
+    ) +
+    scale_y_continuous(transform = transform_VE, breaks = c(0, 0.5, 0.75, 0.90, 0.95)) +
+    scale_color_manual(values = my_palette, limits = trials_naive_only_fct) +
+    scale_shape_manual(values = my_shapes, limits = trials_naive_only_fct) +
+    coord_cartesian(ylim = c(-0.2, 0.95)) +
+    xlab(paste0("Estimated treatment effect on ", surrogate_name)) +
+    ylab("Estimated VE") +
+    # Remove the legend
+    theme(legend.position = "none")
+  
+  # Add estimated trial-level correlation and 95% CI to the plot as text.
+  surrogate_results_text = surrogate_results_text_for_plots %>%
+    filter(
+      surrogate_name == .env$surrogate_name,
+      method == "untransformed surrogate",
+      analysis_set == "naive_only"
+    )
+  
+  ma_plot = ma_plot +
+    geom_text_npc(
+      aes(npcx = 0.02, npcy = 0.95, label = rho_inference),
+      data = surrogate_results_text,
+      inherit.aes = FALSE,
+      color = "black",
+      size = 4,
+      parse = TRUE
+    ) 
+      
+  
+  outfile = paste0("ma-untransformed-surrogate-naive-only-", surrogate_name, ".pdf")
+  
+  ggsave(
+    filename = outfile,
+    path = figures_dir,
+    height = single_height,
+    width = single_width,
+    dpi = res,
+    device = "pdf",
+    units = "cm"
+  )
+}
+
+expand_grid(surrogate_name = c("IgG Spike", "nAb ID50", "adjusted nAb ID50")) %>%
+  rowwise(everything()) %>%
+  summarise(ma_plot_simple_helper(surrogate_name))
+
+
+### Plot for Poster ------------------------------------------------------
 
 # Extra plot that contains the MA plot for the untransformed surrogate and the
 # MA plot for the surrogate index based on SuperLearner. This plot will be used
