@@ -165,6 +165,95 @@ plotting_pms %>%
     )
   )
 
+## Summary MA plot with 6 latest times and trial-level correlation estimates --------
+
+# Use the data set with the trial-level correlation results to produce a text
+# variable with the estimated correlation and 95% CI to be added to the MA plots.
+# We truncate the CI limits to [-1, 1] for better visualization.
+surrogate_results_text_for_plots = surrogate_results_tbl %>%
+  rowwise(everything()) %>%
+  summarise(rho_inference = list({
+    bquote(rho[trial] == .(round(rho_trial, 2)) *  ~ "(" * .(round(min(max(CI_lower_sandwich, -1), 1), 2)) * ", " * .(round(min(max(CI_upper_sandwich, -1), 1), 2)) * ")")
+  })) %>%
+  ungroup() %>%
+  select(
+    landmark_time,
+    landmark_time_months_fct,
+    model,
+    model_type,
+    rho_inference,
+    vcov_multiplier,
+    endpoint
+  )
+# Plot with 6 most recent time points and trial-level correlation estimates +
+# CIs added as text.
+ma_plot_w_est = ma_trt_effects_tbl %>%
+  filter(
+    landmark_time >= 0.3*365.25,
+    model_type == "full",
+    model == "sl",
+    vcov_multiplier == 0.1
+  ) %>%
+  ggplot(
+    aes(
+      x = trt_effect_surrogate_index_est,
+      y = trt_effect_clinical_est,
+      color = trial_fct,
+      shape = trial_fct
+    )
+  ) +
+  geom_abline(slope = 1, intercept = 0, alpha = 0.5, linetype = "dashed") +
+  geom_point() +
+  geom_errorbar(
+    aes(
+      ymin = trt_effect_clinical_est - 1.96 * trt_effect_clinical_est_se,
+      ymax = trt_effect_clinical_est + 1.96 * trt_effect_clinical_est_se
+    ),
+    width = 0.002
+  ) +
+  geom_errorbarh(
+    aes(
+      xmin = trt_effect_surrogate_index_est - 1.96 * trt_effect_surrogate_index_est_se,
+      xmax = trt_effect_surrogate_index_est + 1.96 * trt_effect_surrogate_index_est_se
+    ),
+    height = 0.002
+  ) +
+  coord_cartesian(xlim = c(-0.1, 0.1), ylim = c(-0.1, 0.1)) +
+  facet_wrap( ~ landmark_time_months_fct) +
+  xlab("Treatment effect on Estimated Surrogate Index") +
+  ylab("Difference in Survival Probability") +
+  theme(legend.position = "bottom", legend.title = element_blank()) +
+  # add text with estimated trial-level correlation and 95% CI
+  geom_text_npc(
+    data = surrogate_results_text_for_plots %>%
+      filter(
+        landmark_time >= 0.3*365.25,
+        model_type == "full",
+        model == "sl",
+        vcov_multiplier == 0.1
+      ),
+    aes(
+      npcx = 0.02,
+      npcy = 0.95,
+      label = rho_inference
+    ),
+    inherit.aes = FALSE,
+    color = "black",
+    size = 3,
+    parse = TRUE
+  )
+
+ggsave(
+  filename = paste0("ma-with-trial-level-correlation.pdf"),
+  plot = ma_plot_w_est,
+  device = "pdf",
+  width = double_width,
+  height = double_height,
+  units = "cm",
+  dpi = res, 
+  path = figures_dir
+)
+
 ## Plot of estimated trial-level correlations + CIs -------------------------
 
 # Function to create plot of trial-level correlation estimates with confidence

@@ -511,10 +511,7 @@ plot_ma_sl = ma_trt_effects_tbl %>% filter(method != "untransformed surrogate",
 
 
 # Add two plots together vertically.
-
-
-
-plot_ma_standard = plot_ma_standard +
+plot_ma_standard_new = plot_ma_standard +
   facet_grid(cols = vars(surrogate_name), scales = "free_x") +
   theme_transparent +
   ggtitle("Canonical Meta-Analysis") +
@@ -535,7 +532,7 @@ plot_ma_standard = plot_ma_standard +
     size = 2.5,
     parse = TRUE
   )
-combined <- (plot_ma_standard / plot_ma_sl) +
+combined <- (plot_ma_standard_new / plot_ma_sl) +
   plot_layout(guides = "collect") &
   theme(legend.position = "right", 
         legend.text.position = "top",
@@ -555,6 +552,105 @@ ggsave(
   device = "png",
   units = "cm",
   bg = "transparent"
+)
+
+# Same plot, but with modifications to put in a presentation.
+plot_ma_sl = ma_trt_effects_tbl %>% filter(method != "untransformed surrogate", 
+                                           analysis_set == "naive_only", 
+                                           trial_fct %in% trials_naive_only_fct,
+                                           weighting == "unnormalized", 
+                                           include_risk_score == FALSE,
+                                           method == "sl") %>%
+  ggplot(aes(
+    x = 1 - exp(trt_effect_surrogate_index_est),
+    y = 1 - exp(log_RR_est),
+    color = trial_fct,
+    shape = trial_fct
+  )) +
+  geom_abline(intercept = 0, slope = 1, alpha = 0.5, linetype = "dashed") +
+  geom_point() +
+  geom_errorbar(aes(
+    ymin = 1 - exp(log_RR_est - 1.96 * log_RR_est_se),
+    ymax = 1 - exp(log_RR_est + 1.96 * log_RR_est_se)
+  ), width = 0.01) +
+  geom_errorbarh(aes(
+    xmin = 1 - exp(
+      trt_effect_surrogate_index_est - 1.96 * trt_effect_surrogate_index_est_se
+    ),
+    xmax = 1 - exp(
+      trt_effect_surrogate_index_est + 1.96 * trt_effect_surrogate_index_est_se
+    )
+  ), height = 0.01) +
+  scale_color_manual(values = my_palette, limits = trials_naive_only_fct) +
+  scale_shape_manual(values = my_shapes, limits = trials_naive_only_fct) +
+  coord_cartesian(ylim = c(-0.2, 0.95)) +
+  facet_grid(. ~ surrogate_name) +
+  xlab("Estimated VE on Estimated Surrogate Index") +
+  ylab("Estimated VE") +
+  theme(legend.position = "bottom", legend.title = element_blank(),
+        panel.background = element_rect(fill = "transparent", colour = NA),
+        plot.background  = element_rect(fill = "transparent", colour = NA)) +
+  scale_y_continuous(transform = transform_VE, breaks = c(0, 0.5, 0.75, 0.90, 0.95)) +
+  scale_x_continuous(transform = transform_VE, breaks = c(0, 0.5, 0.75, 0.90, 0.95)) +
+  ggtitle("Meta-Analysis with SuperLearner") +
+  # add text with estimated trial-level correlation and 95% CI
+  geom_text_npc(
+    data = surrogate_results_text_for_plots %>%
+      filter(
+        method == "sl",
+        analysis_set == "naive_only",
+        weighting == "unnormalized",
+        include_risk_score == FALSE
+      ),
+    aes(
+      npcx = 0.02,
+      npcy = 0.95,
+      label = rho_inference
+    ),
+    inherit.aes = FALSE,
+    color = "black",
+    size = 2.75,
+    parse = TRUE
+  )
+
+
+
+# Add two plots together vertically.
+plot_ma_standard_new = plot_ma_standard +
+  facet_grid(cols = vars(surrogate_name), scales = "free_x") +
+  ggtitle("Canonical Meta-Analysis") +
+  # add text with estimated trial-level correlation and 95% CI
+  geom_text_npc(
+    data = surrogate_results_text_for_plots %>%
+      filter(
+        method == "untransformed surrogate",
+        analysis_set == "naive_only"
+      ),
+    aes(
+      npcx = 0.02,
+      npcy = 0.95,
+      label = rho_inference
+    ),
+    inherit.aes = FALSE,
+    color = "black",
+    size = 2.75,
+    parse = TRUE
+  )
+
+combined <- (plot_ma_standard_new / plot_ma_sl) +
+  plot_layout(guides = "collect") &
+  theme(legend.position = "none")
+# Save the picture in high resolution with transparent background. We need to
+# save as png to ensure that the background is truly transparent when using this
+# picture in latex etc.
+ggsave(
+  filename = "ma-standard-and-sl-naive-only-presentation.pdf",
+  plot = combined,
+  path = figures_dir,
+  height = double_height,
+  width = double_width,
+  device = "pdf",
+  units = "cm"
 )
 
 
