@@ -6,58 +6,30 @@ library(scales)
 library(patchwork)
 library(ggpp)
 
-# Extract arguments for analysis.
-args = commandArgs(trailingOnly = TRUE)
-
-# The first argument indicates whether the analysis should be conducted on the
-# original data or on the synthetic data.
-data_set = args[1]
-if (data_set == "real") {
-  ma_trt_effects_tbl_location = "results/raw-results/application/ma_trt_effects_tbl.rds"
-  rho_long_tbl_location = "results/raw-results/application/rho_long_tbl.rds"
-  # Specify options for saving the plots to files
-  figures_dir = "results/figures/application/meta-analysis"
-  tables_dir = "results/tables/application/meta-analysis"
-} else if (data_set == "synthetic") {
-  ma_trt_effects_tbl_location = "results/raw-results/application-synthetic/ma_trt_effects_tbl.rds"
-  rho_long_tbl_location = "results/raw-results/application-synthetic/rho_long_tbl.rds"
-  # Specify options for saving the plots to files
-  figures_dir = "results/figures/application-synthetic/meta-analysis"
-  tables_dir = "results/tables/application-synthetic/meta-analysis"
-}
+ma_trt_effects_tbl_location = "additional-application-2/results/raw-results/ma_trt_effects_tbl.rds"
+rho_long_tbl_location = "additional-application-2/results/raw-results/rho_long_tbl.rds"
+# Specify options for saving the plots to files
+figures_dir = "additional-application-2/results/figures"
+tables_dir = "additional-application-2/results/tables"
 
 # Read in nonparametric results
 surrogate_results_tbl = read.csv(file = paste0(tables_dir, "/", "surrogacy-inferences.csv"))
-# Change some variables to facilite plotting.
-surrogate_results_tbl = surrogate_results_tbl %>%
-  mutate(`Estimated Surrogate Index` = case_when(
-    method == "cox" ~ "Cox Model",
-    method == "sl" ~ "SuperLearner",
-    method == "untransformed surrogate" ~ "Ab Marker"
-  ),
-  surrogate_name = case_when(
-    surrogate == "bindSpike" ~ "IgG Spike",
-    surrogate == "pseudoneutid50" ~ "nAb ID50",
-    surrogate == "pseudoneutid50_adjusted" ~ "adjusted nAb ID50"
-  )) %>%
-  mutate(
-    surrogate_name = factor(surrogate_name, levels = c("IgG Spike", "nAb ID50", "adjusted nAb ID50"), ordered = TRUE)
-  )
-# Read in Bayesian results
-rho_long_tbl = readRDS("results/raw-results/application/rho_long_tbl.rds") %>%
-  mutate(`Estimated Surrogate Index` = case_when(
-    method == "cox" ~ "Cox Model",
-    method == "sl" ~ "SuperLearner",
-    method == "untransformed surrogate" ~ "Ab Marker"
-  ),
-  surrogate_name = case_when(
-    surrogate == "bindSpike" ~ "IgG Spike",
-    surrogate == "pseudoneutid50" ~ "nAb ID50",
-    surrogate == "pseudoneutid50_adjusted" ~ "adjusted nAb ID50"
-  )) %>%
-  mutate(
-    surrogate_name = factor(surrogate_name, levels = c("IgG Spike", "nAb ID50", "adjusted nAb ID50"), ordered = TRUE)
-  )
+# 
+# # Read in Bayesian results
+# rho_long_tbl = readRDS("results/raw-results/application/rho_long_tbl.rds") %>%
+#   mutate(`Estimated Surrogate Index` = case_when(
+#     method == "cox" ~ "Cox Model",
+#     method == "sl" ~ "SuperLearner",
+#     method == "untransformed surrogate" ~ "Ab Marker"
+#   ),
+#   surrogate_name = case_when(
+#     surrogate == "bindSpike" ~ "IgG Spike",
+#     surrogate == "pseudoneutid50" ~ "nAb ID50",
+#     surrogate == "pseudoneutid50_adjusted" ~ "adjusted nAb ID50"
+#   )) %>%
+#   mutate(
+#     surrogate_name = factor(surrogate_name, levels = c("IgG Spike", "nAb ID50", "adjusted nAb ID50"), ordered = TRUE)
+#   )
 
 # Load data with trial-level treatment effects. 
 ma_trt_effects_tbl = readRDS(ma_trt_effects_tbl_location)
@@ -109,7 +81,7 @@ format_CI = function(estimate, ci_lower, ci_upper, digits = 2) {
   paste0(round(estimate, digits), " (", round(ci_lower, digits), ", ", round(ci_upper, digits), ")")
 }
 
-save_inferences_table = function(CI_type, data_type) {
+save_inferences_table = function(CI_type) {
   if (CI_type == "BCa") {
     table_temp = surrogate_results_tbl %>%
       rename(CI_lower = CI_lower_bs, CI_upper = CI_upper_bs)
@@ -118,29 +90,19 @@ save_inferences_table = function(CI_type, data_type) {
       rename(CI_lower = CI_lower_sandwich, CI_upper = CI_upper_sandwich)
   }
   
-  if (data_type == "real-data") {
-    table_temp = table_temp %>% filter(scenario == "real data")
-  } else {
-    table_temp = table_temp %>%
-      filter(scenario != "real data")
-  }
-  
-  outfile = paste0(tables_dir, "/table-inferences-", CI_type, "-", data_type, ".csv")
+  outfile = paste0(tables_dir, "/table-inferences-", CI_type, ".csv")
   
   table_temp %>%
     filter(analysis_set == "naive_only") %>%
     rowwise(everything()) %>%
     mutate(rho_inference = format_CI(rho_trial, CI_lower, CI_upper)) %>%
     ungroup() %>%
-    select(surrogate, method, rho_inference, scenario) %>%
-    pivot_wider(values_from = "rho_inference", names_from = "method") %>%
+    dplyr::select(rho_inference) %>%
     write.csv(file = outfile)
 }
 
-save_inferences_table("BCa", "real-data")
-save_inferences_table("BCa", "pseudo-data")
-save_inferences_table("sandwich", "real-data")
-save_inferences_table("sandwich", "pseudo-data")
+save_inferences_table("BCa")
+save_inferences_table("sandwich")
 
 
 
@@ -148,21 +110,21 @@ save_inferences_table("sandwich", "pseudo-data")
 
 ## MA plots -------------------------------------------------------------
 
-# Add proper name of the surrogates.
-ma_trt_effects_tbl = ma_trt_effects_tbl %>%
-  mutate(`Estimated Surrogate Index` = case_when(
-    method == "cox" ~ "Cox Model",
-    method == "sl" ~ "SuperLearner",
-    method == "untransformed surrogate" ~ "Ab Marker"
-  ),
-  surrogate_name = case_when(
-    surrogate == "bindSpike" ~ "IgG Spike",
-    surrogate == "pseudoneutid50" ~ "nAb ID50",
-    surrogate == "pseudoneutid50_adjusted" ~ "adjusted nAb ID50"
-  )) %>%
-  mutate(
-    surrogate_name = factor(surrogate_name, levels = c("IgG Spike", "nAb ID50", "adjusted nAb ID50"), ordered = TRUE)
-  )
+# # Add proper name of the surrogates.
+# ma_trt_effects_tbl = ma_trt_effects_tbl %>%
+#   mutate(`Estimated Surrogate Index` = case_when(
+#     method == "cox" ~ "Cox Model",
+#     method == "sl" ~ "SuperLearner",
+#     method == "untransformed surrogate" ~ "Ab Marker"
+#   ),
+#   surrogate_name = case_when(
+#     surrogate == "bindSpike" ~ "IgG Spike",
+#     surrogate == "pseudoneutid50" ~ "nAb ID50",
+#     surrogate == "pseudoneutid50_adjusted" ~ "adjusted nAb ID50"
+#   )) %>%
+#   mutate(
+#     surrogate_name = factor(surrogate_name, levels = c("IgG Spike", "nAb ID50", "adjusted nAb ID50"), ordered = TRUE)
+#   )
 
 # Add indicator for whether only naive individuals are in a given trial. 
 ma_trt_effects_tbl = ma_trt_effects_tbl %>%
@@ -216,45 +178,6 @@ transform_VE = new_transform(
   inverse = function(x) 1 - exp(-x)
 )
 
-# Summarize the estimated trial-level treatment effects in meta-analytic plots.
-plot_ma_standard = ma_trt_effects_tbl %>% 
-  filter(method == "untransformed surrogate", trial %in% trials_naive_only) %>%
-  ggplot(aes(x = trt_effect_surrogate_index_est, y = 1 - exp(log_RR_est), color = trial_fct, shape = trial_fct)) +
-  geom_point() +
-  geom_errorbar(aes(
-    ymin = 1 - exp(log_RR_est - 1.96 * log_RR_est_se),
-    ymax = 1 - exp(log_RR_est + 1.96 * log_RR_est_se)
-  ),
-  width = 0.01) +
-  geom_errorbarh(
-    aes(
-      xmin = trt_effect_surrogate_index_est - 1.96 * trt_effect_surrogate_index_est_se,
-      xmax = trt_effect_surrogate_index_est + 1.96 * trt_effect_surrogate_index_est_se
-    ),
-    height = 0.01
-  ) +
-  scale_y_continuous(transform = transform_VE, breaks = c(0, 0.5, 0.75, 0.90, 0.95)) +
-  scale_color_manual(values = my_palette, limits = trials_naive_only_fct) +
-  scale_shape_manual(values = my_shapes, limits = trials_naive_only_fct) +
-  coord_cartesian(ylim = c(-0.2, 0.95)) +
-  facet_wrap(~surrogate_name, scales = "free_x", nrow = 2) +
-  xlab("Estimated Treatment Effect on Antibody Marker") +
-  ylab("Estimated VE") +
-  theme(legend.position = "bottom", legend.title = element_blank())
-
-plot_ma_standard
-
-ggsave(
-  filename = "ma-standard-naive-only.pdf",
-  path = figures_dir,
-  height = double_height,
-  width = double_width,
-  dpi = res,
-  device = "pdf",
-  units = "cm"
-)
-
-
 # Helper function for MA plots for the surrogate indices by weighting and
 # analysis_set.
 ma_plot_helper = function(weighting, analysis_set, VE_scale, include_risk_score) {
@@ -266,11 +189,11 @@ ma_plot_helper = function(weighting, analysis_set, VE_scale, include_risk_score)
   } else if (analysis_set == "mixed") {
     trials_included = trials_mixed_fct
   }
-  ggplot_object = ma_trt_effects_tbl %>% filter(method != "untransformed surrogate", 
-                                                analysis_set == .env$analysis_set, 
+  ggplot_object = ma_trt_effects_tbl %>% filter(analysis_set == .env$analysis_set, 
                                                 trial_fct %in% trials_included,
                                                 weighting == .env$weighting, 
                                                 include_risk_score == .env$include_risk_score) %>%
+    mutate(high_d_surrogate = ifelse(high_d_surrogate, "low dim. S", "high dim. S")) %>%
     ggplot(aes(
       x = 1 - exp(trt_effect_surrogate_index_est),
       y = 1 - exp(log_RR_est),
@@ -294,7 +217,7 @@ ma_plot_helper = function(weighting, analysis_set, VE_scale, include_risk_score)
     scale_color_manual(values = my_palette, limits = trials_included) +
     scale_shape_manual(values = my_shapes, limits = trials_included) +
     coord_cartesian(ylim = c(-0.2, 0.95)) +
-    facet_grid(`Estimated Surrogate Index` ~ surrogate_name) +
+    facet_grid(. ~ high_d_surrogate) +
     xlab("Estimated VE on Surr. Index") +
     ylab("Estimated VE") +
     theme(legend.position = "bottom", legend.title = element_blank())
@@ -349,218 +272,29 @@ expand_grid(
   rowwise(everything()) %>%
   summarise(ma_plot_helper(weighting, analysis_set, VE_scale, include_risk_score))
 
-# Create extra plots for the four-trial analysis set where the treatment effects
-# for the excluded trials are shown.
-ma_trt_effects_tbl %>% filter(
-  method != "untransformed surrogate",
-  analysis_set == "naive_only",
-  !(trial %in% trials_naive_only),
-  weighting == "unnormalized",
-  include_risk_score == FALSE
-) %>%
-  ggplot(aes(
-    x = 1 - exp(trt_effect_surrogate_index_est),
-    y = 1 - exp(log_RR_est),
-    color = trial_fct,
-    shape = trial_fct
-  )) +
-  geom_point(show.legend = TRUE) +
-  geom_errorbar(aes(
-    ymin = 1 - exp(log_RR_est - 1.96 * log_RR_est_se),
-    ymax = 1 - exp(log_RR_est + 1.96 * log_RR_est_se)
-  ), width = 0.01) +
-  geom_errorbarh(aes(
-    xmin = 1 - exp(
-      trt_effect_surrogate_index_est - 1.96 * trt_effect_surrogate_index_est_se
-    ),
-    xmax = 1 - exp(
-      trt_effect_surrogate_index_est + 1.96 * trt_effect_surrogate_index_est_se
-    )
-  ), height = 0.01) +
-  geom_abline(intercept = 0, slope = 1) +
-  scale_color_manual(values = my_palette, limits = trials_mixed_fct[!(trials_mixed_fct %in% trials_naive_only_fct)]) +
-  scale_shape_manual(values = my_shapes, limits = trials_mixed_fct[!(trials_mixed_fct %in% trials_naive_only_fct)]) +
-  scale_y_continuous(transform = transform_VE, breaks = c(0, 0.5, 0.75, 0.90, 0.95)) +
-  scale_x_continuous(transform = transform_VE, breaks = c(0, 0.5, 0.75, 0.90, 0.95)) +
-  coord_cartesian(ylim = c(-0.2, 0.95), xlim = c(-0.2, 0.95)) +
-  facet_grid(`Estimated Surrogate Index` ~ surrogate_name) +
-  xlab("Predicted VE/Estimated VE on Surr. Index") +
-  ylab("Estimated VE") +
-  theme(legend.position = "bottom", legend.title = element_blank()) +
-  guides(color = guide_legend(nrow = 2))
-
-ggsave(
-  filename = "ma-predictions-unnormalized-wo-riskscore.pdf",
-  path = figures_dir,
-  height = double_height,
-  width = double_width,
-  dpi = res,
-  device = "pdf",
-  units = "cm"
-)
-
 ### Plot for Poster ------------------------------------------------------
 
 # Use the data set with the trial-level correlation results to produce a text
 # variable with the estimated correlation and 95% CI to be added to the MA plots.
 surrogate_results_text_for_plots = surrogate_results_tbl %>%
-  # If we're working with the untransformed surrogate, the estimates and CI
-  # limits should be multiplied with -1 because the treatment effect on the
-  # surrogate is defined as log(RR) and higher values of the surrogate are
-  # better.
-  mutate(
-    rho_trial = ifelse(method == "untransformed surrogate", -1 * rho_trial, rho_trial),
-    CI_lower_bs_new = ifelse(method == "untransformed surrogate", -1 * CI_upper_bs, CI_lower_bs),
-    CI_upper_bs_new = ifelse(method == "untransformed surrogate", -1 * CI_lower_bs, CI_upper_bs)
-  ) %>%
   rowwise(everything()) %>%
   summarise(rho_inference = list({
-    bquote(rho[trial] == .(round(rho_trial, 2)) *  ~ "(" * .(round(CI_lower_bs_new, 2)) * ", " * .(round(CI_upper_bs_new, 2)) * ")")
+    bquote(rho[trial] == .(round(rho_trial, 2)) *  ~ "(" * .(round(CI_lower_bs, 2)) * ", " * .(round(CI_upper_bs, 2)) * ")")
   })) %>%
   ungroup() %>%
-  filter(scenario == "real data") %>%
-  select(surrogate,
-         method,
-         rho_inference,
-         analysis_set,
-         weighting,
-         include_risk_score) %>%
-  mutate(
-    surrogate_name = case_when(
-      surrogate == "bindSpike" ~ "IgG Spike",
-      surrogate == "pseudoneutid50" ~ "nAb ID50",
-      surrogate == "pseudoneutid50_adjusted" ~ "adjusted nAb ID50"
-    )
-  ) %>%
-  mutate(surrogate_name = factor(
-    surrogate_name,
-    levels = c("IgG Spike", "nAb ID50", "adjusted nAb ID50"),
-    ordered = TRUE
-  ))
-
-# Extra plot that contains the MA plot for the untransformed surrogate and the
-# MA plot for the surrogate index based on SuperLearner. This plot will be used
-# in a poster, so the background is transparant.
-theme_transparent <- theme(
-  panel.background        = element_rect(fill = "transparent", colour = NA),
-  plot.background         = element_rect(fill = "transparent", colour = NA),
-  legend.background       = element_rect(fill = "transparent", colour = NA),
-  legend.box.background   = element_rect(fill = "transparent", colour = NA),
-  strip.background        = element_rect(fill = "transparent", colour = NA)
-)
-
-plot_ma_sl = ma_trt_effects_tbl %>% filter(method != "untransformed surrogate", 
-                                           analysis_set == "naive_only", 
-                                           trial_fct %in% trials_naive_only_fct,
-                                           weighting == "unnormalized", 
-                                           include_risk_score == FALSE,
-                                           method == "sl") %>%
-  ggplot(aes(
-    x = 1 - exp(trt_effect_surrogate_index_est),
-    y = 1 - exp(log_RR_est),
-    color = trial_fct,
-    shape = trial_fct
-  )) +
-  geom_point() +
-  geom_errorbar(aes(
-    ymin = 1 - exp(log_RR_est - 1.96 * log_RR_est_se),
-    ymax = 1 - exp(log_RR_est + 1.96 * log_RR_est_se)
-  ), width = 0.01) +
-  geom_errorbarh(aes(
-    xmin = 1 - exp(
-      trt_effect_surrogate_index_est - 1.96 * trt_effect_surrogate_index_est_se
-    ),
-    xmax = 1 - exp(
-      trt_effect_surrogate_index_est + 1.96 * trt_effect_surrogate_index_est_se
-    )
-  ), height = 0.01) +
-  geom_abline(intercept = 0, slope = 1) +
-  scale_color_manual(values = my_palette, limits = trials_naive_only_fct) +
-  scale_shape_manual(values = my_shapes, limits = trials_naive_only_fct) +
-  coord_cartesian(ylim = c(-0.2, 0.95)) +
-  facet_grid(. ~ surrogate_name) +
-  xlab("Estimated VE on Estimated Surrogate Index") +
-  ylab("Estimated VE") +
-  theme(legend.position = "bottom", legend.title = element_blank(),
-        panel.background = element_rect(fill = "transparent", colour = NA),
-        plot.background  = element_rect(fill = "transparent", colour = NA)) +
-  scale_y_continuous(transform = transform_VE, breaks = c(0, 0.5, 0.75, 0.90, 0.95)) +
-  scale_x_continuous(transform = transform_VE, breaks = c(0, 0.5, 0.75, 0.90, 0.95)) +
-  ggtitle("Meta-Analysis with SuperLearner") +
-  theme_transparent +
-  # add text with estimated trial-level correlation and 95% CI
-  geom_text_npc(
-    data = surrogate_results_text_for_plots %>%
-      filter(
-        method == "sl",
-        analysis_set == "naive_only",
-        weighting == "unnormalized",
-        include_risk_score == FALSE
-      ),
-    aes(
-      npcx = 0.02,
-      npcy = 0.95,
-      label = rho_inference
-    ),
-    inherit.aes = FALSE,
-    color = "black",
-    size = 2.5,
-    parse = TRUE
-  )
-
-
-
-# Add two plots together vertically.
-plot_ma_standard_new = plot_ma_standard +
-  facet_grid(cols = vars(surrogate_name), scales = "free_x") +
-  theme_transparent +
-  ggtitle("Canonical Meta-Analysis") +
-  # add text with estimated trial-level correlation and 95% CI
-  geom_text_npc(
-    data = surrogate_results_text_for_plots %>%
-      filter(
-        method == "untransformed surrogate",
-        analysis_set == "naive_only"
-      ),
-    aes(
-      npcx = 0.02,
-      npcy = 0.95,
-      label = rho_inference
-    ),
-    inherit.aes = FALSE,
-    color = "black",
-    size = 2.5,
-    parse = TRUE
-  )
-combined <- (plot_ma_standard_new / plot_ma_sl) +
-  plot_layout(guides = "collect") &
-  theme(legend.position = "right", 
-        legend.text.position = "top",
-        legend.text = element_text(size = 6)) +
-  theme(plot.background = element_rect(scales::alpha("white", 0.5), colour = NA))
-
-# Save the picture in high resolution with transparent background. We need to
-# save as png to ensure that the background is truly transparent when using this
-# picture in latex etc.
-ggsave(
-  filename = "ma-standard-and-sl-naive-only.png",
-  plot = combined,
-  path = figures_dir,
-  height = double_height * 0.80,
-  width = double_width * 1.1,
-  dpi = res*3,
-  device = "png",
-  units = "cm",
-  bg = "transparent"
-)
+  dplyr::select(rho_inference,
+                analysis_set,
+                weighting,
+                include_risk_score,
+                high_d_surrogate) %>%
+  mutate(high_d_surrogate = ifelse(high_d_surrogate, "high dim. S", "low dim. S"))
 
 # Same plot, but with modifications to put in a presentation.
-plot_ma_sl = ma_trt_effects_tbl %>% filter(method != "untransformed surrogate", 
-                                           analysis_set == "naive_only", 
+plot_ma_sl = ma_trt_effects_tbl %>% filter(analysis_set == "naive_only", 
                                            trial_fct %in% trials_naive_only_fct,
                                            weighting == "unnormalized", 
-                                           include_risk_score == FALSE,
-                                           method == "sl") %>%
+                                           include_risk_score == FALSE) %>%
+  mutate(high_d_surrogate = ifelse(high_d_surrogate, "high dim. S", "low dim. S")) %>%
   ggplot(aes(
     x = 1 - exp(trt_effect_surrogate_index_est),
     y = 1 - exp(log_RR_est),
@@ -584,7 +318,7 @@ plot_ma_sl = ma_trt_effects_tbl %>% filter(method != "untransformed surrogate",
   scale_color_manual(values = my_palette, limits = trials_naive_only_fct) +
   scale_shape_manual(values = my_shapes, limits = trials_naive_only_fct) +
   coord_cartesian(ylim = c(-0.2, 0.95)) +
-  facet_grid(. ~ surrogate_name) +
+  facet_grid(. ~ high_d_surrogate) +
   xlab("Estimated VE on Estimated Surrogate Index") +
   ylab("Estimated VE") +
   theme(legend.position = "bottom", legend.title = element_blank(),
@@ -597,7 +331,6 @@ plot_ma_sl = ma_trt_effects_tbl %>% filter(method != "untransformed surrogate",
   geom_text_npc(
     data = surrogate_results_text_for_plots %>%
       filter(
-        method == "sl",
         analysis_set == "naive_only",
         weighting == "unnormalized",
         include_risk_score == FALSE
@@ -614,193 +347,164 @@ plot_ma_sl = ma_trt_effects_tbl %>% filter(method != "untransformed surrogate",
   )
 
 
-
-# Add two plots together vertically.
-plot_ma_standard_new = plot_ma_standard +
-  facet_grid(cols = vars(surrogate_name), scales = "free_x") +
-  ggtitle("Canonical Meta-Analysis") +
-  # add text with estimated trial-level correlation and 95% CI
-  geom_text_npc(
-    data = surrogate_results_text_for_plots %>%
-      filter(
-        method == "untransformed surrogate",
-        analysis_set == "naive_only"
-      ),
-    aes(
-      npcx = 0.02,
-      npcy = 0.95,
-      label = rho_inference
-    ),
-    inherit.aes = FALSE,
-    color = "black",
-    size = 2.75,
-    parse = TRUE
-  )
-
-combined <- (plot_ma_standard_new / plot_ma_sl) +
-  plot_layout(guides = "collect") &
-  theme(legend.position = "none")
-# Save the picture in high resolution with transparent background. We need to
-# save as png to ensure that the background is truly transparent when using this
-# picture in latex etc.
 ggsave(
-  filename = "ma-standard-and-sl-naive-only-presentation.pdf",
-  plot = combined,
+  filename = "ma-high-d-sl-presentation.pdf",
+  plot = plot_ma_sl,
   path = figures_dir,
-  height = double_height,
+  height = single_height,
   width = double_width,
   device = "pdf",
   units = "cm"
 )
 
 
-## Non-Parametric MA ----------------------------------------------------
-
-# Helper function to make plots.
-conf_int_plot_f = function(include_risk_score, type, res_var_prop, scenario) {
-  plotting_data = surrogate_results_tbl %>%
-    filter(include_risk_score == .env$include_risk_score |
-             method == "untransformed surrogate") %>%
-    filter(scenario == .env$scenario, analysis_set == "naive_only")
-  if (res_var_prop) {
-    plotting_data = plotting_data %>%
-      rename(CI_lower = CI_lower_bs_residual_var_prop, CI_upper = CI_upper_bs_residual_var_prop) %>%
-      filter(method != "untransformed surrogate")
-  } else {
-    if (type == "bs") {
-      plotting_data = plotting_data %>%
-        rename(CI_lower = CI_lower_bs, CI_upper = CI_upper_bs)
-    } else {
-      plotting_data = plotting_data %>%
-        rename(CI_lower = CI_lower_sandwich, CI_upper = CI_upper_sandwich)
-    }
-    plotting_data = plotting_data %>%
-      mutate(
-        rho_trial = ifelse(method == "untransformed surrogate", -1 * rho_trial, rho_trial),
-        CI_lower = ifelse(method == "untransformed surrogate", -1 * CI_lower, CI_lower),
-        CI_upper = ifelse(method == "untransformed surrogate", -1 * CI_upper, CI_upper)
-      )
-  }
-  
-  
-  conf_int_plot = plotting_data %>%
-    ggplot(aes(x = surrogate_name, color = `Estimated Surrogate Index`)) +
-    geom_point(aes(y = rho_trial), position = position_dodge(width = 0.5)) +
-    geom_errorbar(
-      aes(ymin = CI_lower, ymax = CI_upper),
-      position = position_dodge(width = 0.5),
-      width = 0.2
-    ) +
-    coord_cartesian(ylim = c(-1, 1)) +
-    scale_y_continuous(name = expr(rho[trial])) +
-    scale_x_discrete(name = NULL) +
-    theme(
-      legend.position = "bottom",
-      legend.box = "vertical",
-      legend.margin = margin(),
-      legend.text = element_text(margin = margin(l = 0))
-    ) +
-    guides(color = guide_legend(direction = "vertical", nrow = 1))
-  
-  risk_score_chr = ifelse(include_risk_score, "w-riskscore", "wo-riskscore")
-  type_chr = ifelse(type == "bs", "bs", "sandwich")
-  res_var_prop_chr = ifelse(res_var_prop, "res_var_prop", "cor")
-  outfile = paste0("/surrogacy-measures-summary-", risk_score_chr, "-", type_chr, "-", res_var_prop_chr, ".pdf")
-  
-  ggsave(
-    outfile,
-    path = figures_dir,
-    height = single_height,
-    width = single_width,
-    dpi = res,
-    device = "pdf",
-    units = "cm"
-  )
-}
-
-# conf_int_plot_f(TRUE, "bs", FALSE)
-# conf_int_plot_f(TRUE, "sandwich", FALSE)
-conf_int_plot_f(FALSE, "bs", FALSE, "real data")
-conf_int_plot_f(FALSE, "sandwich", FALSE, "real data")
-
-# conf_int_plot_f(TRUE, "bs", TRUE)
-# conf_int_plot_f(FALSE, "bs", TRUE, "real data")
-
-## Bayesian MA -------------------------------------------------------------
-
-# Define helper function to make and save plots.
-posterior_plots_f = function(assume_proportional_line, include_risk_score, orientation) {
-  if (orientation == "vertical") {
-    facet_formula = surrogate_name~.
-    height_adjustment = 1
-  } else if (orientation == "horizontal") {
-    facet_formula = .~surrogate_name
-    height_adjustment = 0.6
-  }
-  posterior_plot = rho_long_tbl %>% filter(
-    assume_proportional_line == .env$assume_proportional_line,
-    include_risk_score == .env$include_risk_score | is.na(include_risk_score),
-    analysis_set == "naive_only"
-  ) %>%
-    # The trial-level correlation is "reversed" for the untransformed Ab Marker.
-    # To have a better comparison, we multiply the corresponding trial-level
-    # correlation with -1.
-    mutate(
-      rho = ifelse(`Estimated Surrogate Index` == "Ab Marker", -1 * rho, rho) 
-    ) %>%
-    ggplot(aes(x = rho, y = `Estimated Surrogate Index`, fill = `Estimated Surrogate Index`)) +
-    geom_density_ridges(quantile_lines = TRUE,
-                        quantiles = c(0.025, 0.5, 0.975)) +
-    facet_grid(facet_formula) +
-    scale_y_discrete(labels = NULL) +
-    labs(title = "Posterior Distributions of Trial-Level Correlation",
-         x = expr(rho[trial]),
-         y = NULL) +
-    theme(
-      legend.position = "bottom",
-      legend.box = "vertical",
-      legend.margin = margin()) +
-    guides(fill = guide_legend(direction = "vertical", nrow = 1))
-  
-  assume_proportional_line_chr = ifelse(assume_proportional_line, "prop-line", "default")
-  risk_score_chr = ifelse(include_risk_score, "w-riskscore", "wo-riskscore")
-  outfile = paste0("/posterior-distributions-", assume_proportional_line_chr, "-", risk_score_chr, "-", orientation, ".pdf")
-  
-  ggsave(
-    outfile,
-    path = figures_dir,
-    height = double_height * height_adjustment,
-    width = double_width,
-    dpi = res,
-    device = "pdf",
-    units = "cm"
-  )
-}
-
-# Make plots for specified scenarios
-# posterior_plots_f(TRUE, TRUE)
-posterior_plots_f(TRUE, FALSE, "vertical")
-# posterior_plots_f(FALSE, TRUE)
-posterior_plots_f(FALSE, FALSE, "vertical")
-posterior_plots_f(TRUE, FALSE, "horizontal")
-posterior_plots_f(FALSE, FALSE, "horizontal")
-
-# Compute posterior mean, median, and quantiles.
-rho_long_tbl %>%
-  group_by(
-    surrogate,
-    method,
-    weighting,
-    analysis_set,
-    include_risk_score,
-    assume_proportional_line
-  ) %>%
-  summarise(
-    mean = mean(rho),
-    median = median(rho),
-    quantile_2.5 = quantile(rho, 0.025),
-    quantile_5 = quantile(rho, 0.05),
-    quantile_95 = quantile(rho, 0.95),
-    quantile_97.5 = quantile(rho, 0.975)
-  ) %>%
-  write.csv(paste0(tables_dir, "/posterior-summaries.csv"))
+# ## Non-Parametric MA ----------------------------------------------------
+# 
+# # Helper function to make plots.
+# conf_int_plot_f = function(include_risk_score, type, res_var_prop, scenario) {
+#   plotting_data = surrogate_results_tbl %>%
+#     filter(include_risk_score == .env$include_risk_score |
+#              method == "untransformed surrogate") %>%
+#     filter(scenario == .env$scenario, analysis_set == "naive_only")
+#   if (res_var_prop) {
+#     plotting_data = plotting_data %>%
+#       rename(CI_lower = CI_lower_bs_residual_var_prop, CI_upper = CI_upper_bs_residual_var_prop) %>%
+#       filter(method != "untransformed surrogate")
+#   } else {
+#     if (type == "bs") {
+#       plotting_data = plotting_data %>%
+#         rename(CI_lower = CI_lower_bs, CI_upper = CI_upper_bs)
+#     } else {
+#       plotting_data = plotting_data %>%
+#         rename(CI_lower = CI_lower_sandwich, CI_upper = CI_upper_sandwich)
+#     }
+#     plotting_data = plotting_data %>%
+#       mutate(
+#         rho_trial = ifelse(method == "untransformed surrogate", -1 * rho_trial, rho_trial),
+#         CI_lower = ifelse(method == "untransformed surrogate", -1 * CI_lower, CI_lower),
+#         CI_upper = ifelse(method == "untransformed surrogate", -1 * CI_upper, CI_upper)
+#       )
+#   }
+#   
+#   
+#   conf_int_plot = plotting_data %>%
+#     ggplot(aes(x = surrogate_name, color = `Estimated Surrogate Index`)) +
+#     geom_point(aes(y = rho_trial), position = position_dodge(width = 0.5)) +
+#     geom_errorbar(
+#       aes(ymin = CI_lower, ymax = CI_upper),
+#       position = position_dodge(width = 0.5),
+#       width = 0.2
+#     ) +
+#     coord_cartesian(ylim = c(-1, 1)) +
+#     scale_y_continuous(name = expr(rho[trial])) +
+#     scale_x_discrete(name = NULL) +
+#     theme(
+#       legend.position = "bottom",
+#       legend.box = "vertical",
+#       legend.margin = margin(),
+#       legend.text = element_text(margin = margin(l = 0))
+#     ) +
+#     guides(color = guide_legend(direction = "vertical", nrow = 1))
+#   
+#   risk_score_chr = ifelse(include_risk_score, "w-riskscore", "wo-riskscore")
+#   type_chr = ifelse(type == "bs", "bs", "sandwich")
+#   res_var_prop_chr = ifelse(res_var_prop, "res_var_prop", "cor")
+#   outfile = paste0("/surrogacy-measures-summary-", risk_score_chr, "-", type_chr, "-", res_var_prop_chr, ".pdf")
+#   
+#   ggsave(
+#     outfile,
+#     path = figures_dir,
+#     height = single_height,
+#     width = single_width,
+#     dpi = res,
+#     device = "pdf",
+#     units = "cm"
+#   )
+# }
+# 
+# # conf_int_plot_f(TRUE, "bs", FALSE)
+# # conf_int_plot_f(TRUE, "sandwich", FALSE)
+# conf_int_plot_f(FALSE, "bs", FALSE, "real data")
+# conf_int_plot_f(FALSE, "sandwich", FALSE, "real data")
+# 
+# # conf_int_plot_f(TRUE, "bs", TRUE)
+# # conf_int_plot_f(FALSE, "bs", TRUE, "real data")
+# 
+# ## Bayesian MA -------------------------------------------------------------
+# 
+# # Define helper function to make and save plots.
+# posterior_plots_f = function(assume_proportional_line, include_risk_score, orientation) {
+#   if (orientation == "vertical") {
+#     facet_formula = surrogate_name~.
+#     height_adjustment = 1
+#   } else if (orientation == "horizontal") {
+#     facet_formula = .~surrogate_name
+#     height_adjustment = 0.6
+#   }
+#   posterior_plot = rho_long_tbl %>% filter(
+#     assume_proportional_line == .env$assume_proportional_line,
+#     include_risk_score == .env$include_risk_score | is.na(include_risk_score),
+#     analysis_set == "naive_only"
+#   ) %>%
+#     # The trial-level correlation is "reversed" for the untransformed Ab Marker.
+#     # To have a better comparison, we multiply the corresponding trial-level
+#     # correlation with -1.
+#     mutate(
+#       rho = ifelse(`Estimated Surrogate Index` == "Ab Marker", -1 * rho, rho) 
+#     ) %>%
+#     ggplot(aes(x = rho, y = `Estimated Surrogate Index`, fill = `Estimated Surrogate Index`)) +
+#     geom_density_ridges(quantile_lines = TRUE,
+#                         quantiles = c(0.025, 0.5, 0.975)) +
+#     facet_grid(facet_formula) +
+#     scale_y_discrete(labels = NULL) +
+#     labs(title = "Posterior Distributions of Trial-Level Correlation",
+#          x = expr(rho[trial]),
+#          y = NULL) +
+#     theme(
+#       legend.position = "bottom",
+#       legend.box = "vertical",
+#       legend.margin = margin()) +
+#     guides(fill = guide_legend(direction = "vertical", nrow = 1))
+#   
+#   assume_proportional_line_chr = ifelse(assume_proportional_line, "prop-line", "default")
+#   risk_score_chr = ifelse(include_risk_score, "w-riskscore", "wo-riskscore")
+#   outfile = paste0("/posterior-distributions-", assume_proportional_line_chr, "-", risk_score_chr, "-", orientation, ".pdf")
+#   
+#   ggsave(
+#     outfile,
+#     path = figures_dir,
+#     height = double_height * height_adjustment,
+#     width = double_width,
+#     dpi = res,
+#     device = "pdf",
+#     units = "cm"
+#   )
+# }
+# 
+# # Make plots for specified scenarios
+# # posterior_plots_f(TRUE, TRUE)
+# posterior_plots_f(TRUE, FALSE, "vertical")
+# # posterior_plots_f(FALSE, TRUE)
+# posterior_plots_f(FALSE, FALSE, "vertical")
+# posterior_plots_f(TRUE, FALSE, "horizontal")
+# posterior_plots_f(FALSE, FALSE, "horizontal")
+# 
+# # Compute posterior mean, median, and quantiles.
+# rho_long_tbl %>%
+#   group_by(
+#     surrogate,
+#     method,
+#     weighting,
+#     analysis_set,
+#     include_risk_score,
+#     assume_proportional_line
+#   ) %>%
+#   summarise(
+#     mean = mean(rho),
+#     median = median(rho),
+#     quantile_2.5 = quantile(rho, 0.025),
+#     quantile_5 = quantile(rho, 0.05),
+#     quantile_95 = quantile(rho, 0.95),
+#     quantile_97.5 = quantile(rho, 0.975)
+#   ) %>%
+#   write.csv(paste0(tables_dir, "/posterior-summaries.csv"))

@@ -18,32 +18,18 @@ if (parallelly::supportsMulticore()) {
   plan(multisession)
 }
 
-# Extract arguments for analysis.
-args = commandArgs(trailingOnly = TRUE)
+ma_trt_effects_tbl_location = "additional-application-2/results/raw-results/ma_trt_effects_tbl.rds"
 
-# The first argument indicates whether the analysis should be conducted on the
-# original data or on the synthetic data.
-data_set = args[1]
-if (data_set == "real") {
-  ma_trt_effects_tbl_location = "results/raw-results/application/ma_trt_effects_tbl.rds"
-  
-  # Specify options for saving the plots to files
-  figures_dir = "results/figures/application/meta-analysis"
-  tables_dir = "results/tables/application/meta-analysis"
-} else if (data_set == "synthetic") {
-  ma_trt_effects_tbl_location = "results/raw-results/application-synthetic/ma_trt_effects_tbl.rds"
-  
-  # Specify options for saving the plots to files
-  figures_dir = "results/figures/application-synthetic/meta-analysis"
-  tables_dir = "results/tables/application-synthetic/meta-analysis"
-}
+# Specify options for saving the plots to files
+figures_dir = "additional-application-2/results/figures"
+tables_dir = "additional-application-2/results/tables"
 
 ## Analysis Parameters -------------------------------------------------- 
 
 set.seed(1)
 # Number of bootstrap replications for the multiplier bootstrap for the
 # meta-analytic parameters.
-B_multiplier = 1e5
+B_multiplier = 1e4
 
 time_cumulative_incidence = 80
 
@@ -89,21 +75,6 @@ trials_mixed_fct = c(
 
 # Load data with trial-level treatment effects. 
 ma_trt_effects_tbl = readRDS(ma_trt_effects_tbl_location)
-
-# Add proper name of the surrogates.
-ma_trt_effects_tbl = ma_trt_effects_tbl %>%
-  mutate(surrogate_name = case_when(
-    surrogate == "bindSpike" ~ "IgG Spike",
-    surrogate == "pseudoneutid50" ~ "nAb ID50",
-    surrogate == "pseudoneutid50_adjusted" ~ "adjusted nAb ID50"
-  ))
-
-# Add indicator for whether only naive individuals are in a given trial. 
-ma_trt_effects_tbl = ma_trt_effects_tbl %>%
-  mutate(
-    only_naive = !(trial %in% c("Sanofi-1 non-naive", "Sanofi-2 non-naive"))
-  )
-
 
 # Formal Meta-Analysis -----------------------------------------------------
 
@@ -171,24 +142,9 @@ statistic_f_residual_var_prop = function(data, weights) {
   return(list(estimate = prop_explained, se = NA))
 }
 
-# Construct data set for the treatment effect estimates on the untransformed
-# surrogates. We duplicate rows such that we have a set of rows corresponding to
-# each analysis set.
-ma_trt_effects_tbl_untransformed = bind_rows(
-  ma_trt_effects_tbl %>%
-    filter(method == "untransformed surrogate") %>%
-    filter(trial %in% trials_naive_only) %>%
-    mutate(analysis_set = "naive_only")
-  # ma_trt_effects_tbl %>%
-  #   filter(method == "untransformed surrogate") %>%
-  #   filter(trial %in% trials_mixed) %>%
-  #   mutate(analysis_set = "mixed")
-)
 
 # Construct data set with a set of rows corresponding to each analysis set.
 ma_trt_effects_tbl_modified = ma_trt_effects_tbl %>%
-  filter(method != "untransformed surrogate") %>%
-  bind_rows(ma_trt_effects_tbl_untransformed) %>%
   # Make sure that only the correct trials are included for each analysis set.
   filter(ifelse(
     analysis_set == "first_four",
@@ -196,36 +152,11 @@ ma_trt_effects_tbl_modified = ma_trt_effects_tbl %>%
     ifelse(analysis_set == "naive_only", trial %in% trials_naive_only, TRUE)
   ))
 
-# Add pseudo-real data by (i) cloning each trial four times and (ii) dividing
-# the within-trial variance matrices by four.
-ma_trt_effects_tbl_modified = bind_rows(
-  ma_trt_effects_tbl_modified %>%
-    mutate(scenario = "real data"),
-  bind_rows(
-    ma_trt_effects_tbl_modified,
-    ma_trt_effects_tbl_modified,
-    ma_trt_effects_tbl_modified,
-    ma_trt_effects_tbl_modified
-  ) %>%
-    mutate(scenario = "four clones", analysis_set == "naive_only"),
-  ma_trt_effects_tbl_modified %>%
-    filter(analysis_set == "naive_only") %>%
-    mutate(
-      vcov = purrr::map(
-        .x = vcov,
-        .f = function(x) {
-          x / 4
-        }
-      ),
-      scenario = "precise trials"
-    )
-)
-
 
 # Estimate the surrogacy parameters on each data set of trial-level treatment
 # effect estimates.
 surrogate_results_tbl = ma_trt_effects_tbl_modified %>%
-  group_by(surrogate, method, weighting, analysis_set, include_risk_score, scenario) %>%
+  group_by(weighting, analysis_set, include_risk_score, high_d_surrogate) %>%
   summarise(data_tbl = list(pick(everything())), N = nrow(data_tbl[[1]])) %>%
   ungroup() %>%
   mutate(
@@ -335,7 +266,7 @@ surrogate_results_tbl = surrogate_results_tbl %>%
 
 # Summarize inferences in a table.
 surrogate_results_tbl = surrogate_results_tbl %>%
-  select(-moment_estimate, -bootstrap_ci, -bootstrap_ci_residual_var, -rho_sandwich_inference, -data_tbl) 
+  dplyr::select(-moment_estimate, -bootstrap_ci, -bootstrap_ci_residual_var, -rho_sandwich_inference, -data_tbl) 
 
 surrogate_results_tbl %>%
   write.csv(file = paste0(tables_dir, "/surrogacy-inferences.csv"))

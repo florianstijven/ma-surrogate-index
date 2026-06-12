@@ -16,27 +16,13 @@ if (parallelly::supportsMulticore()) {
   plan(multisession)
 }
 
-# Extract arguments for analysis.
-args = commandArgs(trailingOnly = TRUE)
+surr_indices_tbl_location = "additional-application-2/results/raw-results/ipd_surr_indices_tbl.rds"
+out_file = "additional-application-2/results/raw-results/ma_trt_effects_tbl.rds"
 
-# The first argument indicates whether the analysis should be conducted on the
-# original data or on the synthetic data.
-data_set = args[1]
-if (data_set == "real") {
-  surr_indices_tbl_location = "results/raw-results/application/ipd_surr_indices_tbl.rds"
-  out_file = "results/raw-results/application/ma_trt_effects_tbl.rds"
-  
-  # Specify options for saving the plots to files
-  figures_dir = "results/figures/application/meta-analysis"
-  tables_dir = "results/tables/application/meta-analysis"
-} else if (data_set == "synthetic") {
-  surr_indices_tbl_location = "results/raw-results/application-synthetic/ipd_surr_indices_tbl.rds"
-  out_file = "results/raw-results/application-synthetic/ma_trt_effects_tbl.rds"
-  
-  # Specify options for saving the plots to files
-  figures_dir = "results/figures/application-synthetic/meta-analysis"
-  tables_dir = "results/tables/application-synthetic/meta-analysis"
-}
+# Specify options for saving the plots to files
+figures_dir = "additional-application-2/results/figures/"
+tables_dir = "additional-application-2/results/tables/"
+
 
 ## Analysis Parameters -------------------------------------------------- 
 
@@ -264,14 +250,14 @@ estimate_treatment_effects = function(data,
 ma_trt_effects_tbl =
   ipd_surr_indices_tbl %>%
   filter(surrogate != "none") %>%
-  group_by(method, surrogate, trial, weighting, analysis_set, include_risk_score) %>%
+  group_by(trial, weighting, analysis_set, include_risk_score, high_d_surrogate) %>%
   summarize(data = list(pick(everything()))) %>%
   ungroup() %>%
   # Add variables that determine which treatment effects are estimated. For the original surrogates,
   # the treatment effects are mean differences. 
-  mutate(log_RR_alpha = ifelse(method == "none", FALSE, TRUE),
+  mutate(log_RR_alpha = TRUE,
          log_RR_beta = TRUE,
-         VE_surr = ifelse(method == "none", FALSE, TRUE),
+         VE_surr = TRUE,
          glm_VE = FALSE) %>%
   mutate(
     est_list = future_pmap(
@@ -298,7 +284,7 @@ ma_trt_effects_tbl = ma_trt_effects_tbl %>%
     log_RR_est_se = sqrt(vcov[2, 2])
   ) %>%
   ungroup() %>%
-  select(-data)
+  dplyr::select(-data)
 
 # Saving Results ----------------------------------------------------------
 

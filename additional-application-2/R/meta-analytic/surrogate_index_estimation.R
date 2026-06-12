@@ -25,7 +25,7 @@ if (parallelly::supportsMulticore()) {
 }
 
 data_location = "additional-application-2/data/processed_data_synthetic_high_d.rds"
-out_file = "additional-application-2/results/raw-results/application-synthetic/ipd_surr_indices_tbl.rds"
+out_file = "additional-application-2/results/raw-results/ipd_surr_indices_tbl.rds"
 
 # Specify options for saving the plots to files
 figures_dir = "additional-application-2/results/figures/"
@@ -81,13 +81,6 @@ ipd_tbl = ipd_tbl %>%
     )),
     mixed = TRUE
   )
-
-# TEMPORARILY SAMPLE 3000 SUBJECTS PER TRIAL, TO SPEED UP THE COMPUTATIONS FOR
-# NOW. THIS SHOULD BE REMOVED LATER ON.
-ipd_tbl = ipd_tbl %>%
-  group_by(trial) %>%
-  slice_sample(n = 3000)
-
 
 # Compute pseudo-values. These are computed for each trial separately. We first
 # fit a separate KM curve by trial and treatment group.
