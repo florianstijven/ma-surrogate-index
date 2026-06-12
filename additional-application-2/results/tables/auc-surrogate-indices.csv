@@ -1,0 +1,17 @@
+"","weighting","trial","analysis_set","include_risk_score","high_d_surrogate","AUC"
+"1","unnormalized","Moderna (naive)","naive_only",FALSE,FALSE,0.802737776160517
+"2","unnormalized","Moderna (naive)","naive_only",FALSE,TRUE,0.836092220704322
+"3","unnormalized","AstraZeneca (naive)","naive_only",FALSE,FALSE,0.831248520060458
+"4","unnormalized","AstraZeneca (naive)","naive_only",FALSE,TRUE,0.942173632110412
+"5","unnormalized","Janssen (naive)","naive_only",FALSE,FALSE,0.605104314345343
+"6","unnormalized","Janssen (naive)","naive_only",FALSE,TRUE,0.699347889426676
+"7","unnormalized","Novavax (naive)","naive_only",FALSE,FALSE,0.874068519260735
+"8","unnormalized","Novavax (naive)","naive_only",FALSE,TRUE,0.886780097514496
+"9","unnormalized","Sanofi 1 (naive)","naive_only",FALSE,FALSE,0.74645575798804
+"10","unnormalized","Sanofi 1 (naive)","naive_only",FALSE,TRUE,0.792595147463901
+"11","unnormalized","Sanofi 1 (non-naive)","naive_only",FALSE,FALSE,0.427436939353782
+"12","unnormalized","Sanofi 1 (non-naive)","naive_only",FALSE,TRUE,0.734922331389812
+"13","unnormalized","Sanofi 2 (naive)","naive_only",FALSE,FALSE,0.439950210132277
+"14","unnormalized","Sanofi 2 (naive)","naive_only",FALSE,TRUE,0.546065632444261
+"15","unnormalized","Sanofi 2 (non-naive)","naive_only",FALSE,FALSE,0.647104060968306
+"16","unnormalized","Sanofi 2 (non-naive)","naive_only",FALSE,TRUE,0.650436888976463
