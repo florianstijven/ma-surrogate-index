@@ -34,7 +34,8 @@ additional-application: additional-application/R/meta-analytic/estimate-landmark
 	additional-application/results/tables/surrogacy-inferences.csv \
 	additional-application/R/meta-analytic/processing-results.Rout
 	
-additional-application-2: additional-application-2/results/raw-results/ipd_surr_indices_tbl.rds \
+additional-application-2: additional-application-2/data/processed_data_synthetic_high_d.rds \
+	additional-application-2/results/raw-results/ipd_surr_indices_tbl.rds \
 	additional-application-2/results/raw-results/ma_trt_effects_tbl.rds \
 	additional-application-2/results/tables/surrogacy-inferences.csv \
 	additional-application-2/R/meta-analytic/processing-results.Rout
@@ -113,6 +114,8 @@ additional-application/R/meta-analytic/processing-results.Rout: additional-appli
 
 
 
+additional-application-2/data/processed_data_synthetic_high_d.rds: additional-application-2/R/data/data-preparation.R
+	Rscript --verbose additional-application-2/R/data/data-preparation.R > additional-application-2/R/data/data-preparation.Rout 2> additional-application-2/R/data/data-preparation.Rout
 
 additional-application-2/results/raw-results/ipd_surr_indices_tbl.rds: additional-application-2/R/meta-analytic/surrogate_index_estimation.R
 	Rscript --verbose additional-application-2/R/meta-analytic/surrogate_index_estimation.R > additional-application-2/R/meta-analytic/surrogate_index_estimation.Rout 2> additional-application-2/R/meta-analytic/surrogate_index_estimation.Rout
