@@ -587,9 +587,7 @@ plot_ma_sl = ma_trt_effects_tbl %>% filter(method != "untransformed surrogate",
   facet_grid(. ~ surrogate_name) +
   xlab("Estimated VE on Estimated Surrogate Index") +
   ylab("Estimated VE") +
-  theme(legend.position = "bottom", legend.title = element_blank(),
-        panel.background = element_rect(fill = "transparent", colour = NA),
-        plot.background  = element_rect(fill = "transparent", colour = NA)) +
+  theme(legend.position = "bottom", legend.title = element_blank()) +
   scale_y_continuous(transform = transform_VE, breaks = c(0, 0.5, 0.75, 0.90, 0.95)) +
   scale_x_continuous(transform = transform_VE, breaks = c(0, 0.5, 0.75, 0.90, 0.95)) +
   ggtitle("Meta-Analysis with SuperLearner") +
@@ -646,6 +644,20 @@ combined <- (plot_ma_standard_new / plot_ma_sl) +
 ggsave(
   filename = "ma-standard-and-sl-naive-only-presentation.pdf",
   plot = combined,
+  path = figures_dir,
+  height = double_height,
+  width = double_width,
+  device = "pdf",
+  units = "cm"
+)
+
+combined_legend <- (plot_ma_standard_new / plot_ma_sl) +
+  plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
+
+ggsave(
+  filename = "ma-standard-and-sl-naive-only-presentation-w-legend.pdf",
+  plot = combined_legend,
   path = figures_dir,
   height = double_height,
   width = double_width,
