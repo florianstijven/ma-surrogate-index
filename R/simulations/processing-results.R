@@ -103,14 +103,14 @@ estimand_plot_1 = ma_sim_results %>%
     scenario == "proof-of-concept",
     surrogate_index_estimator != "Surrogate S"
   ) %>%
-  mutate(surrogate_index_estimator = fct_drop(surrogate_index_estimator, only = c("surrogate"))) %>%
+  mutate(surrogate_index_estimator = fct_drop(surrogate_index_estimator, only = c("Surrogate S"))) %>%
   ggplot(aes(x = rho_true, color = surrogate_index_estimator)) +
   geom_density(show.legend = TRUE) +
   geom_vline(
     aes(xintercept = rho_true),
     data = ma_sim_results %>%
       filter(
-        surrogate_index_estimator == "Surrogate",
+        surrogate_index_estimator == "Surrogate S",
         setting == "small N, large n"
       ) %>%
       mutate(rho_true = abs(rho_true)) %>%
@@ -138,7 +138,7 @@ estimand_plot_1 = ma_sim_results %>%
 
 estimand_plot_2 = ma_sim_results %>%
   filter(
-    surrogate_index_estimator != "surrogate",
+    surrogate_index_estimator != "Surrogate S",
     setting == "small N, large n",
     CI_type == "sandwich",
     scenario == "vaccine"
@@ -149,7 +149,7 @@ estimand_plot_2 = ma_sim_results %>%
     aes(xintercept = rho_true),
     data = ma_sim_results %>%
       filter(
-        surrogate_index_estimator == "Surrogate",
+        surrogate_index_estimator == "Surrogate S",
         setting == "small N, large n"
       ) %>%
       mutate(rho_true = abs(rho_true)) %>%
@@ -511,13 +511,13 @@ ggsave(
 
 ma_sim_results %>%
   filter(
-    surrogate_index_estimator != "surrogate",
+    surrogate_index_estimator != "Surrogate S",
     setting == "small N, large n",
     scenario == "proof-of-concept",
     nearest_PD == FALSE,
     CI_type == "BCa"
   ) %>%
-  mutate(surrogate_index_estimator = fct_drop(surrogate_index_estimator, only = c("surrogate"))) %>%
+  mutate(surrogate_index_estimator = fct_drop(surrogate_index_estimator, only = c("Surrogate S"))) %>%
   ggplot(aes(x = rho_ci_lower), fill = "gray") +
   geom_histogram(alpha = 0.5, position = "identity", color = "black") +
   scale_x_continuous(lim = c(-1, 1), name = expr(rho[trial])) +
@@ -542,13 +542,13 @@ ma_sim_results %>%
     nearest_PD == FALSE,
     CI_type == "BCa"
   ) %>%
-  mutate(surrogate_index_estimator = fct_drop(surrogate_index_estimator, only = c("surrogate"))) %>%
+  mutate(surrogate_index_estimator = fct_drop(surrogate_index_estimator, only = c("Surrogate S"))) %>%
   # There is a negative trial-level correlation for the untransformed surrogate.
   # We therefore use -1 * the upper limit for this setting to be comparable to
   # with the estimated surrogate index.
   mutate(
     rho_ci_lower = ifelse(
-      surrogate_index_estimator == "surrogate",-1 * rho_ci_upper,
+      surrogate_index_estimator == "Surrogate S",-1 * rho_ci_upper,
       rho_ci_lower
     )
   ) %>%
