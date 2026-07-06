@@ -2,7 +2,7 @@
 
 This repo contains the code used for the data application and simulations in the
 manuscript "Evaluation of Surrogate Endpoints Based on Meta-Analysis with
-Surrogate Indices" by Stijven, F. and Gilbert, P. B. (2025). This repo is an
+Surrogate Indices" by Stijven, F. and Gilbert, P. B. (2026). This repo is an
 R project and contains all files (except data) needed to reproduce the results
 from the manuscript. Files that are produced by running code (i.e., tables and
 figures) are not included in this repo.
