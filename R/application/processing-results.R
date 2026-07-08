@@ -295,7 +295,7 @@ ma_plot_helper = function(weighting, analysis_set, VE_scale, include_risk_score)
     scale_shape_manual(values = my_shapes, limits = trials_included) +
     coord_cartesian(ylim = c(-0.2, 0.95)) +
     facet_grid(`Estimated Surrogate Index` ~ surrogate_name) +
-    xlab("Estimated VE on Surr. Index") +
+    xlab("Estimated VE on Estimated Surrogate Index") +
     ylab("Estimated VE") +
     theme(legend.position = "bottom", legend.title = element_blank())
   
